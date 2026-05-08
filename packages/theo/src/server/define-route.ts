@@ -8,6 +8,7 @@ export interface RouteConfig<
   query?: TQuery
   body?: TBody
   params?: TParams
+  status?: number
   handler: (ctx: {
     query: z.infer<TQuery>
     body: z.infer<TBody>

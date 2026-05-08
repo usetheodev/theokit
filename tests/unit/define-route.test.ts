@@ -48,4 +48,19 @@ describe('defineRoute', () => {
     const result = defineRoute(config)
     expect(result).toBe(config)
   })
+
+  it('should preserve status field', () => {
+    const config = {
+      status: 201,
+      handler: () => ({ ok: true }),
+    }
+    const result = defineRoute(config)
+    expect(result.status).toBe(201)
+  })
+
+  it('should have undefined status when not set', () => {
+    const config = { handler: () => ({ ok: true }) }
+    const result = defineRoute(config)
+    expect(result.status).toBeUndefined()
+  })
 })

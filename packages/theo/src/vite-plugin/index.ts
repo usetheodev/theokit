@@ -1,9 +1,11 @@
 import type { Plugin } from 'vite'
-import { resolve, basename } from 'node:path'
+import { resolve, basename, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { scanRoutes } from '../router/scan.js'
 import { generateRouteManifest } from '../router/generate.js'
 import { generateEntryClient } from '../router/entry.js'
 import { isRouteFile } from '../router/types.js'
+import { createApiMiddleware } from './api-middleware.js'
 
 const VIRTUAL_ENTRY_ID = '/@theo/entry-client'
 const RESOLVED_ENTRY_ID = '\0@theo/entry-client'
@@ -14,8 +16,23 @@ export function theoPlugin(root?: string): Plugin {
   const projectRoot = root ?? process.cwd()
   const appDir = resolve(projectRoot, 'app')
 
+  // Resolve paths for SSR module loading
+  const currentDir = dirname(fileURLToPath(import.meta.url))
+  const theoSrcDir = resolve(currentDir, '..')
+
   return {
     name: 'theo',
+
+    config() {
+      return {
+        resolve: {
+          alias: [
+            { find: 'theo/server', replacement: resolve(theoSrcDir, 'server/index.ts') },
+            { find: 'theo', replacement: resolve(theoSrcDir, 'index.ts') },
+          ],
+        },
+      }
+    },
 
     resolveId(id: string) {
       if (id === VIRTUAL_ENTRY_ID) return RESOLVED_ENTRY_ID
@@ -33,6 +50,11 @@ export function theoPlugin(root?: string): Plugin {
     },
 
     configureServer(server) {
+      // API routes middleware
+      const serverDir = resolve(projectRoot, 'server')
+      server.middlewares.use(createApiMiddleware(server, serverDir))
+
+      // Frontend HMR watcher
       function handleRouteChange(filePath: string) {
         if (!isRouteFile(basename(filePath))) return
         if (!filePath.startsWith(appDir)) return
