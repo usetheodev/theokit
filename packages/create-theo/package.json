@@ -2,5 +2,11 @@
   "name": "create-theo",
   "version": "0.0.1",
   "type": "module",
-  "description": "Scaffold a new Theo project (Onda 1)"
+  "description": "Scaffold a new Theo project",
+  "bin": {
+    "create-theo": "./bin/create-theo.mjs"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6"
+  }
 }

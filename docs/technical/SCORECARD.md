@@ -7,20 +7,20 @@
 
 | Domínio | Score | Status | Notas |
 |---------|-------|--------|-------|
-| config | 1/5 | 🔴 Pesquisa inicial | Contratos definidos no README, sem implementação |
-| server-routes | 1/5 | 🔴 Pesquisa inicial | API surface definida, sem código |
-| server-actions | 1/5 | 🔴 Pesquisa inicial | API surface definida, sem código |
-| middleware | 1/5 | 🔴 Pesquisa inicial | API surface definida, sem código |
-| build | 1/5 | 🔴 Pesquisa inicial | CLI definido, sem implementação |
-| type-safety | 1/5 | 🔴 Pesquisa inicial | Princípios definidos, sem type tests |
-| project-structure | 1/5 | 🔴 Pesquisa inicial | Estrutura definida no README, sem validação |
-| dx | 0/5 | 🔴 Não iniciado | Sem CLI implementado |
-| routing | 0/5 | ⚪ Onda 2 | Fora de escopo Onda 0 |
-| layouts | 0/5 | ⚪ Onda 2 | Fora de escopo Onda 0 |
-| error-handling | 0/5 | ⚪ Onda 8 | Fora de escopo Onda 0 |
-| observability | 0/5 | ⚪ Onda 8 | Fora de escopo Onda 0 |
-| security | 0/5 | ⚪ Onda 4 | Fora de escopo Onda 0 |
-| testing | 0/5 | ⚪ Onda 0+ | Estratégia definida, sem harness |
+| config | 2/5 | 🟡 Implementado (Onda 0) | defineConfig, loadConfig, theoConfigSchema, TheoConfigError |
+| server-routes | 1/5 | 🔴 Contrato apenas | defineRoute identity function |
+| server-actions | 1/5 | 🔴 Contrato apenas | defineAction identity function |
+| middleware | 1/5 | 🔴 Contrato apenas | defineMiddleware identity function |
+| build | 1/5 | 🔴 Pesquisa Onda 1 | Vite dev server pattern pesquisado |
+| type-safety | 2/5 | 🟡 Type tests passando | 11 type tests com expectTypeOf |
+| project-structure | 2/5 | 🟡 Implementado (Onda 0) | validateProjectStructure + fixtures |
+| dx | 1/5 | 🔴 Pesquisa Onda 1 | create-theo + theo dev patterns pesquisados |
+| routing | 0/5 | ⚪ Onda 2 | Fora de escopo |
+| layouts | 0/5 | ⚪ Onda 2 | Fora de escopo |
+| error-handling | 0/5 | ⚪ Onda 8 | Fora de escopo |
+| observability | 0/5 | ⚪ Onda 8 | Fora de escopo |
+| security | 0/5 | ⚪ Onda 4 | Fora de escopo |
+| testing | 1/5 | 🔴 Vitest configurado | 72 unit + type tests, sem E2E |
 
 ## Legenda
 

@@ -9,3 +9,6 @@ export type { ConfigIssue } from './config/errors.js'
 // Core
 export { validateProjectStructure } from './core/validate-structure.js'
 export { TheoProjectError } from './core/errors.js'
+
+// Vite Plugin
+export { theoPlugin } from './vite-plugin/index.js'

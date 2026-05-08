@@ -2,6 +2,9 @@
   "name": "theo",
   "version": "0.0.1",
   "type": "module",
+  "bin": {
+    "theo": "./bin/theo.mjs"
+  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -10,9 +13,20 @@
     "./server": {
       "types": "./src/server/index.ts",
       "import": "./src/server/index.ts"
+    },
+    "./vite-plugin": {
+      "types": "./src/vite-plugin/index.ts",
+      "import": "./src/vite-plugin/index.ts"
     }
   },
+  "dependencies": {
+    "cac": "^6.7.14",
+    "vite": "^6.0.0",
+    "@vitejs/plugin-react": "^4.4.0"
+  },
   "peerDependencies": {
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   }
 }

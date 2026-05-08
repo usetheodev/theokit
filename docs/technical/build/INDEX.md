@@ -4,8 +4,8 @@
 CLI commands (`theo dev`, `theo build`, `theo start`) e build pipeline via Vite.
 
 ## Packages alvo
-- `@theo/cli` — CLI entry point, commands
-- `@theo/vite-plugin` — Vite integration, HMR, dev server
+- `theo` (bin) — CLI entry point via cac
+- Vite plugin (inline na Onda 1, package separado futuro)
 
 ## Referências-chave
 
@@ -17,19 +17,21 @@ CLI commands (`theo dev`, `theo build`, `theo start`) e build pipeline via Vite.
 | Next.js next-start.ts | Production server: no retry, no fork, keepAliveTimeout |
 | Next.js start-server.ts | Shared bootstrap: HTTP/HTTPS, port conflict, graceful shutdown, timing |
 | Vite CLI | `createServer()`, `build()`, `preview()` APIs |
+| Vite SSR guide | `middlewareMode: true`, `ssrLoadModule`, `transformIndexHtml` |
 | Nitro CLI | `nitro dev`, `nitro build`, preset system para deploy targets |
+| cac | v6.7.14, 4 APIs core, zero deps, usado por Vite/Vitest |
 
 ## Arquivos nesta pasta
 - INDEX.md (este arquivo)
 - improvement-roadmap.md
 
 ## Gaps para pesquisar
-- [ ] CLI framework: commander vs cac vs citty vs custom
-- [ ] Dev server: Vite `createServer()` vs custom server wrapping Vite
-- [ ] Build output: `.theo/` directory structure
-- [ ] Production server: Node.js HTTP server servindo build output
-- [ ] Port detection e retry strategy
-- [ ] Graceful shutdown com signal handling
-- [ ] Startup timing (`Ready in Xms`)
-- [ ] Environment variable loading (`.env` files)
+- [x] CLI framework: cac (decidido)
+- [x] Dev server: Vite `createServer()` nativo para Onda 1 (sem Express/SSR)
+- [ ] Build output: `.theo/` directory structure (Onda 6)
+- [ ] Production server: Node.js HTTP server servindo build output (Onda 6)
+- [x] Port detection: Vite nativo (retry automático)
+- [ ] Graceful shutdown com signal handling (Onda 6)
+- [x] Startup timing: Vite `server.printUrls()` inclui timing
+- [ ] Environment variable loading (`.env` files) — Vite nativo
 - [ ] Node.js version validation
