@@ -15,8 +15,8 @@
 | type-safety | 2/5 | 🟡 Type tests passando | 11 type tests com expectTypeOf |
 | project-structure | 2/5 | 🟡 Implementado (Onda 0) | validateProjectStructure + fixtures |
 | dx | 1/5 | 🔴 Pesquisa Onda 1 | create-theo + theo dev patterns pesquisados |
-| routing | 0/5 | ⚪ Onda 2 | Fora de escopo |
-| layouts | 0/5 | ⚪ Onda 2 | Fora de escopo |
+| routing | 1/5 | 🔴 Pesquisa Onda 2 | react-router v7, scan pattern, virtual module |
+| layouts | 1/5 | 🔴 Pesquisa Onda 2 | Nested via Outlet, pathless error wrapper |
 | error-handling | 0/5 | ⚪ Onda 8 | Fora de escopo |
 | observability | 0/5 | ⚪ Onda 8 | Fora de escopo |
 | security | 0/5 | ⚪ Onda 4 | Fora de escopo |

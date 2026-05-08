@@ -5,6 +5,7 @@ export function runInstall(cwd: string, pkgManager: PkgManager): void {
   const result = spawn.sync(pkgManager, ['install'], {
     cwd,
     stdio: 'inherit',
+    env: { ...process.env, NODE_ENV: 'development' },
   })
 
   if (result.status !== 0) {

@@ -12,3 +12,7 @@ export { TheoProjectError } from './core/errors.js'
 
 // Vite Plugin
 export { theoPlugin } from './vite-plugin/index.js'
+
+// Router
+export { scanRoutes, generateRouteManifest, generateEntryClient, isRouteFile } from './router/index.js'
+export type { RouteNode } from './router/index.js'
