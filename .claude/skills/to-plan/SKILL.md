@@ -99,7 +99,9 @@ Numbered checklist of atomic implementation steps:
 2. Step two
 3. ...
 
-#### TDD + BDD (OBRIGATÓRIO)
+#### TDD + BDD (⛔ OBRIGATÓRIO — BLOQUEANTE)
+
+> **Esta seção é OBRIGATÓRIA para TODA task. Um plano sem TDD+BDD em qualquer task é INVÁLIDO e não pode ser salvo.**
 
 Strict RED-GREEN-REFACTOR cycle with BDD scenarios. List every test FIRST:
 
@@ -191,9 +193,11 @@ Run `/dogfood full`. Always full. No shortcuts.
 
 ## Quality Rules
 
-These rules are NON-NEGOTIABLE for every plan produced by this skill:
+These rules are NON-NEGOTIABLE for every plan produced by this skill.
 
-1. **Every task has TDD + BDD** — no task without RED-GREEN-REFACTOR cycle AND BDD scenarios. Tests are listed BEFORE implementation steps.
+**⛔ HARD BLOCKER: A plan WITHOUT TDD + BDD in EVERY task is an INVALID plan. Do NOT save it. Do NOT present it to the user. If any task is missing its TDD + BDD section, stop and add it before proceeding. There are ZERO exceptions to this rule.**
+
+1. **Every task has TDD + BDD** — no task without RED-GREEN-REFACTOR cycle AND BDD scenarios. Tests are listed BEFORE implementation steps. Every task MUST have: (a) at least one RED test per BDD scenario, (b) the 4 mandatory BDD scenarios (happy path, validation error, edge case, error scenario), (c) GREEN step with minimal implementation, (d) REFACTOR step, (e) VERIFY command. A task missing ANY of these is incomplete and blocks the plan.
 
 2. **Every task has "Files to edit"** — exact paths, not vague references. If a file doesn't exist yet, say "(NEW)".
 
