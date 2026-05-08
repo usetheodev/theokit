@@ -1,9 +1,9 @@
 ---
 name: dogfood
-description: "QA testing do Theo framework como usuário real. Roda create-theo, theo dev, testa no browser, avalia DX, gera relatório estruturado. Use quando pedir para 'dogfood', 'QA test', 'testar como usuário', ou 'eat our own cooking'."
+description: "QA testing do Theo framework como usuário real. Roda create-theo, theo dev, testa frontend routing, API routes, Zod validation, DX. Gera relatório estruturado. Use quando pedir para 'dogfood', 'QA test', 'testar como usuário', ou 'eat our own cooking'."
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Bash, Write, Agent
-argument-hint: "[full|quick|scaffold|dev|unit|e2e]"
+argument-hint: "[full|quick|scaffold|dev|api|routing|e2e|unit]"
 ---
 
 # Dogfood: QA do Theo Framework
@@ -12,7 +12,7 @@ Testa o Theo como um usuário real faria. Executa comandos reais, avalia output,
 
 ## Diretório de teste
 
-Todos os testes usam `/my-test` dentro do monorepo. Este diretório:
+Todos os testes manuais usam `my-test/` dentro do monorepo. Este diretório:
 - Está listado em `pnpm-workspace.yaml` (resolve `workspace:*`)
 - Está no `.gitignore` (não entra no git)
 
@@ -20,172 +20,188 @@ Todos os testes usam `/my-test` dentro do monorepo. Este diretório:
 
 | Arg | Scope | Fases |
 |---|---|---|
-| *(no arg)* or `full` | Tudo: unit + scaffold + dev + e2e | 1-6 |
-| `quick` | Scaffold + dev server smoke | 1-3 |
+| *(no arg)* or `full` | Tudo | 1-8 |
+| `quick` | Scaffold + dev + API smoke | 1-4 |
 | `scaffold` | Apenas scaffold | 1-2 |
-| `dev` | Apenas dev server | 1, 3 |
+| `dev` | Apenas dev server (frontend + API) | 1, 3-4 |
+| `api` | Apenas API routes | 1, 4 |
+| `routing` | Apenas frontend routing | 1, 3 |
+| `e2e` | Apenas Playwright E2E | 1, 6 |
 | `unit` | Apenas testes automatizados | 1 |
-| `e2e` | Apenas Playwright E2E | 1, 5 |
 
-## Execution: 6 Phases
+## Execution: 8 Phases
 
 ### Phase 1: Pre-flight (sempre roda)
 
 Verificar que o workspace está saudável antes de qualquer teste.
 
 ```bash
-# 1. TypeScript check
 pnpm typecheck 2>&1
-
-# 2. Unit + Integration tests
 pnpm test 2>&1
-
-# 3. Type tests
 pnpm test:types 2>&1
-
-# 4. Registrar environment
-echo "Node: $(node -v)"
-echo "pnpm: $(pnpm -v)"
-echo "Commit: $(git rev-parse --short HEAD)"
-echo "Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "Node: $(node -v) | pnpm: $(pnpm -v) | Commit: $(git rev-parse --short HEAD) | Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
-**Gate:** Se qualquer check falhar, PARE e reporte. Não prossiga com scaffold/dev se unit tests falham.
+**Gate:** Se qualquer check falhar, PARE e reporte.
 
 **Avaliar:**
 - [ ] `pnpm typecheck` — zero errors
-- [ ] `pnpm test` — all green
+- [ ] `pnpm test` — all green (contar total)
 - [ ] `pnpm test:types` — all green
-- [ ] Contar: total tests, total files, time
+- [ ] Zero `any` em production code: `grep -rn '\bany\b' packages/theo/src/ --include="*.ts"`
 
 ### Phase 2: Scaffold (modes: `full`, `quick`, `scaffold`)
 
-Testar o fluxo `create-theo` como um usuário faria.
-
 ```bash
-# 1. Limpar teste anterior
 pnpm try:clean 2>&1
-
-# 2. Scaffoldar projeto
 pnpm try:scaffold 2>&1
-
-# 3. Verificar estrutura gerada
-ls -la my-test/
-ls my-test/app/
-cat my-test/package.json
-cat my-test/theo.config.ts
-cat my-test/app/page.tsx
-
-# 4. Instalar deps (workspace resolve)
-pnpm install 2>&1
 ```
 
 **Avaliar:**
 - [ ] Scaffold completa sem erros
 - [ ] `my-test/app/page.tsx` existe e contém "Hello Theo"
-- [ ] `my-test/theo.config.ts` existe e é válido
-- [ ] `my-test/package.json` existe com name correto
-- [ ] `my-test/index.html` existe com `/@theo/entry-client`
+- [ ] `my-test/theo.config.ts` existe
+- [ ] `my-test/package.json` com name correto
+- [ ] `my-test/index.html` com `/@theo/entry-client`
 - [ ] `my-test/.gitignore` existe (não `_gitignore`)
 - [ ] `my-test/package.json.tmpl` NÃO existe
-- [ ] `pnpm install` resolve workspace deps sem erros
+- [ ] `my-test/server/routes/health.ts` existe
 
-### Phase 3: Dev Server (modes: `full`, `quick`, `dev`)
-
-Testar `theo dev` no projeto scaffoldado.
+### Phase 3: Frontend Dev Server (modes: `full`, `quick`, `dev`, `routing`)
 
 ```bash
-# 1. Subir dev server (background, porta auto)
-cd my-test
-npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
-DEV_PID=$!
-sleep 4
+cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
+sleep 5
 
-# 2. Testar HTTP
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/)
-echo "Status: $HTTP_STATUS"
-
-# 3. Verificar HTML
-curl -s http://localhost:3456/ | head -20
-
-# 4. Verificar virtual module
+# Frontend
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/
+curl -s http://localhost:3456/ | grep '<div id="root">'
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/@theo/entry-client
-echo ""
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/@theo/route-manifest
 
-# 5. Cleanup
-kill $DEV_PID 2>/dev/null
-wait $DEV_PID 2>/dev/null
+kill %1 2>/dev/null
 ```
 
 **Avaliar:**
-- [ ] Dev server inicia sem erros
 - [ ] `GET /` retorna HTTP 200
-- [ ] Response é HTML com `<div id="root">`
-- [ ] Response contém `/@theo/entry-client`
-- [ ] `GET /@theo/entry-client` retorna HTTP 200 com JavaScript
-- [ ] JavaScript contém `createRoot`
-- [ ] Server fecha sem erros (graceful shutdown)
+- [ ] Response contém `<div id="root">`
+- [ ] `/@theo/entry-client` retorna 200 com JavaScript
+- [ ] `/@theo/route-manifest` retorna 200 com JavaScript
+- [ ] Route manifest contém `export const routes`
 
-### Phase 4: HMR Test (modes: `full`)
+### Phase 4: API Routes (modes: `full`, `quick`, `dev`, `api`)
 
-Testar Hot Module Replacement.
+Subir dev server no `my-test/` (ou fixture `server-routes-basic`).
+
+Para testar no `my-test/` scaffoldado:
+```bash
+cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
+sleep 5
+
+# API Health
+curl -s http://localhost:3456/api/health
+
+# 404
+curl -s http://localhost:3456/api/nonexistent
+
+kill %1 2>/dev/null
+```
+
+Para testar com fixture completa (routes + params + validation):
+```bash
+cd fixtures/server-routes-basic && npx tsx ../../packages/theo/src/cli/index.ts dev --port 3470 &
+sleep 5
+
+# 1. GET simples
+curl -s http://localhost:3470/api/health
+
+# 2. POST válido
+curl -s -X POST http://localhost:3470/api/users -H 'Content-Type: application/json' -d '{"name":"Paulo","email":"paulo@test.com"}'
+
+# 3. POST inválido → 400
+curl -s -X POST http://localhost:3470/api/users -H 'Content-Type: application/json' -d '{"name":"","email":"bad"}'
+
+# 4. Params
+curl -s http://localhost:3470/api/users/42
+
+# 5. Query
+curl -s "http://localhost:3470/api/users?search=theo"
+
+# 6. 404
+curl -s http://localhost:3470/api/nonexistent
+
+# 7. 405
+curl -s -X DELETE http://localhost:3470/api/health
+
+kill %1 2>/dev/null
+```
+
+**Avaliar:**
+- [ ] GET /api/health → `{"ok":true}` com 200
+- [ ] POST válido → 201 com dados corretos
+- [ ] POST inválido → 400 com `{ error: { code: "VALIDATION_ERROR", issues: [...] } }`
+- [ ] Params → `{"id":"42"}`
+- [ ] Query → `{"search":"theo"}`
+- [ ] /api/nonexistent → 404 com `{ error: { code: "NOT_FOUND" } }`
+- [ ] DELETE /api/health → 405 com `{ error: { code: "METHOD_NOT_ALLOWED" } }`
+- [ ] Content-Type de todas respostas é `application/json`
+
+### Phase 5: HMR Test (modes: `full`)
+
+Testar HMR de frontend E backend.
 
 ```bash
-# 1. Subir dev server
-cd my-test
-npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
-DEV_PID=$!
+cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
 sleep 4
 
-# 2. Verificar conteúdo original
-curl -s http://localhost:3456/@theo/entry-client | grep -o "page.tsx" || echo "MISSING page.tsx ref"
-
-# 3. Modificar page.tsx
+# Frontend HMR
 echo 'export default function Page() { return <h1>Modified</h1> }' > app/page.tsx
-
-# 4. Esperar HMR processar
 sleep 2
-
-# 5. Verificar que server ainda responde
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/
 
-# 6. Restaurar original
-echo 'export default function Page() { return <h1>Hello Theo</h1> }' > app/page.tsx
+# Restaurar
+printf 'export default function Page() {\n  return <h1>Hello Theo</h1>\n}\n' > app/page.tsx
 
-# 7. Cleanup
-kill $DEV_PID 2>/dev/null
-wait $DEV_PID 2>/dev/null
+# Backend HMR: criar nova route
+mkdir -p server/routes
+echo 'import { defineRoute } from "theo/server"\nexport const GET = defineRoute({ handler: () => ({ ping: "pong" }) })' > server/routes/ping.ts
+sleep 2
+curl -s http://localhost:3456/api/ping
+
+kill %1 2>/dev/null
 ```
 
 **Avaliar:**
-- [ ] Server continua respondendo após edit
-- [ ] Nenhum crash no server após modificação
-- [ ] File restore funciona
+- [ ] Server sobrevive edit de page.tsx
+- [ ] Server sobrevive criação de nova route
+- [ ] Nova route `/api/ping` responde após criação
+- [ ] Nenhum crash
 
-### Phase 5: E2E Playwright (modes: `full`, `e2e`)
-
-Testar rendering real no browser.
+### Phase 6: E2E Playwright (modes: `full`, `e2e`)
 
 ```bash
-pnpm test:e2e 2>&1
+CI=true pnpm test:e2e 2>&1
 ```
 
 **Avaliar:**
-- [ ] Playwright tests all green
-- [ ] `<h1>Hello Theo</h1>` renderiza no browser
-- [ ] Título "Theo App" correto
-- [ ] `#root` element existe
+- [ ] Todos os Playwright tests GREEN
+- [ ] Hello Theo renderiza no browser
+- [ ] Nested layouts funcionam
+- [ ] Error boundaries funcionam
+- [ ] Not-found funciona
 - [ ] Zero console errors
 
-### Phase 6: DX Evaluation (modes: `full`)
+### Phase 7: DX Evaluation (modes: `full`)
 
-Avaliar Developer Experience em 5 dimensões (1-5 cada):
+7 dimensões, cada uma 1-5:
 
 1. **Scaffold Speed** — `create-theo` completa em tempo aceitável?
 2. **Zero Config** — Projeto funciona sem editar nenhum arquivo?
-3. **Error Messages** — Erros são acionáveis? (ex: missing app/)
+3. **Error Messages** — Erros são acionáveis?
 4. **Dev Startup** — `theo dev` printa URLs rapidamente?
 5. **File Structure** — Estrutura gerada é intuitiva?
+6. **API DX** — Criar route é simples? Zod errors são claros?
+7. **Routing DX** — Criar page é intuitivo? Layouts fazem sentido?
 
 Testar erros:
 ```bash
@@ -193,9 +209,33 @@ Testar erros:
 npx tsx packages/create-theo/src/cli.ts "Bad Name!" 2>&1
 
 # Dev sem app/
-npx tsx packages/theo/src/cli/index.ts dev 2>&1
-# (rodar de um dir sem app/ — deve falhar com mensagem clara)
+cd /tmp && npx tsx /path/to/theo/src/cli/index.ts dev 2>&1
+
+# POST sem Content-Type
+curl -s -X POST http://localhost:3456/api/users -d '{"name":"test"}'
 ```
+
+### Phase 8: Regression Check (modes: `full`)
+
+Verificar que features de ondas anteriores não quebraram.
+
+```bash
+# Onda 0: Contracts
+pnpm test 2>&1 | grep -c "passed"
+
+# Onda 1: Scaffold + dev
+# (já testado em Phase 2+3)
+
+# Onda 2: Frontend routing
+# (já testado em Phase 6 via Playwright)
+
+# Onda 3: API routes
+# (já testado em Phase 4)
+```
+
+**Avaliar:**
+- [ ] Todos os testes de todas as ondas passam
+- [ ] Nenhuma regressão introduzida
 
 ## Report
 
@@ -214,12 +254,14 @@ Salvar em `docs/audit/dogfood-{YYYY-MM-DD}.md`.
 
 | Phase | Score | Max | Status |
 |-------|-------|-----|--------|
-| Pre-flight | {N} | 20 | PASS/FAIL |
-| Scaffold | {N} | 20 | PASS/FAIL |
-| Dev Server | {N} | 20 | PASS/FAIL |
+| Pre-flight | {N} | 15 | PASS/FAIL |
+| Scaffold | {N} | 10 | PASS/FAIL |
+| Frontend | {N} | 10 | PASS/FAIL |
+| API Routes | {N} | 15 | PASS/FAIL |
 | HMR | {N} | 10 | PASS/FAIL/SKIP |
 | E2E | {N} | 15 | PASS/FAIL |
 | DX | {N} | 15 | {score}/5 |
+| Regression | {N} | 10 | PASS/FAIL |
 
 ## Issues
 
@@ -234,14 +276,40 @@ Salvar em `docs/audit/dogfood-{YYYY-MM-DD}.md`.
 
 ## Checklist Summary
 
+### Infra
 - [ ] TypeScript: zero errors
 - [ ] Unit tests: N/N green
 - [ ] Type tests: N/N green
+- [ ] Zero `any` in production code
+
+### Scaffold (Onda 1)
 - [ ] Scaffold: creates valid project
+- [ ] Package.json name correct
+- [ ] .gitignore exists
+- [ ] Server routes template exists
+
+### Frontend (Onda 1+2)
 - [ ] Dev server: responds 200
-- [ ] Virtual module: serves JavaScript
-- [ ] E2E: Hello Theo in browser
-- [ ] Error messages: actionable
+- [ ] Virtual modules: entry-client + route-manifest serve JS
+- [ ] File-based routing: multiple pages work
+- [ ] Nested layouts: root + segment layouts
+- [ ] Error boundaries: broken page caught
+- [ ] Not-found: unknown URL handled
+
+### Backend (Onda 3)
+- [ ] GET /api/health → JSON 200
+- [ ] POST valid → correct status + data
+- [ ] POST invalid → 400 VALIDATION_ERROR with issues
+- [ ] Dynamic params extracted correctly
+- [ ] Query strings parsed correctly
+- [ ] 404 for unmatched API routes
+- [ ] 405 for wrong HTTP method
+- [ ] Content-Type: application/json on all API responses
+
+### DX
+- [ ] Error messages: clean, no stack traces
+- [ ] Scaffold speed acceptable
+- [ ] Zero config needed
 - [ ] No crashes, no hangs
 ```
 
@@ -261,3 +329,4 @@ Salvar em `docs/audit/dogfood-{YYYY-MM-DD}.md`.
 3. **Actionable.** Cada issue sugere fix.
 4. **Teste como usuário.** Só usa o que o dev teria acesso.
 5. **Não ignora warnings.** Warning hoje = bug amanhã.
+6. **Backend é cidadão de primeira classe.** API routes testados com mesma rigorosidade que frontend.
