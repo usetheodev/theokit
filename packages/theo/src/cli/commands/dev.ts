@@ -28,7 +28,13 @@ export async function startDevServer(
 }
 
 export async function devCommand(options: DevOptions): Promise<void> {
-  const cwd = process.cwd()
-  const server = await startDevServer(cwd, options)
-  server.printUrls()
+  try {
+    const cwd = process.cwd()
+    const server = await startDevServer(cwd, options)
+    server.printUrls()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`\n  ✗ ${msg}\n`)
+    process.exit(1)
+  }
 }
