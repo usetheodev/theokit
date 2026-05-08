@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.theo/
+.next/
+.output/
+.nitro/
+.cache/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+playwright-report/
+test-results/
+.vitest/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Secrets / credentials
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Temporary
+tmp/
+.tmp/
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Project-specific
+ONDAS.md
