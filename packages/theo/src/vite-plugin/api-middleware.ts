@@ -22,6 +22,6 @@ export function createApiMiddleware(
     }
 
     const method = (req.method ?? 'GET').toUpperCase()
-    await executeRoute(match.route, method, match.params, req, res, vite)
+    await executeRoute(match.route, method, match.params, req, res, vite, serverDir)
   }
 }

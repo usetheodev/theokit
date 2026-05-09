@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ViteDevServer } from 'vite'
 import type { ServerRouteNode } from './match.js'
+import { runMiddlewareAndContext } from './middleware-runner.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
 
@@ -63,8 +64,17 @@ export async function executeRoute(
   req: IncomingMessage,
   res: ServerResponse,
   vite: ViteDevServer,
+  serverDir?: string,
 ): Promise<void> {
   try {
+    // Run middleware + context pipeline
+    let ctx: unknown = {}
+    if (serverDir) {
+      const result = await runMiddlewareAndContext(req, res, vite, serverDir)
+      if (result.aborted) return
+      ctx = result.ctx
+    }
+
     const mod = await vite.ssrLoadModule(route.filePath)
     const routeConfig = mod[method]
 
@@ -121,7 +131,7 @@ export async function executeRoute(
     }
 
     // Execute handler
-    const handlerResult = await handler({ query, body, params, request: req })
+    const handlerResult = await handler({ query, body, params, request: req, ctx })
 
     // Handle result
     if (handlerResult === undefined || handlerResult === null) {

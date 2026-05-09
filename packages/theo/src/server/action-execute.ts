@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ViteDevServer } from 'vite'
 import { validateCsrf } from './csrf.js'
 import { parseBody, sendJson, sendError } from './execute.js'
+import { runMiddlewareAndContext } from './middleware-runner.js'
 
 export async function executeAction(
   filePath: string,
@@ -9,6 +10,7 @@ export async function executeAction(
   req: IncomingMessage,
   res: ServerResponse,
   vite: ViteDevServer,
+  serverDir?: string,
 ): Promise<void> {
   try {
     // 1. Only POST
@@ -25,17 +27,25 @@ export async function executeAction(
       return
     }
 
-    // 3. Load module
+    // 3. Run middleware + context pipeline
+    let ctx: unknown = {}
+    if (serverDir) {
+      const result = await runMiddlewareAndContext(req, res, vite, serverDir)
+      if (result.aborted) return
+      ctx = result.ctx
+    }
+
+    // 4. Load module
     const mod = await vite.ssrLoadModule(filePath)
 
-    // 4. Find export
+    // 5. Find export
     const actionConfig = mod[exportName]
     if (!actionConfig || typeof actionConfig.handler !== 'function' || !actionConfig.input) {
       sendError(res, 'NOT_FOUND', `Action "${exportName}" not found`, 404)
       return
     }
 
-    // 5. Parse body
+    // 6. Parse body
     let body: unknown
     try {
       body = await parseBody(req)
@@ -44,17 +54,17 @@ export async function executeAction(
       return
     }
 
-    // 6. Validate input with Zod
+    // 7. Validate input with Zod
     const result = actionConfig.input.safeParse(body)
     if (!result.success) {
       sendError(res, 'VALIDATION_ERROR', 'Invalid action input', 400, result.error.issues)
       return
     }
 
-    // 7. Execute handler
-    const handlerResult = await actionConfig.handler({ input: result.data })
+    // 8. Execute handler
+    const handlerResult = await actionConfig.handler({ input: result.data, ctx })
 
-    // 8. Send response
+    // 9. Send response
     if (handlerResult === undefined || handlerResult === null) {
       sendJson(res, null, 204)
       return

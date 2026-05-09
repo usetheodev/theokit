@@ -14,6 +14,7 @@ export interface RouteConfig<
     body: z.infer<TBody>
     params: z.infer<TParams>
     request: Request
+    ctx: unknown
   }) => unknown | Promise<unknown>
 }
 

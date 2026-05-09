@@ -37,6 +37,6 @@ export function createActionMiddleware(
       return
     }
 
-    await executeAction(action.filePath, exportName, req, res, vite)
+    await executeAction(action.filePath, exportName, req, res, vite, serverDir)
   }
 }
