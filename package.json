@@ -27,6 +27,7 @@
     "@types/node": "^25.6.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/ws": "^8.18.1",
     "expect-type": "^1.1.0",
     "publint": "^0.3.20",
     "react": "^19.0.0",
@@ -36,6 +37,7 @@
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",
+    "ws": "^8.20.0",
     "yaml": "^2.8.4",
     "zod": "^3.24.0"
   }

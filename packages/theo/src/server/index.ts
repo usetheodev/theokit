@@ -17,3 +17,6 @@ export { createSessionManager } from './session.js'
 export type { SessionManager, SessionConfig } from './session.js'
 
 export { requireAuth, AuthRequiredError } from './auth.js'
+
+export { defineWebSocket } from './define-websocket.js'
+export type { WebSocketHandler, WebSocketLike } from './define-websocket.js'

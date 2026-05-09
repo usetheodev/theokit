@@ -11,9 +11,10 @@ export async function buildCommand(): Promise<void> {
 
   console.log('\n  Building...\n')
 
+  // Client build
   await viteBuild({
     root: cwd,
-    plugins: [react(), theoPlugin({ root: cwd })],
+    plugins: [react(), theoPlugin({ root: cwd, ssr: config.ssr })],
     build: {
       outDir: '.theo/client',
       emptyOutDir: true,
@@ -21,5 +22,24 @@ export async function buildCommand(): Promise<void> {
     logLevel: 'info',
   })
 
-  console.log('\n  ✓ Build complete → .theo/client/\n')
+  // SSR build (only when ssr: true)
+  if (config.ssr) {
+    console.log('\n  Building SSR...\n')
+    await viteBuild({
+      root: cwd,
+      plugins: [react(), theoPlugin({ root: cwd, ssr: true })],
+      build: {
+        ssr: true,
+        outDir: '.theo/server',
+        emptyOutDir: true,
+        rollupOptions: {
+          input: '/@theo/entry-server',
+        },
+      },
+      logLevel: 'info',
+    })
+  }
+
+  const ssrNote = config.ssr ? ' (SSR)' : ''
+  console.log(`\n  ✓ Build complete → .theo/client/${ssrNote}\n`)
 }

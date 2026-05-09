@@ -12,6 +12,7 @@ import { createProductionLoader } from '../../server/module-loader.js'
 import { serveStaticFile } from '../../server/static.js'
 import { logRequest } from '../../server/logger.js'
 import { createRateLimiter } from '../../server/rate-limit.js'
+import { scanWebSocketRoutes } from '../../server/ws-scan.js'
 
 interface StartOptions {
   port?: number
@@ -43,6 +44,25 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const rateLimiter = config.rateLimit
     ? createRateLimiter(config.rateLimit)
     : null
+
+  // SSR setup (opt-in)
+  const ssrServerPath = resolve(distDir, 'server/entry-server.js')
+  const ssrEnabled = config.ssr && existsSync(ssrServerPath)
+  let ssrRender: ((url: string) => Promise<string | { redirect: Response }>) | null = null
+  let htmlHead = ''
+  let htmlTail = ''
+
+  if (ssrEnabled) {
+    const mod = await import(ssrServerPath)
+    ssrRender = mod.render
+    // Split HTML template on root div
+    const rootDivMatch = indexHtml.match(/<div id=["']root["'][^>]*>/)
+    if (rootDivMatch) {
+      const splitIdx = indexHtml.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
+      htmlHead = indexHtml.slice(0, splitIdx)
+      htmlTail = indexHtml.slice(splitIdx)
+    }
+  }
 
   const server = createServer(async (req, res) => {
     const url = req.url ?? '/'
@@ -125,7 +145,26 @@ export async function startCommand(options: StartOptions): Promise<void> {
         return
       }
 
-      // 5. SPA fallback (client-side router decides)
+      // 5. SSR or SPA fallback
+      if (ssrRender) {
+        try {
+          const result = await ssrRender(url)
+          if (result && typeof result === 'object' && 'redirect' in result) {
+            res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
+            res.end()
+            return
+          }
+          const ssrHtml = result as string
+          res.writeHead(200, { 'Content-Type': 'text/html' })
+          res.end(htmlHead + ssrHtml + htmlTail)
+          return
+        } catch (ssrErr) {
+          console.error('[SSR Error] Falling back to CSR:', (ssrErr as Error).message)
+          // Fall through to CSR fallback
+        }
+      }
+
+      // CSR fallback
       res.writeHead(200, { 'Content-Type': 'text/html' })
       res.end(indexHtml)
     } catch (err) {
@@ -140,6 +179,48 @@ export async function startCommand(options: StartOptions): Promise<void> {
       }
     }
   })
+
+  // WebSocket upgrade handler (opt-in: only if server/ws/ exists)
+  const wsRoutes = scanWebSocketRoutes(serverDir)
+  if (wsRoutes.length > 0) {
+    try {
+      const { WebSocketServer } = await import('ws')
+      const wss = new WebSocketServer({ noServer: true })
+
+      server.on('upgrade', async (request, socket, head) => {
+        const url = request.url ?? '/'
+        if (!url.startsWith('/ws/')) {
+          socket.destroy()
+          return
+        }
+
+        const wsPath = url.split('?')[0]
+        const match = wsRoutes.find(r => r.wsPath === wsPath)
+        if (!match) {
+          socket.destroy()
+          return
+        }
+
+        try {
+          const mod = await loadModule(match.filePath)
+          const handler = (mod.default ?? mod) as import('../../server/define-websocket.js').WebSocketHandler
+
+          wss.handleUpgrade(request, socket, head, (ws) => {
+            handler.onOpen?.(ws, request)
+            ws.on('message', (data: Buffer) => handler.onMessage?.(ws, data.toString()))
+            ws.on('close', (code: number, reason: Buffer) => handler.onClose?.(ws, code, reason))
+            ws.on('error', (err: Error) => handler.onError?.(ws, err))
+          })
+        } catch {
+          socket.destroy()
+        }
+      })
+    } catch {
+      throw new Error(
+        'WebSocket routes found but "ws" package is not installed. Run: npm install ws',
+      )
+    }
+  }
 
   server.listen(port, () => {
     console.log(`\n  Theo production server`)
