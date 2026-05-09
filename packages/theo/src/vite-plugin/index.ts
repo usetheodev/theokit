@@ -8,14 +8,21 @@ import { generateEntryClient } from '../router/entry.js'
 import { isRouteFile } from '../router/types.js'
 import { createApiMiddleware } from './api-middleware.js'
 import { createActionMiddleware } from './action-middleware.js'
+import type { RateLimitConfig } from '../server/rate-limit.js'
 
 const VIRTUAL_ENTRY_ID = '/@theo/entry-client'
 const RESOLVED_ENTRY_ID = '\0@theo/entry-client'
 const VIRTUAL_MANIFEST_ID = '/@theo/route-manifest'
 const RESOLVED_MANIFEST_ID = '\0@theo/route-manifest'
 
-export function theoPlugin(root?: string): Plugin {
-  const projectRoot = root ?? process.cwd()
+export interface TheoPluginOptions {
+  root?: string
+  rateLimit?: RateLimitConfig
+}
+
+export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
+  const options = typeof rootOrOptions === 'string' ? { root: rootOrOptions } : (rootOrOptions ?? {})
+  const projectRoot = options.root ?? process.cwd()
   const appDir = resolve(projectRoot, 'app')
 
   // Resolve paths for SSR module loading
@@ -29,6 +36,7 @@ export function theoPlugin(root?: string): Plugin {
       // Detect whether we're running from source (.ts) or compiled dist (.js)
       const ext = existsSync(resolve(theoSrcDir, 'index.ts')) ? '.ts' : '.js'
       return {
+        envPrefix: 'THEO_PUBLIC_',
         resolve: {
           alias: [
             { find: 'theo/server', replacement: resolve(theoSrcDir, `server/index${ext}`) },
@@ -57,7 +65,7 @@ export function theoPlugin(root?: string): Plugin {
       // Server middleware (action before API — more specific prefix first)
       const serverDir = resolve(projectRoot, 'server')
       server.middlewares.use(createActionMiddleware(server, serverDir))
-      server.middlewares.use(createApiMiddleware(server, serverDir))
+      server.middlewares.use(createApiMiddleware(server, serverDir, options.rateLimit))
 
       // Frontend HMR watcher
       function handleRouteChange(filePath: string) {

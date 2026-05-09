@@ -6,6 +6,7 @@ export default defineConfig([
       'index': 'src/index.ts',
       'server/index': 'src/server/index.ts',
       'vite-plugin/index': 'src/vite-plugin/index.ts',
+      'client/index': 'src/client/index.ts',
     },
     format: ['esm'],
     dts: true,

@@ -27,12 +27,12 @@ describe('Onda 7 — Type Safety End-to-End', () => {
   })
 
   // Teste 2 — Output: handler return type is unknown (by design)
-  it('handler return type is unknown | Promise<unknown>', () => {
+  it('handler return type is inferred from implementation', () => {
     const route = defineRoute({
       handler: () => ({ id: '1', name: 'test' }),
     })
-    // Return type is unknown | Promise<unknown> — intentional for identity function
-    expectTypeOf(route.handler).returns.toEqualTypeOf<unknown | Promise<unknown>>()
+    // Return type is inferred — TResponse generic captures the actual return
+    expectTypeOf(route.handler).returns.toEqualTypeOf<{ id: string; name: string } | Promise<{ id: string; name: string }>>()
   })
 
   // Teste 3 — Params inferidos

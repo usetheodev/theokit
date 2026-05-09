@@ -3,6 +3,7 @@ import type { LoadModule } from './module-loader.js'
 import { validateCsrf } from './csrf.js'
 import { parseBody, sendJson, sendError } from './execute.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
+import { AuthRequiredError } from './auth.js'
 
 export async function executeAction(
   filePath: string,
@@ -74,6 +75,10 @@ export async function executeAction(
 
     sendJson(res, handlerResult, 200)
   } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      sendError(res, err.code, err.message, err.status, undefined, requestId)
+      return
+    }
     sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500, undefined, requestId)
   }
 }

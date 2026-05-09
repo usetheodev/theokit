@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { ServerRouteNode } from './match.js'
 import type { LoadModule } from './module-loader.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
+import { AuthRequiredError } from './auth.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
 
@@ -184,6 +185,10 @@ export async function executeRoute(
 
     sendJson(res, handlerResult, (rc.status as number) ?? 200)
   } catch (err) {
+    if (err instanceof AuthRequiredError) {
+      sendError(res, err.code, err.message, err.status, undefined, requestId)
+      return
+    }
     sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500, undefined, requestId)
   }
 }

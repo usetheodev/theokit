@@ -123,6 +123,16 @@ describe('Smoke: Import Validation from dist/', () => {
     expect(typeof mod.theoPlugin).toBe('function')
   })
 
+  it('should import theoFetch from theo/client dist', async () => {
+    const mod = await import('../../packages/theo/dist/client/index.js')
+    expect(typeof mod.theoFetch).toBe('function')
+  })
+
+  it('should import TheoFetchError from theo/client dist', async () => {
+    const mod = await import('../../packages/theo/dist/client/index.js')
+    expect(typeof mod.TheoFetchError).toBe('function')
+  })
+
   it('should run CLI --help without error', () => {
     const output = execSync(`node ${resolve(theoDistDir, 'cli/index.js')} --help`, {
       encoding: 'utf-8',
@@ -139,6 +149,8 @@ describe('Smoke: Package.json Validation', () => {
     expect(pkg.exports['.'].types).toBe('./dist/index.d.ts')
     expect(pkg.exports['./server'].import).toBe('./dist/server/index.js')
     expect(pkg.exports['./vite-plugin'].import).toBe('./dist/vite-plugin/index.js')
+    expect(pkg.exports['./client'].import).toBe('./dist/client/index.js')
+    expect(pkg.exports['./client'].types).toBe('./dist/client/index.d.ts')
   })
 
   it('theo bin should point to dist/', () => {

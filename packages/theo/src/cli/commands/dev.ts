@@ -18,7 +18,7 @@ export async function startDevServer(
   const port = options?.port ?? config.port
   const server = await createServer({
     root: cwd,
-    plugins: [react(), theoPlugin(cwd)],
+    plugins: [react(), theoPlugin({ root: cwd, rateLimit: config.rateLimit })],
     server: { port },
     logLevel: options?.port === 0 ? 'silent' : undefined,
   })

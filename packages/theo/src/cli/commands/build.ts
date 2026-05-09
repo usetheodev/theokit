@@ -13,7 +13,7 @@ export async function buildCommand(): Promise<void> {
 
   await viteBuild({
     root: cwd,
-    plugins: [react(), theoPlugin(cwd)],
+    plugins: [react(), theoPlugin({ root: cwd })],
     build: {
       outDir: '.theo/client',
       emptyOutDir: true,

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { resolve, join, extname } from 'node:path'
 import { loadConfig } from '../../config/load-config.js'
 import { scanServerRoutes } from '../../server/scan.js'
 import { scanServerActions } from '../../server/action-scan.js'
@@ -11,6 +11,7 @@ import { executeAction } from '../../server/action-execute.js'
 import { createProductionLoader } from '../../server/module-loader.js'
 import { serveStaticFile } from '../../server/static.js'
 import { logRequest } from '../../server/logger.js'
+import { createRateLimiter } from '../../server/rate-limit.js'
 
 interface StartOptions {
   port?: number
@@ -32,6 +33,17 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const loadModule = createProductionLoader()
   const port = options.port ?? config.port
 
+  // Custom error pages (optional)
+  const custom404Path = join(clientDir, '404.html')
+  const custom500Path = join(clientDir, '500.html')
+  const custom404Html = existsSync(custom404Path) ? readFileSync(custom404Path, 'utf-8') : null
+  const custom500Html = existsSync(custom500Path) ? readFileSync(custom500Path, 'utf-8') : null
+
+  // Rate limiter (opt-in)
+  const rateLimiter = config.rateLimit
+    ? createRateLimiter(config.rateLimit)
+    : null
+
   const server = createServer(async (req, res) => {
     const url = req.url ?? '/'
     const requestId = randomUUID()
@@ -41,6 +53,18 @@ export async function startCommand(options: StartOptions): Promise<void> {
       // 1. Action routes
       if (url.startsWith('/api/__actions/')) {
         res.setHeader('x-request-id', requestId)
+
+        // Rate limit check
+        if (rateLimiter) {
+          const check = rateLimiter(req)
+          for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
+          if (check.limited) {
+            sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
+            logRequest({ method: req.method ?? 'POST', url, status: 429, duration: Date.now() - start, requestId })
+            return
+          }
+        }
+
         const pathAfterPrefix = url.slice('/api/__actions/'.length).split('?')[0]
         const segments = pathAfterPrefix.split('/').filter(Boolean)
         if (segments.length < 2) {
@@ -65,6 +89,18 @@ export async function startCommand(options: StartOptions): Promise<void> {
       // 2. API routes
       if (url.startsWith('/api/')) {
         res.setHeader('x-request-id', requestId)
+
+        // Rate limit check
+        if (rateLimiter) {
+          const check = rateLimiter(req)
+          for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
+          if (check.limited) {
+            sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
+            logRequest({ method: req.method ?? 'GET', url, status: 429, duration: Date.now() - start, requestId })
+            return
+          }
+        }
+
         const routes = scanServerRoutes(serverDir)
         const match = matchRoute(url, routes)
         if (!match) {
@@ -81,11 +117,27 @@ export async function startCommand(options: StartOptions): Promise<void> {
       // 3. Static files
       if (serveStaticFile(req, res, clientDir)) return
 
-      // 4. SPA fallback
+      // 4. Custom 404 for URLs with file extensions (missing static files)
+      const urlPath = url.split('?')[0]
+      if (custom404Html && extname(urlPath)) {
+        res.writeHead(404, { 'Content-Type': 'text/html' })
+        res.end(custom404Html)
+        return
+      }
+
+      // 5. SPA fallback (client-side router decides)
       res.writeHead(200, { 'Content-Type': 'text/html' })
       res.end(indexHtml)
     } catch (err) {
-      sendError(res, 'INTERNAL_ERROR', (err as Error).message, 500)
+      // Custom 500 page for non-API errors
+      if (custom500Html && !res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'text/html' })
+        res.end(custom500Html)
+      } else if (!res.headersSent) {
+        sendError(res, 'INTERNAL_ERROR', (err as Error).message, 500)
+      } else {
+        res.end()
+      }
     }
   })
 
