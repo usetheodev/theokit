@@ -5,33 +5,31 @@ CLI commands (`theo dev`, `theo build`, `theo start`) e build pipeline via Vite.
 
 ## Packages alvo
 - `theo` (bin) — CLI entry point via cac
-- Vite plugin (inline na Onda 1, package separado futuro)
+- Vite plugin (inline, theoPlugin)
 
 ## Referências-chave
 
 | Fonte | O que extrair |
 |-------|---------------|
-| Next.js bin/next.ts | Commander.js, Node.js version check, dependency validation, pre-action hooks |
-| Next.js next-dev.ts | Dev server: child process fork, port retry (max 10), IPC, auto-restart |
-| Next.js next-build.ts | Build pipeline: env loading → config → bundler → output |
-| Next.js next-start.ts | Production server: no retry, no fork, keepAliveTimeout |
-| Next.js start-server.ts | Shared bootstrap: HTTP/HTTPS, port conflict, graceful shutdown, timing |
-| Vite CLI | `createServer()`, `build()`, `preview()` APIs |
-| Vite SSR guide | `middlewareMode: true`, `ssrLoadModule`, `transformIndexHtml` |
-| Nitro CLI | `nitro dev`, `nitro build`, preset system para deploy targets |
-| cac | v6.7.14, 4 APIs core, zero deps, usado por Vite/Vitest |
+| Vite build guide | `vite build`, outDir, manifest.json, asset hashing |
+| Vite SSR guide | Client/server split build, ssrManifest |
+| Vite static deploy | `vite preview`, dist/ structure |
+| Next.js next-build.ts | Build pipeline: env → config → bundler → output |
+| Next.js next-start.ts | Production server: static files + SSR |
+| Nitro CLI | `nitro build`, preset system |
+| cac | CLI framework, 4 APIs |
 
 ## Arquivos nesta pasta
 - INDEX.md (este arquivo)
 - improvement-roadmap.md
 
 ## Gaps para pesquisar
-- [x] CLI framework: cac (decidido)
-- [x] Dev server: Vite `createServer()` nativo para Onda 1 (sem Express/SSR)
-- [ ] Build output: `.theo/` directory structure (Onda 6)
-- [ ] Production server: Node.js HTTP server servindo build output (Onda 6)
-- [x] Port detection: Vite nativo (retry automático)
-- [ ] Graceful shutdown com signal handling (Onda 6)
-- [x] Startup timing: Vite `server.printUrls()` inclui timing
-- [ ] Environment variable loading (`.env` files) — Vite nativo
-- [ ] Node.js version validation
+- [x] CLI framework: cac (Onda 1)
+- [x] Dev server: Vite createServer (Onda 1)
+- [x] Build output: `.theo/client/` + `.theo/server/` (Onda 6 research)
+- [x] Production server: Node.js HTTP + static files + API execution (Onda 6 research)
+- [x] Port detection: Vite nativo
+- [x] Startup timing: Vite printUrls
+- [ ] Graceful shutdown com signal handling — Onda 6 implementation
+- [ ] Environment variable loading (`.env` files)
+- [ ] Server bundling via esbuild — futuro

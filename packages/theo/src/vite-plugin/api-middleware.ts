@@ -2,11 +2,13 @@ import type { ViteDevServer, Connect } from 'vite'
 import { scanServerRoutes } from '../server/scan.js'
 import { matchRoute } from '../server/match.js'
 import { executeRoute, sendError } from '../server/execute.js'
+import { createViteLoader } from '../server/module-loader.js'
 
 export function createApiMiddleware(
   vite: ViteDevServer,
   serverDir: string,
 ): Connect.NextHandleFunction {
+  const loadModule = createViteLoader(vite)
   return async (req, res, next) => {
     const url = req.url ?? ''
     if (!url.startsWith('/api/')) {
@@ -22,6 +24,6 @@ export function createApiMiddleware(
     }
 
     const method = (req.method ?? 'GET').toUpperCase()
-    await executeRoute(match.route, method, match.params, req, res, vite, serverDir)
+    await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir)
   }
 }

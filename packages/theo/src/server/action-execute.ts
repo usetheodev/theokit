@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ViteDevServer } from 'vite'
+import type { LoadModule } from './module-loader.js'
 import { validateCsrf } from './csrf.js'
 import { parseBody, sendJson, sendError } from './execute.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
@@ -9,7 +9,7 @@ export async function executeAction(
   exportName: string,
   req: IncomingMessage,
   res: ServerResponse,
-  vite: ViteDevServer,
+  loadModule: LoadModule,
   serverDir?: string,
 ): Promise<void> {
   try {
@@ -30,16 +30,16 @@ export async function executeAction(
     // 3. Run middleware + context pipeline
     let ctx: unknown = {}
     if (serverDir) {
-      const result = await runMiddlewareAndContext(req, res, vite, serverDir)
+      const result = await runMiddlewareAndContext(req, res, loadModule, serverDir)
       if (result.aborted) return
       ctx = result.ctx
     }
 
     // 4. Load module
-    const mod = await vite.ssrLoadModule(filePath)
+    const mod = await loadModule(filePath)
 
     // 5. Find export
-    const actionConfig = mod[exportName]
+    const actionConfig = mod[exportName] as Record<string, unknown> | undefined
     if (!actionConfig || typeof actionConfig.handler !== 'function' || !actionConfig.input) {
       sendError(res, 'NOT_FOUND', `Action "${exportName}" not found`, 404)
       return
@@ -55,14 +55,15 @@ export async function executeAction(
     }
 
     // 7. Validate input with Zod
-    const result = actionConfig.input.safeParse(body)
+    const input = actionConfig.input as { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: { issues: unknown[] } } }
+    const result = input.safeParse(body)
     if (!result.success) {
-      sendError(res, 'VALIDATION_ERROR', 'Invalid action input', 400, result.error.issues)
+      sendError(res, 'VALIDATION_ERROR', 'Invalid action input', 400, result.error?.issues)
       return
     }
 
     // 8. Execute handler
-    const handlerResult = await actionConfig.handler({ input: result.data, ctx })
+    const handlerResult = await (actionConfig.handler as Function)({ input: result.data, ctx })
 
     // 9. Send response
     if (handlerResult === undefined || handlerResult === null) {

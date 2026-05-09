@@ -1,9 +1,9 @@
 ---
 name: dogfood
-description: "QA testing do Theo framework como usuário real. Roda create-theo, theo dev, testa frontend routing, API routes, Zod validation, DX. Gera relatório estruturado. Use quando pedir para 'dogfood', 'QA test', 'testar como usuário', ou 'eat our own cooking'."
+description: "QA testing do Theo framework como usuário real. Roda create-theo, theo dev, theo build, theo start, testa frontend routing, API routes, actions, middleware, type safety. Gera relatório estruturado."
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Bash, Write, Agent
-argument-hint: "[full|quick|scaffold|dev|api|routing|e2e|unit]"
+argument-hint: "[full|quick|scaffold|dev|api|build|prod|routing|e2e|unit]"
 ---
 
 # Dogfood: QA do Theo Framework
@@ -20,25 +20,26 @@ Todos os testes manuais usam `my-test/` dentro do monorepo. Este diretório:
 
 | Arg | Scope | Fases |
 |---|---|---|
-| *(no arg)* or `full` | Tudo | 1-8 |
+| *(no arg)* or `full` | Tudo | 1-10 |
 | `quick` | Scaffold + dev + API smoke | 1-4 |
 | `scaffold` | Apenas scaffold | 1-2 |
 | `dev` | Apenas dev server (frontend + API) | 1, 3-4 |
-| `api` | Apenas API routes | 1, 4 |
+| `api` | Apenas API routes + actions | 1, 4 |
+| `build` | Apenas build | 1, 5 |
+| `prod` | Apenas production server | 1, 5-6 |
 | `routing` | Apenas frontend routing | 1, 3 |
-| `e2e` | Apenas Playwright E2E | 1, 6 |
+| `e2e` | Apenas Playwright E2E | 1, 8 |
 | `unit` | Apenas testes automatizados | 1 |
 
-## Execution: 8 Phases
+## Execution: 10 Phases
 
 ### Phase 1: Pre-flight (sempre roda)
-
-Verificar que o workspace está saudável antes de qualquer teste.
 
 ```bash
 pnpm typecheck 2>&1
 pnpm test 2>&1
 pnpm test:types 2>&1
+grep -rn '\bany\b' packages/theo/src/ --include="*.ts" || echo "ZERO any"
 echo "Node: $(node -v) | pnpm: $(pnpm -v) | Commit: $(git rev-parse --short HEAD) | Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ```
 
@@ -48,7 +49,7 @@ echo "Node: $(node -v) | pnpm: $(pnpm -v) | Commit: $(git rev-parse --short HEAD
 - [ ] `pnpm typecheck` — zero errors
 - [ ] `pnpm test` — all green (contar total)
 - [ ] `pnpm test:types` — all green
-- [ ] Zero `any` em production code: `grep -rn '\bany\b' packages/theo/src/ --include="*.ts"`
+- [ ] Zero `any` em production code
 
 ### Phase 2: Scaffold (modes: `full`, `quick`, `scaffold`)
 
@@ -59,183 +60,131 @@ pnpm try:scaffold 2>&1
 
 **Avaliar:**
 - [ ] Scaffold completa sem erros
-- [ ] `my-test/app/page.tsx` existe e contém "Hello Theo"
-- [ ] `my-test/theo.config.ts` existe
-- [ ] `my-test/package.json` com name correto
-- [ ] `my-test/index.html` com `/@theo/entry-client`
-- [ ] `my-test/.gitignore` existe (não `_gitignore`)
-- [ ] `my-test/package.json.tmpl` NÃO existe
-- [ ] `my-test/server/routes/health.ts` existe
+- [ ] `my-test/app/page.tsx` contém "Hello Theo"
+- [ ] `.gitignore`, `theo.config.ts`, `package.json`, `server/routes/health.ts` existem
 
 ### Phase 3: Frontend Dev Server (modes: `full`, `quick`, `dev`, `routing`)
 
 ```bash
 cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
 sleep 5
-
-# Frontend
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/
-curl -s http://localhost:3456/ | grep '<div id="root">'
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/@theo/entry-client
 curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/@theo/route-manifest
-
 kill %1 2>/dev/null
 ```
 
 **Avaliar:**
-- [ ] `GET /` retorna HTTP 200
-- [ ] Response contém `<div id="root">`
-- [ ] `/@theo/entry-client` retorna 200 com JavaScript
-- [ ] `/@theo/route-manifest` retorna 200 com JavaScript
-- [ ] Route manifest contém `export const routes`
+- [ ] GET / → 200
+- [ ] entry-client → 200 JavaScript
+- [ ] route-manifest → 200 JavaScript
 
-### Phase 4: API Routes (modes: `full`, `quick`, `dev`, `api`)
+### Phase 4: API Routes + Actions (modes: `full`, `quick`, `dev`, `api`)
 
-Subir dev server no `my-test/` (ou fixture `server-routes-basic`).
-
-Para testar no `my-test/` scaffoldado:
-```bash
-cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
-sleep 5
-
-# API Health
-curl -s http://localhost:3456/api/health
-
-# 404
-curl -s http://localhost:3456/api/nonexistent
-
-kill %1 2>/dev/null
-```
-
-Para testar com fixture completa (routes + params + validation):
-```bash
-cd fixtures/server-routes-basic && npx tsx ../../packages/theo/src/cli/index.ts dev --port 3470 &
-sleep 5
-
-# 1. GET simples
-curl -s http://localhost:3470/api/health
-
-# 2. POST válido
-curl -s -X POST http://localhost:3470/api/users -H 'Content-Type: application/json' -d '{"name":"Paulo","email":"paulo@test.com"}'
-
-# 3. POST inválido → 400
-curl -s -X POST http://localhost:3470/api/users -H 'Content-Type: application/json' -d '{"name":"","email":"bad"}'
-
-# 4. Params
-curl -s http://localhost:3470/api/users/42
-
-# 5. Query
-curl -s "http://localhost:3470/api/users?search=theo"
-
-# 6. 404
-curl -s http://localhost:3470/api/nonexistent
-
-# 7. 405
-curl -s -X DELETE http://localhost:3470/api/health
-
-kill %1 2>/dev/null
-```
+Usar fixture `server-routes-basic` para routes completas e `server-actions-basic` para actions.
 
 **Avaliar:**
-- [ ] GET /api/health → `{"ok":true}` com 200
-- [ ] POST válido → 201 com dados corretos
-- [ ] POST inválido → 400 com `{ error: { code: "VALIDATION_ERROR", issues: [...] } }`
+- [ ] GET /api/health → `{"ok":true}` 200
+- [ ] POST valid → 201
+- [ ] POST invalid → 400 VALIDATION_ERROR
 - [ ] Params → `{"id":"42"}`
 - [ ] Query → `{"search":"theo"}`
-- [ ] /api/nonexistent → 404 com `{ error: { code: "NOT_FOUND" } }`
-- [ ] DELETE /api/health → 405 com `{ error: { code: "METHOD_NOT_ALLOWED" } }`
-- [ ] Content-Type de todas respostas é `application/json`
+- [ ] 404 / 405 handling
+- [ ] Actions: valid → 200, invalid → 400, CSRF → 403
 
-### Phase 5: HMR Test (modes: `full`)
+### Phase 5: Build (modes: `full`, `build`, `prod`)
 
-Testar HMR de frontend E backend.
+```bash
+cd fixtures/production-build
+npx tsx ../../packages/theo/src/cli/index.ts build
+```
+
+**Avaliar:**
+- [ ] Build completa sem erros
+- [ ] `.theo/client/index.html` existe
+- [ ] `.theo/client/assets/` tem JS/CSS hashados
+- [ ] `public/logo.png` copiado para `.theo/client/logo.png`
+- [ ] Build time aceitável (< 10s)
+
+### Phase 6: Production Server (modes: `full`, `prod`)
+
+```bash
+cd fixtures/production-build
+npx tsx ../../packages/theo/src/cli/index.ts start --port 4000 &
+sleep 2
+curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/
+curl -s http://localhost:4000/api/health
+curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/dashboard
+curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/logo.png
+kill %1 2>/dev/null
+```
+
+**Avaliar:**
+- [ ] GET / → 200 HTML
+- [ ] GET /api/health → 200 JSON `{"ok":true}`
+- [ ] GET /dashboard → 200 (SPA fallback)
+- [ ] GET /logo.png → 200 (public asset)
+- [ ] Paridade dev/prod (mesmas rotas funcionam)
+
+### Phase 7: HMR Test (modes: `full`)
 
 ```bash
 cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev --port 3456 &
 sleep 4
-
 # Frontend HMR
 echo 'export default function Page() { return <h1>Modified</h1> }' > app/page.tsx
-sleep 2
-curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/
-
-# Restaurar
+sleep 2 && curl -s -o /dev/null -w "%{http_code}" http://localhost:3456/
+# Restore + Backend HMR
 printf 'export default function Page() {\n  return <h1>Hello Theo</h1>\n}\n' > app/page.tsx
-
-# Backend HMR: criar nova route
 mkdir -p server/routes
-echo 'import { defineRoute } from "theo/server"\nexport const GET = defineRoute({ handler: () => ({ ping: "pong" }) })' > server/routes/ping.ts
-sleep 2
-curl -s http://localhost:3456/api/ping
-
+printf 'import { defineRoute } from "theo/server"\nexport const GET = defineRoute({ handler: () => ({ ping: "pong" }) })\n' > server/routes/ping.ts
+sleep 2 && curl -s http://localhost:3456/api/ping
 kill %1 2>/dev/null
 ```
 
 **Avaliar:**
-- [ ] Server sobrevive edit de page.tsx
-- [ ] Server sobrevive criação de nova route
-- [ ] Nova route `/api/ping` responde após criação
-- [ ] Nenhum crash
+- [ ] Server sobrevive edit frontend + backend
+- [ ] Nova route auto-detectada
 
-### Phase 6: E2E Playwright (modes: `full`, `e2e`)
+### Phase 8: E2E Playwright (modes: `full`, `e2e`)
 
 ```bash
 CI=true pnpm test:e2e 2>&1
 ```
 
 **Avaliar:**
-- [ ] Todos os Playwright tests GREEN
-- [ ] Hello Theo renderiza no browser
-- [ ] Nested layouts funcionam
-- [ ] Error boundaries funcionam
-- [ ] Not-found funciona
-- [ ] Zero console errors
+- [ ] Todos Playwright tests GREEN
+- [ ] Layouts, errors, not-found funcionam
 
-### Phase 7: DX Evaluation (modes: `full`)
+### Phase 9: DX Evaluation (modes: `full`)
 
-7 dimensões, cada uma 1-5:
+8 dimensões, cada uma 1-5:
 
-1. **Scaffold Speed** — `create-theo` completa em tempo aceitável?
-2. **Zero Config** — Projeto funciona sem editar nenhum arquivo?
-3. **Error Messages** — Erros são acionáveis?
-4. **Dev Startup** — `theo dev` printa URLs rapidamente?
-5. **File Structure** — Estrutura gerada é intuitiva?
-6. **API DX** — Criar route é simples? Zod errors são claros?
-7. **Routing DX** — Criar page é intuitivo? Layouts fazem sentido?
+1. **Scaffold Speed** — `create-theo` rápido?
+2. **Zero Config** — funciona sem editar?
+3. **Error Messages** — erros acionáveis?
+4. **Dev Startup** — `theo dev` rápido?
+5. **File Structure** — intuitiva?
+6. **API DX** — criar route/action simples?
+7. **Routing DX** — criar page intuitivo?
+8. **Build DX** — `theo build` rápido? Mensagens claras?
 
 Testar erros:
 ```bash
-# Scaffold com nome inválido
-npx tsx packages/create-theo/src/cli.ts "Bad Name!" 2>&1
-
-# Dev sem app/
-cd /tmp && npx tsx /path/to/theo/src/cli/index.ts dev 2>&1
-
-# POST sem Content-Type
-curl -s -X POST http://localhost:3456/api/users -d '{"name":"test"}'
+npx tsx packages/create-theo/src/cli.ts "Bad!" 2>&1
+cd /tmp && npx tsx /path/to/theo dev 2>&1
+npx tsx /path/to/theo start 2>&1  # sem build → erro claro
 ```
 
-### Phase 8: Regression Check (modes: `full`)
-
-Verificar que features de ondas anteriores não quebraram.
+### Phase 10: Regression Check (modes: `full`)
 
 ```bash
-# Onda 0: Contracts
-pnpm test 2>&1 | grep -c "passed"
-
-# Onda 1: Scaffold + dev
-# (já testado em Phase 2+3)
-
-# Onda 2: Frontend routing
-# (já testado em Phase 6 via Playwright)
-
-# Onda 3: API routes
-# (já testado em Phase 4)
+pnpm test 2>&1 | grep "passed"
 ```
 
 **Avaliar:**
 - [ ] Todos os testes de todas as ondas passam
-- [ ] Nenhuma regressão introduzida
+- [ ] Nenhuma regressão
 
 ## Report
 
@@ -254,25 +203,16 @@ Salvar em `docs/audit/dogfood-{YYYY-MM-DD}.md`.
 
 | Phase | Score | Max | Status |
 |-------|-------|-----|--------|
-| Pre-flight | {N} | 15 | PASS/FAIL |
-| Scaffold | {N} | 10 | PASS/FAIL |
-| Frontend | {N} | 10 | PASS/FAIL |
-| API Routes | {N} | 15 | PASS/FAIL |
-| HMR | {N} | 10 | PASS/FAIL/SKIP |
-| E2E | {N} | 15 | PASS/FAIL |
-| DX | {N} | 15 | {score}/5 |
-| Regression | {N} | 10 | PASS/FAIL |
-
-## Issues
-
-### {ID}: {title}
-- **Severity:** CRITICAL / HIGH / MEDIUM / LOW
-- **Phase:** {phase}
-- **Command:** `{command}`
-- **Expected:** {what should happen}
-- **Actual:** {what happened}
-- **Repro:** {steps}
-- **Fix:** {sugestão}
+| Pre-flight | {N} | 12 | PASS/FAIL |
+| Scaffold | {N} | 8 | PASS/FAIL |
+| Frontend | {N} | 8 | PASS/FAIL |
+| API+Actions | {N} | 12 | PASS/FAIL |
+| Build | {N} | 10 | PASS/FAIL |
+| Production | {N} | 12 | PASS/FAIL |
+| HMR | {N} | 8 | PASS/FAIL/SKIP |
+| E2E | {N} | 10 | PASS/FAIL |
+| DX | {N} | 12 | {score}/5 |
+| Regression | {N} | 8 | PASS/FAIL |
 
 ## Checklist Summary
 
@@ -283,34 +223,35 @@ Salvar em `docs/audit/dogfood-{YYYY-MM-DD}.md`.
 - [ ] Zero `any` in production code
 
 ### Scaffold (Onda 1)
-- [ ] Scaffold: creates valid project
-- [ ] Package.json name correct
-- [ ] .gitignore exists
-- [ ] Server routes template exists
+- [ ] Creates valid project with all files
 
 ### Frontend (Onda 1+2)
-- [ ] Dev server: responds 200
-- [ ] Virtual modules: entry-client + route-manifest serve JS
-- [ ] File-based routing: multiple pages work
-- [ ] Nested layouts: root + segment layouts
-- [ ] Error boundaries: broken page caught
-- [ ] Not-found: unknown URL handled
+- [ ] Dev server: 200, virtual modules
+- [ ] Routing, layouts, errors, not-found (via E2E)
 
-### Backend (Onda 3)
-- [ ] GET /api/health → JSON 200
-- [ ] POST valid → correct status + data
-- [ ] POST invalid → 400 VALIDATION_ERROR with issues
-- [ ] Dynamic params extracted correctly
-- [ ] Query strings parsed correctly
-- [ ] 404 for unmatched API routes
-- [ ] 405 for wrong HTTP method
-- [ ] Content-Type: application/json on all API responses
+### Backend (Onda 3+4+5)
+- [ ] API routes: GET, POST, params, query, validation
+- [ ] Actions: CSRF, Zod input, 403/404/405
+- [ ] Middleware: headers, ctx.requestId
+- [ ] Context: available in routes AND actions
+
+### Build + Production (Onda 6)
+- [ ] `theo build` generates .theo/client/
+- [ ] Assets hashed, public/ copied
+- [ ] `theo start` serves app on production
+- [ ] SPA fallback for frontend routes
+- [ ] API works in production
+- [ ] Static files with correct MIME types
+
+### Type Safety (Onda 7)
+- [ ] Zod → handler type inference
+- [ ] Zero any in public API
+- [ ] ctx: unknown (requires narrowing)
 
 ### DX
 - [ ] Error messages: clean, no stack traces
-- [ ] Scaffold speed acceptable
-- [ ] Zero config needed
-- [ ] No crashes, no hangs
+- [ ] Build messages clear
+- [ ] "Run theo build first" when no build
 ```
 
 ## Scoring
@@ -319,14 +260,15 @@ Salvar em `docs/audit/dogfood-{YYYY-MM-DD}.md`.
 |-------|---------|
 | 90-100 | Ship it |
 | 70-89 | Minor issues, shippable |
-| 50-69 | Needs work before next onda |
-| <50 | Broken, fix before anything else |
+| 50-69 | Needs work |
+| <50 | Broken |
 
 ## Princípios
 
-1. **Brutalmente honesto.** Se está quebrado, diz que está quebrado.
-2. **Evidência sobre opinião.** Comando reproduzível + output real.
-3. **Actionable.** Cada issue sugere fix.
-4. **Teste como usuário.** Só usa o que o dev teria acesso.
-5. **Não ignora warnings.** Warning hoje = bug amanhã.
-6. **Backend é cidadão de primeira classe.** API routes testados com mesma rigorosidade que frontend.
+1. **Brutalmente honesto.**
+2. **Evidência sobre opinião.**
+3. **Actionable.**
+4. **Teste como usuário.**
+5. **Não ignora warnings.**
+6. **Backend é cidadão de primeira classe.**
+7. **Build+prod testados com mesmo rigor que dev.**

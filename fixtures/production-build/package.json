@@ -1,0 +1,5 @@
+{
+  "name": "production-build",
+  "private": true,
+  "type": "module"
+}

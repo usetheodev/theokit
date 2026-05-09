@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ViteDevServer } from 'vite'
 import type { ServerRouteNode } from './match.js'
+import type { LoadModule } from './module-loader.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
@@ -63,19 +63,19 @@ export async function executeRoute(
   params: Record<string, string>,
   req: IncomingMessage,
   res: ServerResponse,
-  vite: ViteDevServer,
+  loadModule: LoadModule,
   serverDir?: string,
 ): Promise<void> {
   try {
     // Run middleware + context pipeline
     let ctx: unknown = {}
     if (serverDir) {
-      const result = await runMiddlewareAndContext(req, res, vite, serverDir)
+      const result = await runMiddlewareAndContext(req, res, loadModule, serverDir)
       if (result.aborted) return
       ctx = result.ctx
     }
 
-    const mod = await vite.ssrLoadModule(route.filePath)
+    const mod = await loadModule(route.filePath)
     const routeConfig = mod[method]
 
     if (!routeConfig) {
@@ -83,7 +83,7 @@ export async function executeRoute(
       return
     }
 
-    const handler = typeof routeConfig === 'function' ? routeConfig : routeConfig.handler
+    const handler = typeof routeConfig === 'function' ? routeConfig : (routeConfig as Record<string, unknown>).handler
     if (typeof handler !== 'function') {
       sendError(res, 'INTERNAL_ERROR', 'Route handler is not a function', 500)
       return
@@ -103,8 +103,9 @@ export async function executeRoute(
     }
 
     // Zod validation
-    if (routeConfig.query) {
-      const result = routeConfig.query.safeParse(query)
+    const rc = routeConfig as Record<string, unknown>
+    if (rc.query && typeof (rc.query as { safeParse: Function }).safeParse === 'function') {
+      const result = (rc.query as { safeParse: Function }).safeParse(query)
       if (!result.success) {
         sendError(res, 'VALIDATION_ERROR', 'Invalid query parameters', 400, result.error.issues)
         return
@@ -112,8 +113,8 @@ export async function executeRoute(
       Object.assign(query, result.data)
     }
 
-    if (routeConfig.body) {
-      const result = routeConfig.body.safeParse(body)
+    if (rc.body && typeof (rc.body as { safeParse: Function }).safeParse === 'function') {
+      const result = (rc.body as { safeParse: Function }).safeParse(body)
       if (!result.success) {
         sendError(res, 'VALIDATION_ERROR', 'Invalid request body', 400, result.error.issues)
         return
@@ -121,8 +122,8 @@ export async function executeRoute(
       body = result.data
     }
 
-    if (routeConfig.params) {
-      const result = routeConfig.params.safeParse(params)
+    if (rc.params && typeof (rc.params as { safeParse: Function }).safeParse === 'function') {
+      const result = (rc.params as { safeParse: Function }).safeParse(params)
       if (!result.success) {
         sendError(res, 'VALIDATION_ERROR', 'Invalid route parameters', 400, result.error.issues)
         return
@@ -135,7 +136,7 @@ export async function executeRoute(
 
     // Handle result
     if (handlerResult === undefined || handlerResult === null) {
-      sendJson(res, null, routeConfig.status ?? 204)
+      sendJson(res, null, (rc.status as number) ?? 204)
       return
     }
 
@@ -146,7 +147,7 @@ export async function executeRoute(
       return
     }
 
-    sendJson(res, handlerResult, routeConfig.status ?? 200)
+    sendJson(res, handlerResult, (rc.status as number) ?? 200)
   } catch (err) {
     sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500)
   }
