@@ -11,19 +11,20 @@ export async function executeAction(
   res: ServerResponse,
   loadModule: LoadModule,
   serverDir?: string,
+  requestId?: string,
 ): Promise<void> {
   try {
     // 1. Only POST
     const method = (req.method ?? 'GET').toUpperCase()
     if (method !== 'POST') {
-      sendError(res, 'METHOD_NOT_ALLOWED', 'Actions only accept POST', 405)
+      sendError(res, 'METHOD_NOT_ALLOWED', 'Actions only accept POST', 405, undefined, requestId)
       return
     }
 
     // 2. CSRF validation
     const csrf = validateCsrf(req)
     if (!csrf.valid) {
-      sendError(res, 'FORBIDDEN', csrf.reason, 403)
+      sendError(res, 'FORBIDDEN', csrf.reason, 403, undefined, requestId)
       return
     }
 
@@ -41,7 +42,7 @@ export async function executeAction(
     // 5. Find export
     const actionConfig = mod[exportName] as Record<string, unknown> | undefined
     if (!actionConfig || typeof actionConfig.handler !== 'function' || !actionConfig.input) {
-      sendError(res, 'NOT_FOUND', `Action "${exportName}" not found`, 404)
+      sendError(res, 'NOT_FOUND', `Action "${exportName}" not found`, 404, undefined, requestId)
       return
     }
 
@@ -50,7 +51,7 @@ export async function executeAction(
     try {
       body = await parseBody(req)
     } catch (err) {
-      sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400)
+      sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400, undefined, requestId)
       return
     }
 
@@ -58,7 +59,7 @@ export async function executeAction(
     const input = actionConfig.input as { safeParse: (v: unknown) => { success: boolean; data?: unknown; error?: { issues: unknown[] } } }
     const result = input.safeParse(body)
     if (!result.success) {
-      sendError(res, 'VALIDATION_ERROR', 'Invalid action input', 400, result.error?.issues)
+      sendError(res, 'VALIDATION_ERROR', 'Invalid action input', 400, result.error?.issues, requestId)
       return
     }
 
@@ -73,6 +74,6 @@ export async function executeAction(
 
     sendJson(res, handlerResult, 200)
   } catch (err) {
-    sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500)
+    sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500, undefined, requestId)
   }
 }

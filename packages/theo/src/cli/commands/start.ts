@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { loadConfig } from '../../config/load-config.js'
@@ -9,6 +10,7 @@ import { executeRoute, sendError } from '../../server/execute.js'
 import { executeAction } from '../../server/action-execute.js'
 import { createProductionLoader } from '../../server/module-loader.js'
 import { serveStaticFile } from '../../server/static.js'
+import { logRequest } from '../../server/logger.js'
 
 interface StartOptions {
   port?: number
@@ -32,14 +34,18 @@ export async function startCommand(options: StartOptions): Promise<void> {
 
   const server = createServer(async (req, res) => {
     const url = req.url ?? '/'
+    const requestId = randomUUID()
+    const start = Date.now()
 
     try {
       // 1. Action routes
       if (url.startsWith('/api/__actions/')) {
+        res.setHeader('x-request-id', requestId)
         const pathAfterPrefix = url.slice('/api/__actions/'.length).split('?')[0]
         const segments = pathAfterPrefix.split('/').filter(Boolean)
         if (segments.length < 2) {
-          sendError(res, 'BAD_REQUEST', 'Action URL must be /api/__actions/{file}/{exportName}', 400)
+          sendError(res, 'BAD_REQUEST', 'Action URL must be /api/__actions/{file}/{exportName}', 400, undefined, requestId)
+          logRequest({ method: req.method ?? 'POST', url, status: 400, duration: Date.now() - start, requestId })
           return
         }
         const exportName = segments[segments.length - 1]
@@ -47,23 +53,28 @@ export async function startCommand(options: StartOptions): Promise<void> {
         const actions = scanServerActions(serverDir)
         const action = actions.find((a) => a.actionPath === actionPath)
         if (!action) {
-          sendError(res, 'NOT_FOUND', `Action "${actionPath}" not found`, 404)
+          sendError(res, 'NOT_FOUND', `Action "${actionPath}" not found`, 404, undefined, requestId)
+          logRequest({ method: req.method ?? 'POST', url, status: 404, duration: Date.now() - start, requestId })
           return
         }
-        await executeAction(action.filePath, exportName, req, res, loadModule, serverDir)
+        await executeAction(action.filePath, exportName, req, res, loadModule, serverDir, requestId)
+        logRequest({ method: req.method ?? 'POST', url, status: res.statusCode, duration: Date.now() - start, requestId })
         return
       }
 
       // 2. API routes
       if (url.startsWith('/api/')) {
+        res.setHeader('x-request-id', requestId)
         const routes = scanServerRoutes(serverDir)
         const match = matchRoute(url, routes)
         if (!match) {
-          sendError(res, 'NOT_FOUND', 'API route not found', 404)
+          sendError(res, 'NOT_FOUND', 'API route not found', 404, undefined, requestId)
+          logRequest({ method: req.method ?? 'GET', url, status: 404, duration: Date.now() - start, requestId })
           return
         }
         const method = (req.method ?? 'GET').toUpperCase()
-        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir)
+        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId)
+        logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
         return
       }
 

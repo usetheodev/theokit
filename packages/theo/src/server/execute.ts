@@ -24,8 +24,29 @@ export function sendError(
   message: string,
   status: number,
   issues?: unknown[],
+  requestId?: string,
 ): void {
-  sendJson(res, { error: { code, message, ...(issues ? { issues } : {}) } }, status)
+  const errorMessage =
+    code === 'INTERNAL_ERROR' && process.env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : message
+
+  if (code === 'INTERNAL_ERROR') {
+    console.error(`[${requestId ?? 'no-id'}] ${message}`)
+  }
+
+  sendJson(
+    res,
+    {
+      error: {
+        code,
+        message: errorMessage,
+        ...(requestId ? { requestId } : {}),
+        ...(issues ? { issues } : {}),
+      },
+    },
+    status,
+  )
 }
 
 export function parseBody(req: IncomingMessage): Promise<unknown> {
@@ -65,6 +86,7 @@ export async function executeRoute(
   res: ServerResponse,
   loadModule: LoadModule,
   serverDir?: string,
+  requestId?: string,
 ): Promise<void> {
   try {
     // Run middleware + context pipeline
@@ -79,13 +101,13 @@ export async function executeRoute(
     const routeConfig = mod[method]
 
     if (!routeConfig) {
-      sendError(res, 'METHOD_NOT_ALLOWED', `Method ${method} not allowed`, 405)
+      sendError(res, 'METHOD_NOT_ALLOWED', `Method ${method} not allowed`, 405, undefined, requestId)
       return
     }
 
     const handler = typeof routeConfig === 'function' ? routeConfig : (routeConfig as Record<string, unknown>).handler
     if (typeof handler !== 'function') {
-      sendError(res, 'INTERNAL_ERROR', 'Route handler is not a function', 500)
+      sendError(res, 'INTERNAL_ERROR', 'Route handler is not a function', 500, undefined, requestId)
       return
     }
 
@@ -98,7 +120,7 @@ export async function executeRoute(
     try {
       body = await parseBody(req)
     } catch (err) {
-      sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400)
+      sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400, undefined, requestId)
       return
     }
 
@@ -107,7 +129,7 @@ export async function executeRoute(
     if (rc.query && typeof (rc.query as { safeParse: Function }).safeParse === 'function') {
       const result = (rc.query as { safeParse: Function }).safeParse(query)
       if (!result.success) {
-        sendError(res, 'VALIDATION_ERROR', 'Invalid query parameters', 400, result.error.issues)
+        sendError(res, 'VALIDATION_ERROR', 'Invalid query parameters', 400, result.error.issues, requestId)
         return
       }
       Object.assign(query, result.data)
@@ -116,7 +138,7 @@ export async function executeRoute(
     if (rc.body && typeof (rc.body as { safeParse: Function }).safeParse === 'function') {
       const result = (rc.body as { safeParse: Function }).safeParse(body)
       if (!result.success) {
-        sendError(res, 'VALIDATION_ERROR', 'Invalid request body', 400, result.error.issues)
+        sendError(res, 'VALIDATION_ERROR', 'Invalid request body', 400, result.error.issues, requestId)
         return
       }
       body = result.data
@@ -125,7 +147,7 @@ export async function executeRoute(
     if (rc.params && typeof (rc.params as { safeParse: Function }).safeParse === 'function') {
       const result = (rc.params as { safeParse: Function }).safeParse(params)
       if (!result.success) {
-        sendError(res, 'VALIDATION_ERROR', 'Invalid route parameters', 400, result.error.issues)
+        sendError(res, 'VALIDATION_ERROR', 'Invalid route parameters', 400, result.error.issues, requestId)
         return
       }
       Object.assign(params, result.data)
@@ -149,6 +171,6 @@ export async function executeRoute(
 
     sendJson(res, handlerResult, (rc.status as number) ?? 200)
   } catch (err) {
-    sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500)
+    sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500, undefined, requestId)
   }
 }
