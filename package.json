@@ -8,24 +8,35 @@
     "test:watch": "vitest",
     "test:types": "vitest --typecheck.only --run",
     "test:e2e": "playwright test --config playwright.config.ts",
+    "build": "pnpm -r run build",
+    "validate:publint": "npx publint packages/theo && npx publint packages/create-theo",
+    "validate:attw": "npx @arethetypeswrong/cli --pack packages/theo --ignore-rules cjs-resolves-to-esm no-resolution",
     "typecheck": "tsc --noEmit",
     "try:scaffold": "tsx packages/create-theo/src/cli.ts my-test",
     "try:dev": "cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev",
-    "try:clean": "node -e \"const fs=require('fs');fs.rmSync('my-test',{recursive:true,force:true})\""
+    "try:clean": "node -e \"const fs=require('fs');fs.rmSync('my-test',{recursive:true,force:true})\"",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@changesets/cli": "^2.31.0",
     "@playwright/test": "^1.52.0",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^25.6.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "expect-type": "^1.1.0",
+    "publint": "^0.3.20",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-router": "^7.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",
-    "react-router": "^7.0.0",
+    "yaml": "^2.8.4",
     "zod": "^3.24.0"
   }
 }

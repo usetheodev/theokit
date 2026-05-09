@@ -164,8 +164,21 @@ export async function executeRoute(
 
     if (handlerResult instanceof Response) {
       res.writeHead(handlerResult.status, Object.fromEntries(handlerResult.headers))
-      const responseBody = await handlerResult.text()
-      res.end(responseBody)
+
+      if (handlerResult.body) {
+        const reader = handlerResult.body.getReader()
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            res.write(value)
+          }
+        } catch {
+          // Stream error after headers sent — just close the response
+        }
+      }
+
+      res.end()
       return
     }
 

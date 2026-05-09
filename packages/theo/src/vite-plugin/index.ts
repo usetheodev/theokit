@@ -1,5 +1,6 @@
 import type { Plugin } from 'vite'
 import { resolve, basename, dirname } from 'node:path'
+import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { scanRoutes } from '../router/scan.js'
 import { generateRouteManifest } from '../router/generate.js'
@@ -25,11 +26,13 @@ export function theoPlugin(root?: string): Plugin {
     name: 'theo',
 
     config() {
+      // Detect whether we're running from source (.ts) or compiled dist (.js)
+      const ext = existsSync(resolve(theoSrcDir, 'index.ts')) ? '.ts' : '.js'
       return {
         resolve: {
           alias: [
-            { find: 'theo/server', replacement: resolve(theoSrcDir, 'server/index.ts') },
-            { find: 'theo', replacement: resolve(theoSrcDir, 'index.ts') },
+            { find: 'theo/server', replacement: resolve(theoSrcDir, `server/index${ext}`) },
+            { find: 'theo', replacement: resolve(theoSrcDir, `index${ext}`) },
           ],
         },
       }

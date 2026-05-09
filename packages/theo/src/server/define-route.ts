@@ -4,6 +4,7 @@ export interface RouteConfig<
   TQuery extends z.ZodType = z.ZodUndefined,
   TBody extends z.ZodType = z.ZodUndefined,
   TParams extends z.ZodType = z.ZodUndefined,
+  TCtx = unknown,
 > {
   query?: TQuery
   body?: TBody
@@ -14,7 +15,7 @@ export interface RouteConfig<
     body: z.infer<TBody>
     params: z.infer<TParams>
     request: Request
-    ctx: unknown
+    ctx: TCtx
   }) => unknown | Promise<unknown>
 }
 
@@ -26,6 +27,7 @@ export function defineRoute<
   TQuery extends z.ZodType = z.ZodUndefined,
   TBody extends z.ZodType = z.ZodUndefined,
   TParams extends z.ZodType = z.ZodUndefined,
->(config: RouteConfig<TQuery, TBody, TParams>): RouteConfig<TQuery, TBody, TParams> {
+  TCtx = unknown,
+>(config: RouteConfig<TQuery, TBody, TParams, TCtx>): RouteConfig<TQuery, TBody, TParams, TCtx> {
   return config
 }

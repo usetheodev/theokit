@@ -8,11 +8,21 @@ export interface RequestLog {
   timestamp: string
 }
 
-export function logRequest(info: Omit<RequestLog, 'level' | 'timestamp'>): void {
+export type LoggerFn = (log: RequestLog) => void
+
+const defaultLogger: LoggerFn = (log) => {
+  console.log(JSON.stringify(log))
+}
+
+export function logRequest(
+  info: Omit<RequestLog, 'level' | 'timestamp'>,
+  customLogger?: LoggerFn,
+): void {
   const log: RequestLog = {
     level: 'info',
     ...info,
     timestamp: new Date().toISOString(),
   }
-  console.log(JSON.stringify(log))
+  const logger = customLogger ?? defaultLogger
+  logger(log)
 }

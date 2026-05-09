@@ -1,24 +1,30 @@
 {
   "name": "theo",
-  "version": "0.0.1",
+  "version": "0.1.0-alpha.0",
   "type": "module",
+  "scripts": {
+    "build": "tsup"
+  },
   "bin": {
-    "theo": "./bin/theo.mjs"
+    "theo": "./dist/cli/index.js"
   },
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./server": {
-      "types": "./src/server/index.ts",
-      "import": "./src/server/index.ts"
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js"
     },
     "./vite-plugin": {
-      "types": "./src/vite-plugin/index.ts",
-      "import": "./src/vite-plugin/index.ts"
+      "types": "./dist/vite-plugin/index.d.ts",
+      "import": "./dist/vite-plugin/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "dependencies": {
     "cac": "^6.7.14",
     "vite": "^6.0.0",

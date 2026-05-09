@@ -34,4 +34,25 @@ describe('defineAction type inference', () => {
       },
     })
   })
+
+  it('should default ctx to unknown when TCtx omitted', () => {
+    defineAction({
+      input: z.object({ name: z.string() }),
+      handler: ({ ctx }) => {
+        expectTypeOf(ctx).toBeUnknown()
+        return { ok: true }
+      },
+    })
+  })
+
+  it('should infer ctx type from TCtx generic', () => {
+    interface AppContext { userId: string }
+    defineAction<z.ZodObject<{ name: z.ZodString }>, AppContext>({
+      input: z.object({ name: z.string() }),
+      handler: ({ ctx }) => {
+        expectTypeOf(ctx).toEqualTypeOf<AppContext>()
+        return { userId: ctx.userId }
+      },
+    })
+  })
 })
