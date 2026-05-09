@@ -4,20 +4,20 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
-function getTemplateDir(): string {
-  return resolve(__dirname, '../templates/default')
+function getTemplateDir(templateName = 'default'): string {
+  return resolve(__dirname, '../templates', templateName)
 }
 
 function isValidProjectName(name: string): boolean {
   return /^[a-z0-9][a-z0-9._-]*$/.test(name)
 }
 
-export function scaffold(targetDir: string, projectName: string): void {
-  const templateDir = getTemplateDir()
+export function scaffold(targetDir: string, projectName: string, templateName = 'default'): void {
+  const templateDir = getTemplateDir(templateName)
 
   if (!existsSync(templateDir)) {
     throw new Error(
-      `Template not found at ${templateDir}. This is a bug in create-theo.`,
+      `Template "${templateName}" not found. Available templates: default, dashboard, api-only`,
     )
   }
 

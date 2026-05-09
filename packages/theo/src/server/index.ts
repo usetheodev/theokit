@@ -6,3 +6,6 @@ export type { ActionConfig } from './define-action.js'
 
 export { defineMiddleware } from './define-middleware.js'
 export type { MiddlewareHandler } from './define-middleware.js'
+
+export { getCookie, setCookie, deleteCookie } from './cookies.js'
+export type { CookieOptions } from './cookies.js'

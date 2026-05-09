@@ -36,7 +36,7 @@ export async function runMiddlewareAndContext(
   if (existsSync(contextPath)) {
     const mod = await loadModule(contextPath)
     if (typeof mod.createContext === 'function') {
-      ctx = await (mod.createContext as Function)({ request: req })
+      ctx = await (mod.createContext as Function)({ request: req, response: res })
     }
   }
 

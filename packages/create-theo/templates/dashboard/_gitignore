@@ -1,0 +1,5 @@
+node_modules
+.theo
+dist
+.env
+.env.local
