@@ -1,45 +1,33 @@
-import { build as viteBuild } from 'vite'
-import react from '@vitejs/plugin-react'
 import { loadConfig } from '../../config/load-config.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
-import { theoPlugin } from '../../vite-plugin/index.js'
+import { VALID_TARGETS, type BuildTarget } from '../../adapters/types.js'
+import { nodeAdapter } from '../../adapters/node.js'
 
-export async function buildCommand(): Promise<void> {
+export async function buildCommand(options?: { target?: string }): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig(cwd)
   validateProjectStructure(cwd)
 
-  console.log('\n  Building...\n')
+  const target = (options?.target ?? 'node') as BuildTarget
 
-  // Client build
-  await viteBuild({
-    root: cwd,
-    plugins: [react(), theoPlugin({ root: cwd, ssr: config.ssr })],
-    build: {
-      outDir: '.theo/client',
-      emptyOutDir: true,
-    },
-    logLevel: 'info',
-  })
+  if (!VALID_TARGETS.includes(target)) {
+    throw new Error(
+      `Invalid build target "${target}". Available targets: ${VALID_TARGETS.join(', ')}`,
+    )
+  }
 
-  // SSR build (only when ssr: true)
-  if (config.ssr) {
-    console.log('\n  Building SSR...\n')
-    await viteBuild({
-      root: cwd,
-      plugins: [react(), theoPlugin({ root: cwd, ssr: true })],
-      build: {
-        ssr: true,
-        outDir: '.theo/server',
-        emptyOutDir: true,
-        rollupOptions: {
-          input: '/@theo/entry-server',
-        },
-      },
-      logLevel: 'info',
-    })
+  console.log(`\n  Building for ${target}...\n`)
+
+  if (target === 'node') {
+    await nodeAdapter.build(config, cwd)
+  } else if (target === 'vercel') {
+    const { vercelAdapter } = await import('../../adapters/vercel.js')
+    await vercelAdapter.build(config, cwd)
+  } else if (target === 'cloudflare') {
+    const { cloudflareAdapter } = await import('../../adapters/cloudflare.js')
+    await cloudflareAdapter.build(config, cwd)
   }
 
   const ssrNote = config.ssr ? ' (SSR)' : ''
-  console.log(`\n  ✓ Build complete → .theo/client/${ssrNote}\n`)
+  console.log(`\n  ✓ Build complete → ${target}${ssrNote}\n`)
 }

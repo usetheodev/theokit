@@ -12,10 +12,11 @@ cli
 
 cli
   .command('build', 'Build for production')
-  .action(async () => {
+  .option('--target <target>', 'Deploy target (node, vercel, cloudflare)')
+  .action(async (options) => {
     try {
       const { buildCommand } = await import('./commands/build.js')
-      await buildCommand()
+      await buildCommand({ target: options.target })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`\n  ✗ ${msg}\n`)
@@ -30,6 +31,20 @@ cli
     try {
       const { startCommand } = await import('./commands/start.js')
       await startCommand({ port: options.port ? Number(options.port) : undefined })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`\n  ✗ ${msg}\n`)
+      process.exit(1)
+    }
+  })
+
+cli
+  .command('docker', 'Generate Dockerfile for production')
+  .option('--force', 'Overwrite existing Dockerfile')
+  .action(async (options) => {
+    try {
+      const { dockerCommand } = await import('./commands/docker.js')
+      await dockerCommand({ force: options.force })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`\n  ✗ ${msg}\n`)
