@@ -1,0 +1,67 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { ViteDevServer } from 'vite'
+import { validateCsrf } from './csrf.js'
+import { parseBody, sendJson, sendError } from './execute.js'
+
+export async function executeAction(
+  filePath: string,
+  exportName: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+  vite: ViteDevServer,
+): Promise<void> {
+  try {
+    // 1. Only POST
+    const method = (req.method ?? 'GET').toUpperCase()
+    if (method !== 'POST') {
+      sendError(res, 'METHOD_NOT_ALLOWED', 'Actions only accept POST', 405)
+      return
+    }
+
+    // 2. CSRF validation
+    const csrf = validateCsrf(req)
+    if (!csrf.valid) {
+      sendError(res, 'FORBIDDEN', csrf.reason, 403)
+      return
+    }
+
+    // 3. Load module
+    const mod = await vite.ssrLoadModule(filePath)
+
+    // 4. Find export
+    const actionConfig = mod[exportName]
+    if (!actionConfig || typeof actionConfig.handler !== 'function' || !actionConfig.input) {
+      sendError(res, 'NOT_FOUND', `Action "${exportName}" not found`, 404)
+      return
+    }
+
+    // 5. Parse body
+    let body: unknown
+    try {
+      body = await parseBody(req)
+    } catch (err) {
+      sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400)
+      return
+    }
+
+    // 6. Validate input with Zod
+    const result = actionConfig.input.safeParse(body)
+    if (!result.success) {
+      sendError(res, 'VALIDATION_ERROR', 'Invalid action input', 400, result.error.issues)
+      return
+    }
+
+    // 7. Execute handler
+    const handlerResult = await actionConfig.handler({ input: result.data })
+
+    // 8. Send response
+    if (handlerResult === undefined || handlerResult === null) {
+      sendJson(res, null, 204)
+      return
+    }
+
+    sendJson(res, handlerResult, 200)
+  } catch (err) {
+    sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500)
+  }
+}

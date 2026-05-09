@@ -6,6 +6,7 @@ import { generateRouteManifest } from '../router/generate.js'
 import { generateEntryClient } from '../router/entry.js'
 import { isRouteFile } from '../router/types.js'
 import { createApiMiddleware } from './api-middleware.js'
+import { createActionMiddleware } from './action-middleware.js'
 
 const VIRTUAL_ENTRY_ID = '/@theo/entry-client'
 const RESOLVED_ENTRY_ID = '\0@theo/entry-client'
@@ -50,8 +51,9 @@ export function theoPlugin(root?: string): Plugin {
     },
 
     configureServer(server) {
-      // API routes middleware
+      // Server middleware (action before API — more specific prefix first)
       const serverDir = resolve(projectRoot, 'server')
+      server.middlewares.use(createActionMiddleware(server, serverDir))
       server.middlewares.use(createApiMiddleware(server, serverDir))
 
       // Frontend HMR watcher

@@ -5,31 +5,32 @@ Funções server-side chamadas pelo frontend com contrato tipado via `defineActi
 
 ## Packages alvo
 - `theo/server` — export `defineAction`
-- `@theo/server` — action discovery, execution, CSRF, serialization
+- `theo` (vite-plugin) — action middleware, CSRF protection
 
 ## Referências-chave
 
 | Fonte | O que extrair |
 |-------|---------------|
-| Next.js action-handler.ts | Server Action execution pipeline, CSRF via origin checking, body size limiting |
-| Next.js server_actions.rs | Action ID generation (SHA1 hash + arg metadata), deterministic IDs |
-| Next.js server-reference-proxy-loader.ts | Client proxy pattern: `createServerReference(actionId, callServer)` |
-| Next.js server-action-reducer.ts | Wire protocol: `POST` com header `next-action`, React Flight encoding |
-| Next.js csrf-protection.ts | Origin matching com wildcard support, case-insensitive |
-| Next.js action-validate.ts | Runtime validation: `ensureServerEntryExports` (must be async functions) |
-| SvelteKit form actions | `+page.server.ts` pattern, progressive enhancement, `ActionData` typing |
-| tRPC mutations | Zod input validation, typed output, `useMutation` hook |
+| Next.js action-handler.ts | Execution pipeline, CSRF via origin checking, body size limiting |
+| Next.js csrf-protection.ts | Origin matching, wildcard domain support, case-insensitive |
+| Next.js server-action-request-meta.ts | Action ID detection via headers, request classification |
+| SvelteKit form actions | `+page.server.ts`, progressive enhancement, `ActionData` |
+| tRPC mutations | Zod input validation, typed output, `useMutation` |
+| OWASP CSRF Prevention | Synchronizer Token, Origin header, SameSite cookies, custom headers |
+| MDN CSRF Prevention | Non-simple requests as defense, Fetch-Metadata headers |
 
 ## Arquivos nesta pasta
 - INDEX.md (este arquivo)
 - improvement-roadmap.md
+- ONDA-4-SOTA-RESEARCH.md (consolidado)
 
 ## Gaps para pesquisar
-- [ ] Theo usa `'use server'` directive ou `defineAction()` explícito? (decisão arquitetural)
-- [ ] Wire protocol: REST endpoint por action ou multiplexed?
-- [ ] Serialization: JSON vs React Flight vs custom
-- [ ] CSRF: token-based vs origin checking vs ambos
-- [ ] Client proxy generation: build-time vs runtime
-- [ ] Progressive enhancement: actions funcionam sem JS?
-- [ ] Bundle boundary: como garantir que handler não vaza pro client
-- [ ] Action discovery: file-based (`server/actions/*.ts`) vs export-based
+- [x] `defineAction()` explícito (não `'use server'` magic) — decisão confirmada
+- [x] Wire protocol: REST endpoint `/api/__actions/{file}/{export}` 
+- [x] Serialization: JSON (simples, debuggável)
+- [x] CSRF: origin checking + custom header `X-Theo-Action` (double defense)
+- [x] Bundle boundary: server/actions/ nunca importado no client (sem proxy)
+- [x] Action discovery: file-based `server/actions/*.ts` scan
+- [ ] Client proxy generation: typed `callAction()` helper — futuro
+- [ ] Progressive enhancement: actions sem JS — futuro
+- [ ] Streaming responses de actions — futuro
