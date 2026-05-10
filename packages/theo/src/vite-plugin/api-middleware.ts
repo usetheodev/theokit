@@ -6,6 +6,7 @@ import { executeRoute, sendError } from '../server/execute.js'
 import { createViteLoader } from '../server/module-loader.js'
 import { logRequest } from '../server/logger.js'
 import { createRateLimiter } from '../server/rate-limit.js'
+import { findSuggestion } from '../server/suggest.js'
 import type { RateLimitConfig } from '../server/rate-limit.js'
 
 export function createApiMiddleware(
@@ -41,7 +42,13 @@ export function createApiMiddleware(
     const match = matchRoute(url, routes)
 
     if (!match) {
-      sendError(res, 'NOT_FOUND', 'API route not found', 404, undefined, requestId)
+      const urlPath = url.split('?')[0]
+      const routePaths = routes.map((r) => r.routePath)
+      const suggestion = findSuggestion(urlPath, routePaths)
+      const msg = suggestion
+        ? `API route not found: ${urlPath}. Did you mean: ${suggestion}?`
+        : 'API route not found'
+      sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
       logRequest({ method: req.method ?? 'GET', url, status: 404, duration: Date.now() - start, requestId })
       return
     }

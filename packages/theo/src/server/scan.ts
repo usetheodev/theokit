@@ -17,6 +17,8 @@ function fileToRoutePath(filePath: string, routesDir: string): string {
   } else if (rel === 'index') {
     rel = ''
   }
+  // Replace [...param] with :...param (catch-all, before regular params)
+  rel = rel.replace(/\[\.\.\.([^\]]+)\]/g, ':...$1')
   // Replace [param] with :param
   rel = rel.replace(/\[([^\]]+)\]/g, ':$1')
   return `/api/${rel}`
@@ -56,10 +58,20 @@ export function scanServerRoutes(serverDir: string): ServerRouteNode[] {
   const results: ServerRouteNode[] = []
   scanDir(routesDir, routesDir, results)
 
-  // Sort: static routes before dynamic (routes without params first)
+  // Sort: static first, then dynamic, then catch-all last
+  const isCatchAll = (route: ServerRouteNode) => route.routePath.includes(':...')
   results.sort((a, b) => {
-    if (a.paramNames.length === 0 && b.paramNames.length > 0) return -1
-    if (a.paramNames.length > 0 && b.paramNames.length === 0) return 1
+    const aStatic = a.paramNames.length === 0
+    const bStatic = b.paramNames.length === 0
+    const aCatchAll = isCatchAll(a)
+    const bCatchAll = isCatchAll(b)
+
+    // Static routes first
+    if (aStatic && !bStatic) return -1
+    if (!aStatic && bStatic) return 1
+    // Catch-all routes last
+    if (aCatchAll && !bCatchAll) return 1
+    if (!aCatchAll && bCatchAll) return -1
     return a.routePath.localeCompare(b.routePath)
   })
 

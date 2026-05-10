@@ -21,6 +21,8 @@ export default defineConfig([
       'zod',
       '@vitejs/plugin-react',
       'cac',
+      'busboy',
+      'superjson',
     ],
   },
   {
@@ -43,6 +45,8 @@ export default defineConfig([
       'zod',
       '@vitejs/plugin-react',
       'cac',
+      'busboy',
+      'superjson',
     ],
   },
 ])

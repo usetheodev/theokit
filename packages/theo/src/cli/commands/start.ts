@@ -12,7 +12,12 @@ import { createProductionLoader } from '../../server/module-loader.js'
 import { serveStaticFile } from '../../server/static.js'
 import { logRequest } from '../../server/logger.js'
 import { createRateLimiter } from '../../server/rate-limit.js'
+import { findSuggestion } from '../../server/suggest.js'
 import { scanWebSocketRoutes } from '../../server/ws-scan.js'
+import { loadManifest } from '../../server/manifest.js'
+import type { ServerRouteNode } from '../../server/match.js'
+import type { ActionNode } from '../../server/action-scan.js'
+import type { WebSocketRouteNode } from '../../server/ws-scan.js'
 
 interface StartOptions {
   port?: number
@@ -39,6 +44,24 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const custom500Path = join(clientDir, '500.html')
   const custom404Html = existsSync(custom404Path) ? readFileSync(custom404Path, 'utf-8') : null
   const custom500Html = existsSync(custom500Path) ? readFileSync(custom500Path, 'utf-8') : null
+
+  // Load routes/actions from manifest (built at build time) or fallback to scan
+  let cachedRoutes: ServerRouteNode[]
+  let cachedActions: ActionNode[]
+  let cachedWsRoutes: WebSocketRouteNode[]
+
+  const manifestPath = join(distDir, 'manifest.json')
+  if (existsSync(manifestPath)) {
+    const manifest = loadManifest(distDir, serverDir)
+    cachedRoutes = manifest.routes
+    cachedActions = manifest.actions
+    cachedWsRoutes = manifest.websockets
+  } else {
+    console.warn('  ⚠ No manifest found, scanning routes at startup. Run "theo build" to generate manifest.')
+    cachedRoutes = scanServerRoutes(serverDir)
+    cachedActions = scanServerActions(serverDir)
+    cachedWsRoutes = scanWebSocketRoutes(serverDir)
+  }
 
   // Rate limiter (opt-in)
   const rateLimiter = config.rateLimit
@@ -94,10 +117,14 @@ export async function startCommand(options: StartOptions): Promise<void> {
         }
         const exportName = segments[segments.length - 1]
         const actionPath = segments.slice(0, -1).join('/')
-        const actions = scanServerActions(serverDir)
-        const action = actions.find((a) => a.actionPath === actionPath)
+        const action = cachedActions.find((a) => a.actionPath === actionPath)
         if (!action) {
-          sendError(res, 'NOT_FOUND', `Action "${actionPath}" not found`, 404, undefined, requestId)
+          const actionPaths = cachedActions.map((a) => a.actionPath)
+          const suggestion = findSuggestion(actionPath, actionPaths)
+          const msg = suggestion
+            ? `Action "${actionPath}" not found. Did you mean: ${suggestion}?`
+            : `Action "${actionPath}" not found`
+          sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
           logRequest({ method: req.method ?? 'POST', url, status: 404, duration: Date.now() - start, requestId })
           return
         }
@@ -121,10 +148,15 @@ export async function startCommand(options: StartOptions): Promise<void> {
           }
         }
 
-        const routes = scanServerRoutes(serverDir)
-        const match = matchRoute(url, routes)
+        const match = matchRoute(url, cachedRoutes)
         if (!match) {
-          sendError(res, 'NOT_FOUND', 'API route not found', 404, undefined, requestId)
+          const urlPath = url.split('?')[0]
+          const routePaths = cachedRoutes.map((r) => r.routePath)
+          const suggestion = findSuggestion(urlPath, routePaths)
+          const msg = suggestion
+            ? `API route not found: ${urlPath}. Did you mean: ${suggestion}?`
+            : 'API route not found'
+          sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
           logRequest({ method: req.method ?? 'GET', url, status: 404, duration: Date.now() - start, requestId })
           return
         }
@@ -181,8 +213,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
   })
 
   // WebSocket upgrade handler (opt-in: only if server/ws/ exists)
-  const wsRoutes = scanWebSocketRoutes(serverDir)
-  if (wsRoutes.length > 0) {
+  if (cachedWsRoutes.length > 0) {
     try {
       const { WebSocketServer } = await import('ws')
       const wss = new WebSocketServer({ noServer: true })
@@ -195,7 +226,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
         }
 
         const wsPath = url.split('?')[0]
-        const match = wsRoutes.find(r => r.wsPath === wsPath)
+        const match = cachedWsRoutes.find(r => r.wsPath === wsPath)
         if (!match) {
           socket.destroy()
           return

@@ -5,6 +5,7 @@ import { executeAction } from '../server/action-execute.js'
 import { sendError } from '../server/execute.js'
 import { createViteLoader } from '../server/module-loader.js'
 import { logRequest } from '../server/logger.js'
+import { findSuggestion } from '../server/suggest.js'
 
 const PREFIX = '/api/__actions/'
 
@@ -39,7 +40,12 @@ export function createActionMiddleware(
     const action = actions.find((a) => a.actionPath === actionPath)
 
     if (!action) {
-      sendError(res, 'NOT_FOUND', `Action file "${actionPath}" not found`, 404, undefined, requestId)
+      const actionPaths = actions.map((a) => a.actionPath)
+      const suggestion = findSuggestion(actionPath, actionPaths)
+      const msg = suggestion
+        ? `Action file "${actionPath}" not found. Did you mean: ${suggestion}?`
+        : `Action file "${actionPath}" not found`
+      sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
       logRequest({ method: req.method ?? 'POST', url, status: 404, duration: Date.now() - start, requestId })
       return
     }

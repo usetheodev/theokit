@@ -10,9 +10,11 @@ export function compilePattern(routePath: string): {
   paramNames: string[]
 } {
   const paramNames: string[] = []
-  const regexStr = routePath.replace(/:([^/]+)/g, (_, name) => {
+  // Single pass: handle both catch-all (:...name) and regular (:name) params
+  const regexStr = routePath.replace(/:(?:\.\.\.)?([^/]+)/g, (match, name) => {
     paramNames.push(name)
-    return '([^/]+)'
+    // Catch-all matches across slashes, regular matches single segment
+    return match.startsWith(':...') ? '(.+)' : '([^/]+)'
   })
   return { pattern: new RegExp(`^${regexStr}$`), paramNames }
 }

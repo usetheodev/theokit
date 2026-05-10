@@ -1,6 +1,6 @@
 // Config
 export { defineConfig } from './config/define-config.js'
-export { loadConfig } from './config/load-config.js'
+export { loadConfig, deepMerge } from './config/load-config.js'
 export { theoConfigSchema } from './config/schema.js'
 export type { TheoConfig } from './config/schema.js'
 export { TheoConfigError } from './config/errors.js'

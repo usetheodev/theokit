@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { LoadModule } from './module-loader.js'
 import { validateCsrf } from './csrf.js'
-import { parseBody, sendJson, sendError } from './execute.js'
+import { sendJson, sendError } from './execute.js'
+import { parseRequestBody } from './body-parser.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
 import { AuthRequiredError } from './auth.js'
 
@@ -47,10 +48,11 @@ export async function executeAction(
       return
     }
 
-    // 6. Parse body
+    // 6. Parse body (supports JSON and multipart/form-data)
     let body: unknown
     try {
-      body = await parseBody(req)
+      const parsed = await parseRequestBody(req)
+      body = parsed.json !== undefined ? parsed.json : parsed.fields
     } catch (err) {
       sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400, undefined, requestId)
       return

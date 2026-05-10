@@ -3,6 +3,7 @@ import type { ServerRouteNode } from './match.js'
 import type { LoadModule } from './module-loader.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
 import { AuthRequiredError } from './auth.js'
+import { parseRequestBody, type BodyParserOptions } from './body-parser.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
 
@@ -116,12 +117,21 @@ export async function executeRoute(
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
     const query: Record<string, string> = Object.fromEntries(url.searchParams)
 
-    // Parse body
+    // Parse body (supports JSON and multipart/form-data)
     let body: unknown
     try {
-      body = await parseBody(req)
+      const parsed = await parseRequestBody(req)
+      if (parsed.json !== undefined) {
+        body = parsed.json
+      } else if (parsed.files.length > 0 || Object.keys(parsed.fields).length > 0) {
+        body = { ...parsed.fields, _files: parsed.files }
+      } else {
+        body = undefined
+      }
     } catch (err) {
-      sendError(res, 'VALIDATION_ERROR', (err as Error).message, 400, undefined, requestId)
+      const message = (err as Error).message
+      const status = message.includes('Unsupported Content-Type') ? 415 : 400
+      sendError(res, 'VALIDATION_ERROR', message, status, undefined, requestId)
       return
     }
 

@@ -1,7 +1,9 @@
+import { resolve } from 'node:path'
 import { loadConfig } from '../../config/load-config.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
 import { VALID_TARGETS, type BuildTarget } from '../../adapters/types.js'
 import { nodeAdapter } from '../../adapters/node.js'
+import { generateManifest, writeManifest } from '../../server/manifest.js'
 
 export async function buildCommand(options?: { target?: string }): Promise<void> {
   const cwd = process.cwd()
@@ -27,6 +29,15 @@ export async function buildCommand(options?: { target?: string }): Promise<void>
     const { cloudflareAdapter } = await import('../../adapters/cloudflare.js')
     await cloudflareAdapter.build(config, cwd)
   }
+
+  // Generate route manifest
+  const serverDir = resolve(cwd, config.serverDir)
+  const distDir = resolve(cwd, '.theo')
+  const manifest = generateManifest(serverDir)
+  writeManifest(manifest, distDir)
+
+  const totalEndpoints = manifest.routes.length + manifest.actions.length + manifest.websockets.length
+  console.log(`  ✓ Manifest: ${manifest.routes.length} routes, ${manifest.actions.length} actions, ${manifest.websockets.length} ws (${totalEndpoints} total)`)
 
   const ssrNote = config.ssr ? ' (SSR)' : ''
   console.log(`\n  ✓ Build complete → ${target}${ssrNote}\n`)
