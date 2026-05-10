@@ -33,7 +33,7 @@ export default defineConfig([
     clean: false,
     target: 'node20',
     banner: {
-      js: '#!/usr/bin/env node',
+      js: '#!/usr/bin/env node\nimport "tsx/esm";',
     },
     external: [
       'vite',
