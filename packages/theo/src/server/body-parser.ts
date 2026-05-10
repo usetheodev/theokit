@@ -51,31 +51,33 @@ function parseJsonBody(req: IncomingMessage): Promise<unknown> {
 
 // --- Multipart parsing ---
 
-function parseMultipartBody(
+async function parseMultipartBody(
   req: IncomingMessage,
   contentType: string,
   options: Required<Pick<BodyParserOptions, 'maxFileSize' | 'maxFiles' | 'maxFieldSize'>>,
 ): Promise<{ fields: Record<string, string>; files: UploadedFile[] }> {
+  // EC-3: Validate boundary exists
+  if (!contentType.includes('boundary=')) {
+    throw new Error('Missing multipart boundary')
+  }
+
+  // Dynamic import — works in ESM context
+  let busboyModule: Record<string, unknown>
+  try {
+    busboyModule = await import('busboy')
+  } catch {
+    throw new Error('busboy package is required for multipart/form-data. Run: npm install busboy')
+  }
+
+  // busboy default export may be the constructor directly or wrapped in { default }
+  const BusboyConstructor = (busboyModule.default ?? busboyModule) as Function
+
   return new Promise((resolve, reject) => {
-    // EC-3: Validate boundary exists
-    if (!contentType.includes('boundary=')) {
-      return reject(new Error('Missing multipart boundary'))
-    }
-
-    // Lazy-load busboy to keep it optional until actually used
-    let Busboy: typeof import('busboy')
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      Busboy = require('busboy')
-    } catch {
-      return reject(new Error('busboy package is required for multipart/form-data. Run: npm install busboy'))
-    }
-
     const fields: Record<string, string> = {}
     const files: UploadedFile[] = []
     let fileCount = 0
 
-    const bb = Busboy({
+    const bb = (BusboyConstructor as Function)({
       headers: req.headers as Record<string, string>,
       limits: {
         fileSize: options.maxFileSize,
