@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { theoConfigSchema } from 'theo'
+import { theoConfigSchema } from 'theokit'
 
 describe('theoConfigSchema', () => {
   it('should accept valid config with all fields', () => {

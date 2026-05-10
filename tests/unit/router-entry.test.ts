@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateEntryClient } from 'theo'
+import { generateEntryClient } from 'theokit'
 
 describe('generateEntryClient', () => {
   it('should contain createBrowserRouter', () => {

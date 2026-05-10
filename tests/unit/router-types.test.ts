@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isRouteFile } from 'theo'
+import { isRouteFile } from 'theokit'
 
 describe('isRouteFile', () => {
   it.each(['page.tsx', 'page.ts', 'page.jsx', 'page.js'])('should accept %s', (f) => {

@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from 'vitest'
-import { requireAuth } from 'theo/server'
+import { requireAuth } from 'theokit/server'
 
 interface UserSession {
   userId: string

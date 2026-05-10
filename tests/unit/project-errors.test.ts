@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TheoProjectError } from 'theo'
+import { TheoProjectError } from 'theokit'
 
 describe('TheoProjectError', () => {
   it('should include the root dir in the message', () => {

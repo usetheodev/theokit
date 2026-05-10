@@ -1,12 +1,12 @@
 {
-  "name": "theo",
+  "name": "theokit",
   "version": "0.1.0-alpha.0",
   "type": "module",
   "scripts": {
     "build": "tsup"
   },
   "bin": {
-    "theo": "./dist/cli/index.js"
+    "theokit": "./dist/cli/index.js"
   },
   "exports": {
     ".": {

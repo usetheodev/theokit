@@ -11,7 +11,7 @@ describe('Changeset Configuration', () => {
 
   it('should have linked packages theo + create-theo', () => {
     const config = JSON.parse(readFileSync(resolve(rootDir, '.changeset/config.json'), 'utf-8'))
-    expect(config.linked).toEqual([['theo', 'create-theo']])
+    expect(config.linked).toEqual([['theokit', 'create-theokit']])
   })
 
   it('should have access set to public', () => {

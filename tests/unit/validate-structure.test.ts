@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { validateProjectStructure, TheoProjectError } from 'theo'
+import { validateProjectStructure, TheoProjectError } from 'theokit'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdirSync, writeFileSync } from 'node:fs'

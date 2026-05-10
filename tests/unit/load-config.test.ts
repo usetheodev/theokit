@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { loadConfig, TheoConfigError } from 'theo'
+import { loadConfig, TheoConfigError } from 'theokit'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdirSync, writeFileSync } from 'node:fs'

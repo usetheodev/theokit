@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defineAction } from 'theo/server'
+import { defineAction } from 'theokit/server'
 import { z } from 'zod'
 
 describe('defineAction', () => {

@@ -9,11 +9,11 @@ export function main(): void {
   const projectName = positionalArgs[0]
 
   if (!projectName) {
-    console.error('Usage: create-theo <project-name> [--template=name]')
+    console.error('Usage: create-theokit <project-name> [--template=name]')
     console.error('')
     console.error('Example:')
-    console.error('  npx create-theo my-app')
-    console.error('  npx create-theo my-app --template=dashboard')
+    console.error('  npx create-theokit my-app')
+    console.error('  npx create-theokit my-app --template=dashboard')
     process.exit(1)
   }
 
@@ -24,7 +24,7 @@ export function main(): void {
   const targetDir = resolve(process.cwd(), projectName)
 
   try {
-    console.log(`\nCreating Theo project "${projectName}" (template: ${templateName})...\n`)
+    console.log(`\nCreating TheoKit project "${projectName}" (template: ${templateName})...\n`)
 
     scaffold(targetDir, projectName, templateName)
 
@@ -35,7 +35,7 @@ export function main(): void {
     console.log(`\n  ✓ Project created at ${targetDir}\n`)
     console.log(`  Next steps:\n`)
     console.log(`    cd ${projectName}`)
-    console.log(`    ${pkgManager === 'npm' ? 'npx' : pkgManager} theo dev\n`)
+    console.log(`    ${pkgManager === 'npm' ? 'npx' : pkgManager} theokit dev\n`)
   } catch (err) {
     console.error(`\n  ✗ ${(err as Error).message}\n`)
     process.exit(1)

@@ -15,9 +15,9 @@
     "declarationMap": true,
     "sourceMap": true,
     "paths": {
-      "theo": ["./packages/theo/src/index.ts"],
-      "theo/server": ["./packages/theo/src/server/index.ts"],
-      "theo/client": ["./packages/theo/src/client/index.ts"]
+      "theokit": ["./packages/theo/src/index.ts"],
+      "theokit/server": ["./packages/theo/src/server/index.ts"],
+      "theokit/client": ["./packages/theo/src/client/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "tests/**/*.ts"],

@@ -1,4 +1,4 @@
-import { defineWebSocket } from 'theo/server'
+import { defineWebSocket } from 'theokit/server'
 
 export default defineWebSocket({
   onMessage(ws, data) {

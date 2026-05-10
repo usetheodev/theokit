@@ -155,7 +155,7 @@ describe('Smoke: Package.json Validation', () => {
 
   it('theo bin should point to dist/', () => {
     const pkg = JSON.parse(readFileSync(resolve(theoDistDir, '../package.json'), 'utf-8'))
-    expect(pkg.bin.theo).toBe('./dist/cli/index.js')
+    expect(pkg.bin.theokit).toBe('./dist/cli/index.js')
   })
 
   it('theo files should include only dist', () => {
@@ -166,7 +166,7 @@ describe('Smoke: Package.json Validation', () => {
 
   it('create-theo bin should point to dist/', () => {
     const pkg = JSON.parse(readFileSync(resolve(createTheoDistDir, '../package.json'), 'utf-8'))
-    expect(pkg.bin['create-theo']).toBe('./dist/cli.js')
+    expect(pkg.bin['create-theokit']).toBe('./dist/cli.js')
   })
 
   it('create-theo files should include dist and templates', () => {

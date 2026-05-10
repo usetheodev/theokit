@@ -41,8 +41,25 @@ pnpm-debug.log*
 # Secrets / credentials
 *.pem
 *.key
+*.p12
+*.pfx
+*.jks
+*.keystore
 credentials.json
 secrets.json
+secrets.yaml
+secrets.yml
+service-account.json
+gcloud-service-key.json
+token.json
+vault.json
+.htpasswd
+.npmrc
+.pypirc
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519
 
 # Temporary
 tmp/

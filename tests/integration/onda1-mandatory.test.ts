@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import { scaffold } from '../../packages/create-theo/src/index.js'
 import { startDevServer } from '../../packages/theo/src/cli/commands/dev.js'
-import { validateProjectStructure } from 'theo'
+import { validateProjectStructure } from 'theokit'
 import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'

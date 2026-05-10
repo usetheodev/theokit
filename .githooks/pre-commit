@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Git pre-commit hook — delegates to scripts/prevent-secrets.sh
+# This hook blocks commits containing secrets or sensitive data.
+
+SCRIPT="$(git rev-parse --show-toplevel)/scripts/prevent-secrets.sh"
+
+if [ -f "$SCRIPT" ]; then
+  bash "$SCRIPT"
+else
+  echo "WARNING: prevent-secrets.sh not found at $SCRIPT"
+  echo "Secret scanning skipped."
+fi

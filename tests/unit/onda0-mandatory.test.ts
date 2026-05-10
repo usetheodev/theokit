@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateProjectStructure, loadConfig } from 'theo'
+import { validateProjectStructure, loadConfig } from 'theokit'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 

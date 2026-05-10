@@ -1,7 +1,7 @@
 import { describe, it, expectTypeOf } from 'vitest'
-import { defineRoute } from 'theo/server'
-import { theoFetch } from 'theo/client'
-import type { InferResponse, InferQuery, InferBody } from 'theo/client'
+import { defineRoute } from 'theokit/server'
+import { theoFetch } from 'theokit/client'
+import type { InferResponse, InferQuery, InferBody } from 'theokit/client'
 import { z } from 'zod'
 
 // Sample route definitions for type testing

@@ -1,5 +1,5 @@
 {
-  "name": "theo-monorepo",
+  "name": "theokit-monorepo",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.15.0",
@@ -17,7 +17,9 @@
     "try:clean": "node -e \"const fs=require('fs');fs.rmSync('my-test',{recursive:true,force:true})\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "check:secrets": "bash scripts/prevent-secrets.sh"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",

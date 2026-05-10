@@ -1,13 +1,13 @@
 {
-  "name": "create-theo",
+  "name": "create-theokit",
   "version": "0.1.0-alpha.0",
   "type": "module",
-  "description": "Scaffold a new Theo project",
+  "description": "Scaffold a new TheoKit project",
   "scripts": {
     "build": "tsup"
   },
   "bin": {
-    "create-theo": "./dist/cli.js"
+    "create-theokit": "./dist/cli.js"
   },
   "files": [
     "dist",

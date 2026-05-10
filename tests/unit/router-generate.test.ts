@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { generateRouteManifest } from 'theo'
-import type { RouteNode } from 'theo'
+import { generateRouteManifest } from 'theokit'
+import type { RouteNode } from 'theokit'
 
 function makeNode(overrides: Partial<RouteNode> = {}): RouteNode {
   return { segment: '', path: '/', children: [], ...overrides }

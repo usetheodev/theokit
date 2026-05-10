@@ -1,3 +1,3 @@
-import { defineConfig } from 'theo'
+import { defineConfig } from 'theokit'
 
 export default defineConfig({})

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from 'node:path'
-import { validateProjectStructure } from 'theo'
-import { scanRoutes } from 'theo'
+import { validateProjectStructure } from 'theokit'
+import { scanRoutes } from 'theokit'
 import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
 
 const fixtureDir = resolve(__dirname, '../../fixtures/agents-dir-ignored')

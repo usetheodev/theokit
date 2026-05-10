@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { TheoConfigError } from 'theo'
+import { TheoConfigError } from 'theokit'
 
 describe('TheoConfigError', () => {
   it('should include the config file path in the message', () => {

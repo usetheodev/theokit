@@ -45,8 +45,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         envPrefix: 'THEO_PUBLIC_',
         resolve: {
           alias: [
-            { find: 'theo/server', replacement: resolve(theoSrcDir, `server/index${ext}`) },
-            { find: 'theo', replacement: resolve(theoSrcDir, `index${ext}`) },
+            { find: 'theokit/server', replacement: resolve(theoSrcDir, `server/index${ext}`) },
+            { find: 'theokit', replacement: resolve(theoSrcDir, `index${ext}`) },
           ],
         },
       }

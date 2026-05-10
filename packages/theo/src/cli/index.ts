@@ -1,6 +1,6 @@
 import cac from 'cac'
 
-const cli = cac('theo')
+const cli = cac('theokit')
 
 cli
   .command('dev', 'Start development server')
@@ -39,6 +39,32 @@ cli
   })
 
 cli
+  .command('generate <type> <name>', 'Generate a route, action, page, or ws endpoint')
+  .action(async (type: string, name: string) => {
+    try {
+      const { generateCommand } = await import('./commands/generate.js')
+      await generateCommand(type, name)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`\n  ✗ ${msg}\n`)
+      process.exit(1)
+    }
+  })
+
+cli
+  .command('routes', 'List all routes, actions, and WebSocket endpoints')
+  .action(async () => {
+    try {
+      const { routesCommand } = await import('./commands/routes.js')
+      await routesCommand()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`\n  ✗ ${msg}\n`)
+      process.exit(1)
+    }
+  })
+
+cli
   .command('docker', 'Generate Dockerfile for production')
   .option('--force', 'Overwrite existing Dockerfile')
   .action(async (options) => {
@@ -53,7 +79,7 @@ cli
   })
 
 cli.help()
-cli.version('0.0.1')
+cli.version('0.1.0-alpha.0')
 
 export function main(): void {
   cli.parse()

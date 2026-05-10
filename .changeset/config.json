@@ -3,7 +3,7 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [["theo", "create-theo"]],
+  "linked": [["theokit", "create-theokit"]],
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defineRoute } from 'theo/server'
+import { defineRoute } from 'theokit/server'
 import { z } from 'zod'
 
 describe('defineRoute', () => {

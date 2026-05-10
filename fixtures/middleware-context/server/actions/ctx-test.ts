@@ -1,4 +1,4 @@
-import { defineAction } from 'theo/server'
+import { defineAction } from 'theokit/server'
 import { z } from 'zod'
 
 export const testAction = defineAction({
