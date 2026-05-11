@@ -11,6 +11,8 @@ function fixture(name: string) {
 export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 30000,
+  expect: { timeout: 10000 },
+  workers: 1,  // Sequential — 4 dev servers compete for resources in parallel
   projects: [
     {
       name: 'onda1',
@@ -38,29 +40,29 @@ export default defineConfig({
       command: `npx tsx ${cliPath} dev --port 3456`,
       cwd: fixture('onda1-hello-theo'),
       port: 3456,
-      reuseExistingServer: !process.env.CI,
-      timeout: 15000,
+      reuseExistingServer: false,
+      timeout: 30000,
     },
     {
       command: `npx tsx ${cliPath} dev --port 3457`,
       cwd: fixture('app-router-nested-layouts'),
       port: 3457,
-      reuseExistingServer: !process.env.CI,
-      timeout: 15000,
+      reuseExistingServer: false,
+      timeout: 30000,
     },
     {
       command: `npx tsx ${cliPath} dev --port 3458`,
       cwd: fixture('app-router-errors'),
       port: 3458,
-      reuseExistingServer: !process.env.CI,
-      timeout: 15000,
+      reuseExistingServer: false,
+      timeout: 30000,
     },
     {
       command: `npx tsx ${cliPath} dev --port 3459`,
       cwd: fixture('app-router-not-found'),
       port: 3459,
-      reuseExistingServer: !process.env.CI,
-      timeout: 15000,
+      reuseExistingServer: false,
+      timeout: 30000,
     },
   ],
 })

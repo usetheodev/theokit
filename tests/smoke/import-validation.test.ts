@@ -177,6 +177,13 @@ describe('Smoke: Package.json Validation', () => {
 })
 
 describe('Smoke: publint Validation', () => {
+  beforeAll(() => {
+    // Ensure build has been run (publint needs dist/)
+    if (!existsSync(resolve(theoDistDir, 'index.js'))) {
+      execSync('pnpm build', { cwd: resolve(__dirname, '../..'), stdio: 'pipe' })
+    }
+  })
+
   it('theo should pass publint', () => {
     const result = execSync('npx publint packages/theo', {
       cwd: resolve(__dirname, '../..'),
