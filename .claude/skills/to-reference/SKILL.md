@@ -1,194 +1,389 @@
 ---
 name: to-reference
-description: "Pesquisa nas implementações de referência (Next.js, Rails, e outras) como resolvem um problema específico. Retorna comparação estruturada com file paths e line numbers. Use ANTES de decisões arquiteturais para aprender com frameworks maduros."
+description: "Adversarial competitive intelligence — pesquisa AGRESSIVA nas implementações de referência em referencias/ para extrair como cada framework resolve um problema, ONDE eles falham, e como o Theo pode dominar. Produz benchmark numérico, adversarial review e disruptive bets. Persiste em docs/competitive/. Use ANTES de qualquer decisão arquitetural."
 user-invocable: true
-allowed-tools: Read, Glob, Grep, Bash, Agent
-argument-hint: "<topic> [--impl nextjs|rails|all]"
+allowed-tools: Read, Glob, Grep, Bash, Write, Agent
+argument-hint: "<topic> [--impl nextjs,rails,...] [--depth quick|deep|paranoid]"
 ---
 
-# Research Reference: Como Outros Frameworks Resolvem Isso?
+# Adversarial Reference Research: Como Vamos Dominar?
 
-Pesquisa nas implementações de referência em `referencias/` como cada uma resolve um problema específico. Retorna comparação estruturada com file paths, line numbers e padrões encontrados.
+**Não somos turistas em código alheio. Somos engenheiros adversariais buscando vantagem competitiva.**
+
+Esta skill é o ponto de partida obrigatório antes de qualquer decisão arquitetural. Para CADA tópico pesquisado, ela responde 3 perguntas:
+
+1. **Como cada framework resolve isso?** (extração técnica)
+2. **Onde cada framework FALHA?** (análise adversarial — issues, RFCs revertidos, anti-patterns)
+3. **Como o Theo faz 10x melhor?** (disruptive bet, não imitação)
+
+Sem mandato de dominação, esta skill não roda. Comparar não basta — temos que **superar**.
 
 ## Arguments
 
-- `$ARGUMENTS` primeira parte = tópico para pesquisar (e.g., "routing", "middleware", "error handling", "server actions", "streaming", "build pipeline", "HMR", "layouts", "loading states")
-- `--impl <name>` (opcional) = escopo para implementação específica, separado por vírgula
+- `$ARGUMENTS` primeira parte = tópico (ex: "routing", "server-actions", "type-safety", "HMR")
+- `--impl <names>` (opcional) = subset de implementações, separado por vírgula. Default: todas em `referencias/`
+- `--depth quick|deep|paranoid` (opcional, default `deep`)
+  - `quick` — 15 min, 1 fluxo por framework, sem adversarial
+  - `deep` — 45 min, fluxo completo + falhas conhecidas + disruptive bet (DEFAULT)
+  - `paranoid` — 90 min, dissecação completa + git arqueologia + RFCs + roadmap de dominação
 
-## Implementações Disponíveis
+## Discovery Dinâmica de Referências
 
-| Name | Path | Language | Strength |
+**NUNCA hardcode a lista de referências.** Sempre rode:
+
+```bash
+ls -d referencias/*/ 2>/dev/null | sed 's|referencias/||;s|/$||'
+```
+
+Cada subdiretório de `referencias/` é uma referência candidata. Detecte a linguagem automaticamente:
+
+```bash
+for ref in referencias/*/; do
+  name=$(basename "$ref")
+  langs=$(find "$ref" -maxdepth 3 -type f -name "*.ts" -o -name "*.rs" -o -name "*.rb" -o -name "*.go" -o -name "*.py" 2>/dev/null | sed 's/.*\.//' | sort -u | tr '\n' ',')
+  loc=$(find "$ref" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.rb" -o -name "*.go" \) ! -path "*/node_modules/*" ! -path "*/dist/*" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+  echo "$name | langs: $langs | LOC: $loc"
+done
+```
+
+## Referências Esperadas (Estado Alvo)
+
+Para máxima cobertura, `referencias/` deve conter:
+
+| Framework | Path | Por que importa | Status |
 |---|---|---|---|
-| `nextjs` | `referencias/next.js/` | Rust+TypeScript | App Router, Server Components, file-based routing, streaming SSR, middleware, Server Actions, build (Turbopack), HMR |
-| `rails` | `referencias/rails/` | Ruby | Convention over configuration, MVC, middleware stack, routing DSL, error handling, migrations, generators, testing patterns |
+| Next.js | `referencias/next.js/` | Market leader, RSC, App Router | ✅ presente |
+| Rails | `referencias/rails/` | Convention over configuration | ✅ presente |
+| **Remix** | `referencias/remix/` | Web Standards, loaders/actions, nested routes | ⚠️ clonar |
+| **Hono** | `referencias/hono/` | Web Standards, multi-runtime, tiny core | ⚠️ clonar |
+| **Nitro** | `referencias/nitro/` | Runtime adapters, h3, auto-imports | ⚠️ clonar |
+| **TanStack Start** | `referencias/tanstack-router/` | Type-safe routing, end-to-end inference | ⚠️ clonar |
+| **tRPC** | `referencias/trpc/` | End-to-end type safety sem codegen | ⚠️ clonar |
+| **Vite** | `referencias/vite/` | Build tool, plugin API, HMR (Theo já usa) | ⚠️ clonar |
+| **Astro** | `referencias/astro/` | Islands, content-first, file routing | ⚠️ clonar |
+| **SvelteKit** | `referencias/sveltekit/` | File routing, form actions, load functions | ⚠️ clonar |
+| **Fastify** | `referencias/fastify/` | Schema-based serialization, plugin system | ⚠️ clonar |
+| **Elysia** | `referencias/elysia/` | Bun-native, end-to-end types, sucinto | ⚠️ opcional |
 
-## Áreas de Pesquisa por Framework
-
-### Next.js — O que aprender
-
-| Área | Onde procurar | O que extrair |
-|---|---|---|
-| File-system routing | `packages/next/src/build/` | Como scan de arquivos vira rotas |
-| App Router | `packages/next/src/server/app-render/` | Como app/ funciona internamente |
-| Layouts | `packages/next/src/server/app-render/` | Como layouts persistem e compõem |
-| Loading/Error | `packages/next/src/client/components/` | Como Suspense boundaries funcionam |
-| Server Actions | `packages/next/src/server/app-render/action-handler.ts` | Como actions são processadas |
-| Middleware | `packages/next/src/server/web/` | Como middleware executa |
-| Build | `packages/next/src/build/` | Pipeline de build, code splitting |
-| HMR | `packages/next/src/client/components/react-dev-overlay/` | Hot module replacement |
-| Streaming | `packages/next/src/server/stream-utils/` | Streaming SSR |
-| Error handling | `packages/next/src/client/components/error-boundary.tsx` | Error boundaries |
-| Config | `packages/next/src/server/config*.ts` | next.config.js processing |
-
-### Rails — O que aprender
-
-| Área | Onde procurar | O que extrair |
-|---|---|---|
-| Routing | `actionpack/lib/action_dispatch/routing/` | DSL de rotas, matching, constraints |
-| Middleware | `actionpack/lib/action_dispatch/middleware/` | Stack de middleware composável |
-| Error handling | `actionpack/lib/action_dispatch/middleware/exception_wrapper.rb` | Error page rendering |
-| Generators | `railties/lib/rails/generators/` | Scaffolding automático |
-| Testing | `activesupport/lib/active_support/testing/` | Test helpers, fixtures |
-| Convention | `railties/lib/rails/application/` | Convention over configuration |
-| Config | `railties/lib/rails/application/configuration.rb` | Sistema de configuração |
-| Request lifecycle | `actionpack/lib/action_controller/metal.rb` | Middleware → Controller → View |
+Se uma referência esperada está ausente, **mencione no output** mas continue com o que houver. Não bloqueia.
 
 ## Processo
 
-### Passo 1 — Parse o Tópico
-
-Extrair tópico de `$ARGUMENTS`. Se `--impl` especificado, filtrar implementações.
-
-### Passo 2 — Verificar Cross-Validations Existentes
-
-Antes de pesquisar do zero, verificar se já existe análise:
+### Passo 1 — Discovery + Inventory
 
 ```bash
-# Procurar análises existentes
-ls referencias/CROSS_VALIDATION_*.md 2>/dev/null
-grep -rl "$TOPIC" referencias/*.md 2>/dev/null
+# 1. Listar referências disponíveis
+REFS=$(ls -d referencias/*/ 2>/dev/null | sed 's|referencias/||;s|/$||')
+echo "Referências disponíveis: $REFS"
+
+# 2. Verificar análises prévias do tópico
+ls docs/competitive/ 2>/dev/null | grep -i "$TOPIC"
+grep -rl "$TOPIC" docs/competitive/ 2>/dev/null
+grep -rl "$TOPIC" docs/technical/ 2>/dev/null
+
+# 3. Identificar pacote do Theo afetado
+grep -rl "$TOPIC" packages/ --include="*.ts" 2>/dev/null | head -10
 ```
 
-### Passo 3 — Pesquisar em Cada Implementação
+### Passo 2 — Extração Técnica (Por Framework)
 
-Para cada implementação (ou as selecionadas):
+Para CADA framework em `--impl` (ou todos):
 
 ```bash
-# 1. Encontrar arquivos relevantes
-grep -rn "$TOPIC" referencias/next.js/ --include='*.ts' --include='*.tsx' --include='*.rs' -l | head -20
-grep -rn "$TOPIC" referencias/rails/ --include='*.rb' -l | head -20
+# Arquivos relevantes
+grep -rn "$KEYWORD" referencias/$FRAMEWORK/ --include='*.ts' --include='*.rs' --include='*.rb' --include='*.go' -l | head -20
 
-# 2. Buscar por padrões relacionados ao tópico
-# Exemplo para "routing":
-grep -rn 'route\|router\|Route\|Router' referencias/next.js/packages/next/src/ --include='*.ts' -l | head -15
+# Entrypoints do fluxo
+grep -rn "export.*function $KEYWORD\|export class .*$KEYWORD\|def $KEYWORD" referencias/$FRAMEWORK/ | head -15
 
-# 3. Ler trechos relevantes
-# Usar Read tool nos arquivos mais promissores
+# Tipos públicos (TypeScript)
+grep -rn "export type.*$KEYWORD\|export interface.*$KEYWORD" referencias/$FRAMEWORK/ --include='*.ts' | head -10
+
+# Tamanho relativo do módulo
+find referencias/$FRAMEWORK/ -path "*$KEYWORD*" -name "*.ts" -o -name "*.rb" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1
 ```
 
-### Passo 4 — Extrair Padrões
+Para cada framework, extrair:
 
-Para cada implementação, extrair:
-- **Approach**: como resolvem o problema
-- **Key file**: arquivo principal
-- **Lines**: linhas relevantes
-- **Pattern**: padrão de design usado
-- **Trade-offs**: prós e contras da abordagem
+- **API pública** (assinaturas, tipos exportados)
+- **Mecanismo interno** (como funciona por baixo)
+- **LOC** do módulo (proxy de complexidade)
+- **Dependências externas** (custo de adoção)
+- **Padrão de design** (Factory, Plugin, Middleware, etc.)
 
-### Passo 5 — Produzir Comparação
+### Passo 3 — Análise Adversarial (DEEP/PARANOID)
 
-## Report Format
+**Esta fase é OBRIGATÓRIA em modo deep e paranoid.** Onde o framework FALHA?
+
+```bash
+# 1. TODOs, FIXMEs, HACKs no código
+grep -rn "TODO\|FIXME\|HACK\|XXX" referencias/$FRAMEWORK/ --include='*.ts' --include='*.rb' | grep -i "$KEYWORD" | head -20
+
+# 2. Commits de fix/revert no tópico (arqueologia)
+cd referencias/$FRAMEWORK && git log --oneline --grep="$KEYWORD" --grep="revert\|hotfix\|breaking" --all-match 2>/dev/null | head -30
+
+# 3. Issues conhecidas (se houver CHANGELOG/RELEASE_NOTES)
+find referencias/$FRAMEWORK -maxdepth 3 -name "CHANGELOG*" -o -name "RELEASES*" 2>/dev/null
+
+# 4. Discussões públicas (use WebSearch se necessário)
+# Procurar: "$FRAMEWORK $KEYWORD bug", "$FRAMEWORK $KEYWORD slow", "$FRAMEWORK $KEYWORD why"
+```
+
+Para cada framework, documentar:
+
+- **Fragilidades** — onde falha, qual edge case quebra
+- **Trade-offs ruins** — escolhas que envelheceram mal
+- **Anti-patterns** — código que o próprio time admite ser ruim
+- **Limitações fundamentais** — não-corrigíveis sem rewrite
+
+### Passo 4 — Benchmark Numérico (Não Score 1-5 Vago)
+
+Tabela obrigatória com NÚMEROS:
+
+| Métrica | Theo | Next.js | Rails | Remix | Hono | Líder |
+|---|---|---|---|---|---|---|
+| LOC do módulo | N | N | N | N | N | quem |
+| Deps transitivas | N | N | N | N | N | quem |
+| API surface (funções exportadas) | N | N | N | N | N | quem |
+| Type-safety end-to-end | sim/não/parcial | ... | ... | ... | ... | quem |
+| Web Standards (Request/Response) | sim/não | ... | ... | ... | ... | quem |
+| Multi-runtime | sim/não | ... | ... | ... | ... | quem |
+| Bundle KB (se aplicável) | N | N | N | N | N | quem |
+| Cold start ms (se aplicável) | N | N | N | N | N | quem |
+
+Se uma métrica não for diretamente comparável, marque "N/A — explique por quê", não invente.
+
+### Passo 5 — Adversarial Review do Theo
+
+**Inversão do papel.** Se o autor do Next.js (Tim Neutkens), do Remix (Ryan Florence), do Hono (Yusuke Wada) e do Rails (DHH) revisassem a abordagem atual do Theo nesse tópico, **o que cada um atacaria?**
+
+| Crítico | Ataque provável | Resposta do Theo |
+|---|---|---|
+| Tim Neutkens (Next.js) | "Vocês não têm RSC, perdem ganho de bundle" | (resposta defensável OU TODO real) |
+| Ryan Florence (Remix) | "Server Actions REST quebram Web Standards" | ... |
+| Yusuke Wada (Hono) | "Vocês acoplam a Vite, não roda em Cloudflare Workers nativo" | ... |
+| DHH (Rails) | "Falta convention, gerador de scaffold real" | ... |
+
+Cada ataque é uma **dívida visível ou um trade-off consciente**. Não invente respostas — se não há resposta, é gap real.
+
+### Passo 6 — Disruptive Bet (10x Não Imitação)
+
+A imitação produz paridade. A dominação exige aposta.
+
+Para cada tópico, propor 1 disruptive bet — uma escolha radical que nenhum concorrente fez (ou que fizeram e abandonaram). Critérios:
+
+- **Por que ninguém faz?** (custo, complexidade, contexto histórico)
+- **Por que faz sentido para o Theo agora?** (constraints diferentes, oportunidade)
+- **Como medimos sucesso?** (métrica dura: 10x menos LOC, 10x menos config, type-safety total, etc.)
+- **Risco de fracasso e plano B**
+
+Exemplos de disruptive bets típicos:
+- "Server Actions como Web Standards Form actions + Zod schema, zero serialização customizada"
+- "Routing com zero magic — exporta defineRoute, não scan de arquivo no build"
+- "Type-safety end-to-end SEM codegen (estilo tRPC), inferindo direto do server"
+- "HMR via Vite com zero plugin Theo — usa virtual modules para o file routing"
+
+## Output Format — `docs/competitive/{topic}.md`
 
 ```markdown
-# Reference Research: {topic}
+# Competitive Intelligence: {topic}
 
 **Data:** YYYY-MM-DD
-**Implementações pesquisadas:** [lista]
-**Tópico:** {topic}
+**Depth:** quick | deep | paranoid
+**Theo packages afetados:** [lista]
+**Referências analisadas:** [lista]
+**Referências ausentes:** [lista — para você clonar depois]
 
-## Resumo Executivo
+## Sumário Executivo (3 frases)
 
-{1-3 frases sobre como cada framework resolve o problema e qual padrão se repete}
+1. Como cada framework resolve.
+2. Onde o estado da arte falha hoje.
+3. Aposta de dominação do Theo.
 
-## Comparação
+## Tabela de Extração Técnica
 
-| Framework | Approach | Key File | Lines | Pattern | Notes |
+| Framework | Approach | Key file:line | LOC | Deps | Pattern |
 |---|---|---|---|---|---|
-| Next.js | ... | packages/next/src/... | 320-329 | ... | ... |
-| Rails | ... | actionpack/lib/... | 162-174 | ... | ... |
+| Next.js | ... | packages/next/.../X.ts:320 | N | N | Factory |
+| Rails | ... | actionpack/lib/.../Y.rb:162 | N | N | Convention |
+| Remix | ... | ... | N | N | ... |
+| Hono | ... | ... | N | N | ... |
 
-## Padrões Encontrados
+## Benchmark Numérico
 
-### Padrão 1: {nome}
-**Usado por:** [frameworks]
-**Como funciona:**
-{descrição técnica com código}
+| Métrica | Theo | Next.js | Rails | Remix | Hono | Líder |
+|---|---|---|---|---|---|---|
+| LOC | N | N | N | N | N | quem |
+| Deps | N | N | N | N | N | quem |
+| API surface | N | N | N | N | N | quem |
+| Type-safety E2E | ... | ... | ... | ... | ... | quem |
+| Web Standards | ... | ... | ... | ... | ... | quem |
+| ... | ... | ... | ... | ... | ... | ... |
 
-**Trade-offs:**
-- Pro: ...
-- Con: ...
+## Análise Adversarial — Onde Cada Um Falha
 
-### Padrão 2: {nome}
-...
+### Next.js
+- **Fragilidade:** [com referência a issue/commit]
+- **Trade-off ruim:** ...
+- **Anti-pattern:** [file:line]
 
-## O Que Cada Framework Faz Melhor
+### Rails
+- ...
 
-| Aspecto | Melhor em | Por quê |
-|---|---|---|
-| ... | Next.js / Rails | ... |
+### Remix
+- ...
 
-## O Que Cada Framework Faz Pior (Anti-patterns a Evitar)
+### Hono
+- ...
 
-| Anti-pattern | Framework | Por quê evitar |
-|---|---|---|
-| ... | ... | ... |
+## Adversarial Review do Theo
 
-## Recomendação para o Theo
+| Crítico | Ataque | Resposta defensável? | Ação |
+|---|---|---|---|
+| Tim Neutkens | "..." | Sim/Não/Parcial | Manter / Mitigar / Refazer |
+| Ryan Florence | "..." | ... | ... |
+| Yusuke Wada | "..." | ... | ... |
+| DHH | "..." | ... | ... |
 
-Baseado na pesquisa:
+## Padrões Convergentes (Onde TODOS Concordam)
 
-1. **Adotar de {framework}:** {o que copiar e por quê}
-2. **Evitar de {framework}:** {o que não copiar e por quê}
-3. **Inovar em:** {onde o Theo pode fazer melhor que ambos}
+1. **{padrão}** — todos fazem assim, porque... → Theo DEVE adotar.
+2. ...
 
-## Impacto em ADRs
+## Padrões Divergentes (Trade-off Real)
 
-{Se a pesquisa afeta decisões arquiteturais já tomadas, listar quais ADRs devem ser revisados}
+1. **{decisão}** — Next.js faz X, Hono faz Y. Trade-off: ... → Theo escolhe **Z porque...**.
+2. ...
+
+## Disruptive Bet do Theo — A Aposta de Dominação
+
+**Aposta:** {1 frase clara}
+
+**Por que ninguém faz:** {análise honesta}
+
+**Por que o Theo faz agora:** {constraint específica + janela de oportunidade}
+
+**Sucesso medido por:**
+- Métrica 1: ... (target N, baseline atual N)
+- Métrica 2: ...
+
+**Risco:** {o que pode dar errado}
+
+**Plano B:** {fallback se a aposta falhar}
+
+## Recomendação Final
+
+### Adotar (paridade competitiva)
+1. **{do framework X}** — {o quê + por quê + arquivo do Theo a modificar}
+
+### Rejeitar (não imitar)
+1. **{do framework Y}** — {o quê + por que NÃO + qual alternativa}
+
+### Dominar (disruptive bet)
+1. **{aposta acima}** — {ação concreta + dono + sprint alvo}
+
+## Impacto em ADRs Existentes
+
+- ADR-XXX: status (manter / revisar / descartar)
+- ...
+
+## Próximos Passos Concretos
+
+- [ ] {Ação 1 com arquivo + linha}
+- [ ] {Ação 2}
+- [ ] {Ação 3}
+
+## Referências Citadas
+
+- {framework}: {file:line} — {o que mostra}
+- {framework}: {commit hash} — {fix relevante}
+- {URL externa se houver}
 ```
 
-## Tópicos Comuns de Pesquisa
+## Tópicos Comuns
 
-| Tópico | O que pesquisar | Keywords |
+| Tópico | Keywords para grep | Líderes a estudar |
 |---|---|---|
-| `routing` | File-based routing, dynamic segments, catch-all | route, router, path, segment, param |
-| `layouts` | Nested layouts, persistence, composition | layout, template, wrapper, children |
-| `middleware` | Request lifecycle, stack, order, short-circuit | middleware, before_action, interceptor |
-| `error-handling` | Error boundaries, error pages, dev vs prod | error, boundary, exception, rescue |
-| `server-actions` | Mutations, forms, CSRF, serialization | action, mutation, form, csrf |
-| `streaming` | SSR streaming, Suspense, progressive rendering | stream, pipe, suspense, flush |
-| `build` | Bundling, code splitting, tree-shaking | build, bundle, chunk, split, webpack, turbopack |
-| `hmr` | Hot module replacement, fast refresh | hmr, hot, reload, refresh, update |
-| `config` | Configuration system, defaults, validation | config, configuration, option, setting |
-| `testing` | Test helpers, fixtures, test runner | test, spec, fixture, helper, assert |
-| `generators` | Scaffolding, project creation, templates | generator, scaffold, create, template |
-| `validation` | Input validation, schema, error formatting | validate, schema, coerce, parse |
-| `auth` | Authentication, session, middleware | auth, session, token, login, protect |
-| `static-assets` | Public files, hashing, cache headers | public, static, asset, hash, cache |
-| `env-vars` | Environment, .env, public/private separation | env, environment, dotenv, config |
-| `openapi` | API documentation, schema generation | openapi, swagger, schema, doc |
-| `cli` | Command design, help, error messages | cli, command, arg, flag, help |
-| `context` | Request context, dependency injection | context, ctx, request, scope |
+| `routing` | `route, router, segment, param, dynamic` | Next.js (App Router), TanStack Router, SvelteKit |
+| `layouts` | `layout, template, outlet, slot, children` | Next.js (parallel routes), Remix (nested) |
+| `middleware` | `middleware, handler, before, intercept, chain` | Hono, Rails, Nitro |
+| `server-routes` | `loader, action, defineRoute, get, post` | Hono (Route handlers), Remix (loaders), Next.js (route handlers) |
+| `server-actions` | `action, mutation, form, useFormState` | Next.js (Server Actions), Remix (actions), SvelteKit (form actions) |
+| `streaming` | `stream, flush, suspense, RSC, pipe` | Next.js (RSC), Remix (defer), SvelteKit (streaming) |
+| `build` | `bundle, chunk, split, treeshake, optimize` | Vite, Turbopack (Next.js), Rollup |
+| `hmr` | `hmr, hot, reload, refresh, accept` | Vite (canonical), webpack (legacy) |
+| `type-safety` | `infer, type, generic, schema, validate` | tRPC, TanStack, Hono RPC, Effect |
+| `error-handling` | `error, exception, rescue, boundary, catch` | Remix (ErrorBoundary), Hono (onError) |
+| `config` | `config, defineConfig, options, defaults` | Vite (defineConfig), Next.js (next.config), Astro |
+| `cli` | `command, flag, arg, scaffold, generate` | Vite CLI, Astro CLI, Rails generators |
+| `testing` | `test, fixture, mock, vitest, playwright` | Vitest, Playwright, Rails fixtures |
+| `auth` | `session, cookie, token, csrf, auth` | Lucia, NextAuth, Rails has_secure_password |
+| `env` | `env, dotenv, public, secret, NEXT_PUBLIC` | Vite (import.meta.env), Next.js (NEXT_PUBLIC_), Astro |
+| `openapi` | `openapi, swagger, zod-openapi, schema` | Hono (zod-openapi), Fastify (json-schema) |
+| `observability` | `otel, opentelemetry, trace, span, metric` | OpenTelemetry instrumentation packages |
+| `static-assets` | `public, static, asset, hash, immutable` | Vite, Astro, Next.js |
+| `context` | `context, AsyncLocalStorage, scope, request` | Hono (Context), Nitro (useEvent), Next.js (headers) |
 
-## Integração
+## Quality Bar
 
-- Use esta skill **ANTES** de decisões arquiteturais
-- Use `/framework-scope-guardian` DEPOIS para validar que a decisão cabe no MVP
-- Use `/framework-api-reviewer` para validar a API resultante
-- Resultados alimentam ADRs nos planos via `/to-plan`
+Toda execução de `to-reference` em modo `deep` ou `paranoid` DEVE produzir:
 
-## Anti-Patterns
+- [ ] Discovery dinâmica de `referencias/*/` (não hardcoded)
+- [ ] Mínimo 3 frameworks comparados (se houver no disco)
+- [ ] Tabela de extração técnica com file:line REAL (não inventado)
+- [ ] Benchmark numérico com >= 4 métricas duras
+- [ ] Análise adversarial — fraqueza concreta de cada framework com evidência
+- [ ] Adversarial review do Theo — 4 críticos, 4 ataques, 4 ações
+- [ ] Pelo menos 1 disruptive bet com métrica de sucesso + plano B
+- [ ] Output gravado em `docs/competitive/{topic}.md`
+- [ ] Próximos passos com arquivo do Theo + linha (>= 3 ações)
 
-1. **Copiar cegamente** — Entenda POR QUE o framework faz assim, não apenas COMO
-2. **Ignorar trade-offs** — Next.js fez escolhas para Vercel. Rails fez para monolitos. O Theo tem constraints diferentes.
-3. **Pesquisar sem agir** — Toda pesquisa deve gerar recomendação concreta
-4. **Pesquisar demais** — 30 minutos de pesquisa máximo. Se não achou, o problema é diferente.
+Se algum item falhar, a skill **NÃO termina**. Retorna ao Passo correspondente.
+
+## Anti-Patterns da Skill
+
+- **Comparação sem benchmark numérico** — score 1-5 não conta. Tem que ter número.
+- **Imitação como conclusão** — "vamos fazer como Next.js" não é dominação.
+- **Adversarial review fake** — inventar ataque genérico. O ataque tem que ser específico.
+- **Disruptive bet vago** — "fazer melhor que todos" não é bet. "Reduzir API surface em 70% mantendo paridade" é.
+- **Pular file:line** — toda referência precisa ser auditável.
+- **Hardcoded framework list** — sempre `ls referencias/`.
+
+## Integração com Outras Skills
+
+| Skill | Quando usar |
+|---|---|
+| `/to-research` | DEPOIS de `to-reference`: aprofunda com web search + RFCs |
+| `/framework-scope-guardian` | Valida que a disruptive bet cabe no MVP |
+| `/framework-api-reviewer` | Revisa a API resultante da decisão |
+| `/meeting` | Para decisões controversas, leva o relatório à reunião |
+| `/to-plan` | Plano de implementação consome `docs/competitive/{topic}.md` |
+
+## Comandos de Clonagem de Referências (Execução Manual)
+
+Quando quiser ampliar o universo de referências:
+
+```bash
+cd /home/paulo/Projetos/usetheo/theo-agents/referencias
+
+# Tier 1 — essenciais
+git clone --depth 1 https://github.com/remix-run/remix.git remix
+git clone --depth 1 https://github.com/honojs/hono.git hono
+git clone --depth 1 https://github.com/nitrojs/nitro.git nitro
+git clone --depth 1 https://github.com/TanStack/router.git tanstack-router
+git clone --depth 1 https://github.com/vitejs/vite.git vite
+
+# Tier 2 — alto valor
+git clone --depth 1 https://github.com/trpc/trpc.git trpc
+git clone --depth 1 https://github.com/withastro/astro.git astro
+git clone --depth 1 https://github.com/sveltejs/kit.git sveltekit
+git clone --depth 1 https://github.com/fastify/fastify.git fastify
+
+# Tier 3 — opcionais
+git clone --depth 1 https://github.com/elysiajs/elysia.git elysia
+```
+
+Adicionar ao `.gitignore` do projeto para não versionar:
+```
+referencias/
+```

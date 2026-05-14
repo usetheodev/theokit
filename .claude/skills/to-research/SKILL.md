@@ -1,349 +1,584 @@
 ---
 name: to-research
 description: |
-  SOTA Deep Research — pesquisa profunda por domínio técnico do Theo framework.
-  Evolui docs existentes usando referências (Next.js, Remix, Rails, Nitro, Hono,
-  TanStack, tRPC, Vite, Astro). Benchmarks contra líderes da indústria, produz
-  roadmaps de melhoria com ações concretas. Use quando pedir para "pesquisar",
-  "melhorar docs técnicos", "SOTA analysis", "benchmark contra Next.js", ou
-  "upgrade domain docs".
+  SOTA Adversarial Deep Research — pesquisa AGRESSIVA por domínio técnico do Theo
+  framework com mandato de DOMINAÇÃO, não paridade. Combina grep em referencias/
+  (Next.js, Rails, Remix, Hono, Nitro, TanStack, Vite, Astro, SvelteKit, Fastify,
+  tRPC quando presentes) com web search ilimitado, benchmark numérico (LOC, deps,
+  bundle KB, cold start ms, HMR ms, p99 latency, type-check time), análise de
+  fracassos dos concorrentes, RFCs em curso, disruptive bets, adversarial review.
+  Produz roadmap de dominação com ações concretas. Use quando pedir para
+  "pesquisar", "melhorar docs técnicos", "SOTA analysis", "superar Next.js",
+  "dominar o domínio X", ou "upgrade domain docs".
 user-invocable: true
-allowed-tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, Agent
-argument-hint: "[domain or 'all' — ex: 'routing', 'server', 'build', 'types', 'middleware', 'all']"
+allowed-tools: Read, Grep, Glob, Bash, Write, WebFetch, WebSearch, Agent
+argument-hint: "[domain or 'all' — ex: 'routing', 'server', 'build', 'types'] [--depth deep|paranoid]"
 ---
 
-# SOTA Deep Research
+# SOTA Adversarial Deep Research
 
-You are a **Principal Engineer with 15+ years at FAANG** performing deep technical research on each domain of the Theo fullstack TypeScript framework.
+You are a **Principal Engineer with 15+ years at FAANG, mandated to make the Theo framework SUPERIOR to Next.js, Rails, Remix, and every fullstack TypeScript framework on Earth.**
 
-## Core Principle: Evolve, Don't Replace
+Paridade não é meta. Diferenciação não é meta. **Dominação é a meta.**
 
-Each domain may already have accumulated research in `docs/technical/{domain}/INDEX.md` with:
-- **Referências-chave** — curated papers, OSS projects, framework analyses
-- **Gaps para pesquisar** — identified knowledge gaps that need filling
-- **Existing SOTA docs** — consolidated research files
+## Core Principle: Dominate, Don't Catch Up
 
-Your job is to **evolve this knowledge base**: fill identified gaps, find newer sources, deepen existing references, and produce actionable improvements. Never discard existing references — build on them.
+Frameworks maduros têm 5-10 anos de dívida acumulada, decisões que envelheceram mal, e fragilidades que o time admite mas não pode corrigir sem rewrite. Essa é a janela de oportunidade do Theo.
 
-## Mission
+Em CADA domínio, esta skill responde 5 perguntas:
 
-For each domain in `docs/technical/`, you:
+1. **Estado da arte hoje:** quem é o melhor em quê, com NÚMEROS
+2. **Falhas do estado da arte:** onde cada líder quebra (issues, reverts, hacks)
+3. **Tendências em curso:** RFCs, TC39, conf talks, GitHub discussions
+4. **Adversarial review do Theo:** se Tim Neutkens, DHH, Ryan Florence, Yusuke Wada revisassem agora, o que atacariam?
+5. **Disruptive bet do Theo:** qual aposta nos coloca 10x à frente em métrica dura?
 
-1. **Read the INDEX.md** — understand existing references, gaps, and score from SCORECARD
-2. **Read ALL existing SOTA docs** — understand what's already researched
-3. **Read the actual code** — verify claims, find gaps between docs and reality
-4. **Fill identified gaps** — the INDEX.md lists specific "Gaps para pesquisar" — research those FIRST
-5. **Deepen existing references** — for each reference, search for updates, newer APIs, breaking changes
-6. **Find new references** — search for sources the existing research missed
-7. **Benchmark against industry** — compare with Next.js, Remix, Nitro, Hono, TanStack, tRPC, Vite, Astro
-8. **Produce upgraded documents** — evolve existing docs, don't rewrite from scratch
+Sem essas 5 respostas, a pesquisa **não termina**.
 
-## Dynamic Domain Discovery
+## Evolve, Don't Replace
 
-**IMPORTANT: Do NOT rely on hardcoded scores.** Always read current state from disk:
+Cada domínio já tem `docs/technical/{domain}/INDEX.md` com:
+- **Referências-chave** — fontes consagradas
+- **Gaps para pesquisar** — perguntas abertas
+- **SOTA docs** — pesquisas anteriores
 
-1. Read `docs/technical/SCORECARD.md` for current scores per domain
-2. Read `docs/technical/{domain}/INDEX.md` for references and gaps
-3. If a domain lacks INDEX.md, create one from template (see Phase 0)
+Sua função: **evoluir esta base**. Encher gaps, atualizar referências envelhecidas, descobrir fontes novas, produzir **roadmap de dominação acionável**. Não descarte referências — marque como superseded com motivo.
 
-The 12 domains are:
+## Dynamic Domain & Reference Discovery
 
-| Domain | Subdirectory | Package(s) | Focus |
-|--------|-------------|------------|-------|
-| routing | `docs/technical/routing/` | `@theo/router` | File-based routing, dynamic segments, catch-all, groups |
-| layouts | `docs/technical/layouts/` | `@theo/router` | Nested layouts, composition, persistence, metadata |
-| server-routes | `docs/technical/server-routes/` | `@theo/server` | defineRoute, HTTP methods, Zod validation, OpenAPI |
-| server-actions | `docs/technical/server-actions/` | `@theo/server` | defineAction, CSRF, forms, serialization, boundary |
-| middleware | `docs/technical/middleware/` | `@theo/server` | Stack, lifecycle, context, auth hooks, order |
-| build | `docs/technical/build/` | `@theo/vite-plugin`, `@theo/cli` | Vite integration, HMR, dev server, production build |
-| type-safety | `docs/technical/type-safety/` | `@theo/core`, `@theo/client` | End-to-end inference, Zod, typed client, type tests |
-| error-handling | `docs/technical/error-handling/` | `@theo/server`, `@theo/router` | Error model, boundaries, dev/prod, error messages |
-| observability | `docs/technical/observability/` | `@theo/server` | OpenTelemetry, tracing, structured logs, metrics |
-| security | `docs/technical/security/` | `@theo/server` | CSRF, headers, secrets, auth, input validation |
-| dx | `docs/technical/dx/` | `@theo/cli`, `create-theo` | CLI design, scaffolding, templates, error messages, onboarding |
-| testing | `docs/technical/testing/` | all packages | TDD+BDD, fixtures, Vitest, Playwright, type tests |
+**Nunca confie em listas hardcoded.** Toda execução começa com:
+
+```bash
+# 1. Domínios disponíveis
+ls -d docs/technical/*/ 2>/dev/null | sed 's|docs/technical/||;s|/$||'
+
+# 2. Referências locais para grep
+ls -d referencias/*/ 2>/dev/null | sed 's|referencias/||;s|/$||'
+
+# 3. Scorecard atual
+cat docs/technical/SCORECARD.md 2>/dev/null
+
+# 4. INDEX do domínio
+cat docs/technical/{domain}/INDEX.md 2>/dev/null
+```
+
+## Domínios do Theo
+
+Lista de referência (validar via discovery):
+
+| Domain | Subdirectory | Package(s) | Foco |
+|---|---|---|---|
+| routing | `docs/technical/routing/` | `@theo/router` | File-based, dynamic, catch-all, groups |
+| layouts | `docs/technical/layouts/` | `@theo/router` | Nested, composition, persistence, metadata |
+| server-routes | `docs/technical/server-routes/` | `@theo/server` | defineRoute, HTTP, Zod, OpenAPI |
+| server-actions | `docs/technical/server-actions/` | `@theo/server` | defineAction, CSRF, forms, serialização |
+| middleware | `docs/technical/middleware/` | `@theo/server` | Stack, lifecycle, context, auth |
+| build | `docs/technical/build/` | `@theo/vite-plugin`, `@theo/cli` | Vite integration, HMR, dev/prod |
+| type-safety | `docs/technical/type-safety/` | `@theo/core`, `@theo/client` | E2E inference, Zod, typed client |
+| error-handling | `docs/technical/error-handling/` | `@theo/server`, `@theo/router` | Modelo, boundaries, dev/prod |
+| observability | `docs/technical/observability/` | `@theo/server` | OTel, tracing, logs, metrics |
+| security | `docs/technical/security/` | `@theo/server` | CSRF, headers, secrets, auth |
+| dx | `docs/technical/dx/` | `@theo/cli`, `create-theo` | CLI, scaffolding, error messages |
+| testing | `docs/technical/testing/` | all | TDD+BDD, fixtures, Vitest, Playwright |
+| config | `docs/technical/config/` | `@theo/core` | defineConfig, validation |
+| project-structure | `docs/technical/project-structure/` | `@theo/core` | Convenções de pastas, validação |
 
 ## Arguments
 
 | Argument | Behavior |
 |---|---|
-| `routing` | Research only the routing domain |
-| `layouts` | Research only the layouts domain |
-| `server-routes` | Research only the server routes domain |
-| `server-actions` | Research only the server actions domain |
-| `middleware` | Research only the middleware domain |
-| `build` | Research only the build/tooling domain |
-| `type-safety` | Research only the type safety domain |
-| `error-handling` | Research only the error handling domain |
-| `observability` | Research only the observability domain |
-| `security` | Research only the security domain |
-| `dx` | Research only the developer experience domain |
-| `testing` | Research only the testing domain |
-| `all` or no args | Research ALL 12 domains using subagents |
+| `routing` (ou outro domínio) | Pesquisa só esse domínio |
+| `all` ou vazio | Pesquisa todos os domínios via subagents (3 waves) |
+| `--depth deep` | Profundidade default — 7 fases completas |
+| `--depth paranoid` | Profundidade máxima — adiciona arqueologia de git nas refs, leitura de RFCs, conf talks, Twitter/X dos autores |
 
 ## Execution Strategy
 
-### Single domain
+### Single Domain
 
-Run all 7 phases inline in the current conversation.
+7 fases inline.
 
-### All domains (`all`)
+### All Domains
 
-Use the **Agent tool** to parallelize. Process in 3 waves:
+Use Agent tool em 3 waves:
 
-- **Wave 1** (foundational): `routing`, `type-safety`, `error-handling`, `security`
-- **Wave 2** (depends on Wave 1): `layouts`, `server-routes`, `server-actions`, `middleware`, `build`
-- **Wave 3** (depends on Wave 2): `observability`, `dx`, `testing`
+- **Wave 1 (fundacional):** routing, type-safety, error-handling, security
+- **Wave 2 (depende da 1):** layouts, server-routes, server-actions, middleware, build
+- **Wave 3 (depende da 2):** observability, dx, testing, config, project-structure
 
-For each wave, spawn up to 4 parallel agents using the appropriate persona agents when available (e.g., `frontend-runtime-architect` for routing, `type-system-architect` for type-safety, `backend-runtime-architect` for server-routes).
+Cada wave roda em paralelo (4 subagents max). Use personas quando aplicável:
+- `frontend-runtime-architect` para routing/layouts
+- `backend-runtime-architect` para server-routes/middleware
+- `type-system-architect` para type-safety
+- `security-baseline-engineer` para security
+- `observability-runtime-engineer` para observability
 
-Each agent receives:
+Prompt para cada subagent:
+
 ```
-Perform SOTA deep research on the "{domain}" domain of the Theo framework.
-Follow the process in .claude/skills/sota-research/SKILL.md phases 0-6.
-Domain directory: docs/technical/{domain}/
-Primary package(s): {packages}
-Budget: max 5 web searches, max 2000 words of new findings.
-Output: update INDEX.md, update/create improvement-roadmap.md, update SCORECARD.md if score changes.
+Perform SOTA Adversarial Deep Research on the "{domain}" domain of the Theo framework.
+Follow .claude/skills/to-research/SKILL.md phases 0-7.
+Mandate: DOMINATION, not parity.
+
+Inputs:
+- docs/technical/{domain}/INDEX.md
+- All files in docs/technical/{domain}/
+- referencias/* (grep dinamicamente)
+- packages/{packages-for-this-domain}/
+
+Output (mandatory):
+- Update INDEX.md
+- Create/update {domain}-domination-roadmap.md
+- Update SCORECARD.md if score muda
+- All 5 mandatory questions answered (see SKILL Core Principle)
+- Minimum 3 disruptive bets per domain
+- Minimum 5 quick wins with package:file references
 ```
 
-### Context Budget
+### Budget — Sem Limite Conservador
 
-- **Max 5 web searches per domain** (prioritize gap-filling)
-- **Max 2000 words of new findings per domain** in improvement-roadmap.md
-- When running `all`, delegate to subagents — never process 12 domains inline
+**A versão anterior limitava 5 web searches e 2000 palavras. Foi cortado.**
 
-## Competitive Benchmark Targets
+- Web searches: **quantos forem necessários** para chegar à dominação (typical 5-15, paranoid 15-30)
+- Words: **tantas quanto a evidência exija** (typical 3000-6000 por domínio)
+- Hard cap apenas para evitar runaway: 50 searches por domínio, 10000 palavras
 
-| Framework | Type | Why Benchmark |
-|-----------|------|---------------|
-| **Next.js** | Fullstack React | Market leader, App Router, Server Components, Server Actions |
-| **Remix** | Fullstack React | Web Standards, loaders/actions, nested routes |
-| **Nitro** | Server framework | Runtime-agnostic, adapters, auto-imports |
-| **Hono** | Web framework | Web Standards, multi-runtime, tiny, fast |
-| **TanStack Start** | Fullstack | Type-safe routing, SSR, RSC exploration |
-| **tRPC** | API layer | End-to-end type safety, no codegen |
-| **Vite** | Build tool | Dev server, HMR, plugin API |
-| **Astro** | Web framework | Content-first, islands, simple DX |
-| **Fastify** | Server | Schema-based validation, serialization |
-| **SvelteKit** | Fullstack | File routing, load functions, form actions |
+Se um domínio crítico (routing, type-safety, server-routes) precisar de mais profundidade, **gaste**. O custo de uma pesquisa rasa é uma decisão arquitetural errada.
 
-Score domain-specific dimensions 1-5:
+## Competitive Benchmark Targets (Expanded)
 
-| Dimension | Theo | Next.js | Remix | Hono | TanStack |
-|-----------|------|---------|-------|------|----------|
-| [domain-specific] | N | N | N | N | N |
-
-## Reference Implementations in `referencias/`
-
-Always check local reference implementations first before web searches:
-
-| Name | Path | What to extract |
+| Framework | Tipo | Por que estudar |
 |---|---|---|
-| **Next.js** | `referencias/next.js/` | App Router internals, SSR, middleware, Server Actions, build pipeline |
-| **Rails** | `referencias/rails/` | Convention over configuration, middleware stack, generators, testing |
-
-Use `/research-reference {topic}` to deep-dive into these.
+| **Next.js** | Fullstack React | Market leader, App Router, RSC, Server Actions, Turbopack |
+| **Remix** | Fullstack React | Web Standards, loaders/actions, nested routes |
+| **Nitro** | Server universal | Runtime-agnostic, adapters, h3, auto-imports |
+| **Hono** | Web framework | Web Standards, multi-runtime, tiny, RPC, zod-openapi |
+| **TanStack Start** | Fullstack | Type-safe routing, SSR, end-to-end inference |
+| **tRPC** | API layer | End-to-end type safety, sem codegen |
+| **Vite** | Build tool | Dev server, HMR, plugin API, virtual modules |
+| **Astro** | Web framework | Content-first, islands, simple DX, integrations |
+| **Fastify** | Server | Schema validation, serialização rápida, plugins |
+| **SvelteKit** | Fullstack | File routing, load functions, form actions |
+| **Elysia** | Bun-native | End-to-end types, performance, sucinto |
+| **SolidStart** | Fullstack Solid | Fine-grained reactivity, SSR |
+| **Qwik** | Resumability | Zero hydration, lazy loading |
+| **Rails** | Fullstack Ruby | Convention, generators, ActiveSupport |
+| **Phoenix** | Fullstack Elixir | LiveView, channels, hot upgrades |
 
 ## Process Per Domain
 
-### Phase 0: INDEX.md Bootstrap (if missing)
+### Phase 0: INDEX Bootstrap (se faltando)
 
-If `docs/technical/{domain}/INDEX.md` does not exist, create it:
+Se `docs/technical/{domain}/INDEX.md` não existe, criar:
 
 ```markdown
 # {Domain Title} — Pesquisa SOTA
 
 ## Escopo
-[One-line description]
+[1 frase]
 
 ## Packages alvo
-- `@theo/{package}` — key modules
+- `@theo/{package}` — módulos principais
 
 ## Referências-chave
-| Fonte | O que extrair |
-|-------|---------------|
+| Fonte | O que extrair | Última checagem |
+|-------|---------------|-----------------|
 
 ## Arquivos nesta pasta
-[List all .md files]
+[Listar .md files]
 
 ## Gaps para pesquisar
-- [Initial gaps from code review]
+- [Gaps iniciais do code review]
+
+## Histórico de Pesquisa
+- YYYY-MM-DD — [tipo de update]
 ```
 
-### Phase 1: Read Existing Knowledge Base (MANDATORY FIRST STEP)
+### Phase 1: Inventário (OBRIGATÓRIO)
 
 ```
-1. Read docs/technical/SCORECARD.md — current score per domain
-2. Read docs/technical/{domain}/INDEX.md — references, gaps, file listing
-3. Read ALL existing SOTA docs listed in INDEX.md
-4. Catalog every reference in "Referências-chave" table
-5. Catalog every gap in "Gaps para pesquisar" list
+1. Ler docs/technical/SCORECARD.md
+2. Ler docs/technical/{domain}/INDEX.md
+3. Ler TODOS os .md em docs/technical/{domain}/
+4. Catalogar TODA referência em "Referências-chave"
+5. Catalogar TODO gap em "Gaps para pesquisar"
+6. Ler referencias/*/ disponíveis para o tópico
 ```
 
-Produce inventories:
+Tabelas de inventário:
 
-| # | Reference | Type | Last checked | Status |
-|---|-----------|------|-------------|--------|
-| R1 | [name] | Framework/Paper/Blog | YYYY-MM | Current/Stale/Check |
+| # | Reference | Type | Last checked | Status | Action |
+|---|---|---|---|---|---|
+| R1 | [nome] | Framework/Paper/Blog | YYYY-MM | Current/Stale/Check | Update/Keep/Supersede |
 
-| # | Gap | Priority | From INDEX |
-|---|-----|----------|-----------|
-| G1 | [gap description] | HIGH/MEDIUM/LOW | Yes/No |
+| # | Gap | Priority | From INDEX | Strategy to Fill |
+|---|---|---|---|---|
+| G1 | [descrição] | HIGH/MED/LOW | Yes/No | [code/web/ref] |
 
-### Phase 2: Code Verification
+### Phase 2: Code Verification (Theo + Referencias)
 
-Read the corresponding package source code. Verify claims:
-
-| Claim | Source doc | Verified? | Evidence (file:line) | Gap |
-|-------|-----------|-----------|---------------------|-----|
-| [claim] | [doc] | YES/NO/PARTIAL | package/module:line | what's missing |
-
-### Phase 3: Fill Identified Gaps (Research)
-
-**Priority 1: Gaps from INDEX.md**
-**Priority 2: Deepen existing references** — check for newer versions, APIs, patterns
-**Priority 3: Find new references** — new sources the research missed
-
-**Web search guidance:**
-- Specific queries: `"file-based routing" typescript framework 2025` not `"web framework best practices"`
-- Include names: `"next.js" OR "remix" OR "hono" {topic} 2025`
-- Prefer: official docs, GitHub, arXiv, RFC specs, conference talks
-- Max 5 searches per domain
-
-**Local reference guidance:**
-- Check `referencias/next.js/` first — grep for the topic
-- Check `referencias/rails/` for convention/pattern inspiration
-- Use `/research-reference {topic}` for structured comparison
-
-### Phase 4: Competitive Benchmark
-
-Compare against fullstack frameworks (see table above).
-
-Score dimensions relevant to the domain, 1-5 scale:
-
-| Dimension | Theo | Next.js | Remix | Hono | Best-in-class |
-|-----------|------|---------|-------|------|---------------|
-| [dim 1] | N | N | N | N | [who] |
-| [dim 2] | N | N | N | N | [who] |
-
-### Phase 5: Gap Analysis & Improvement Roadmap
-
-1. **Gaps Filled** — which INDEX.md gaps were resolved
-2. **Gaps Remaining** — which need more work
-3. **New Gaps Found** — discovered during research
-4. **Quick Wins** — improvements achievable in 1-2 sessions
-5. **Anti-Patterns Found** — patterns contradicting SOTA (with file:line)
-
-### Phase 6: Document Production
-
-**Evolve, don't replace.**
-
-1. **Update INDEX.md** — add references, update gaps, add new files
-2. **Update existing docs** — append findings, correct outdated claims
-3. **Create `improvement-roadmap.md`** if missing
-4. **Update SCORECARD.md** if score changes
-
-### Phase 7: Validation
+Verificar claims existentes contra o código real:
 
 ```bash
-# Check file sizes
-wc -l docs/technical/{domain}/*.md | sort -rn | head -5
+# Theo
+grep -rn "$CLAIM" packages/ --include="*.ts"
 
-# Check broken links
-grep -r '\[.*\](.*\.md)' docs/technical/{domain}/ | while read line; do
-  file=$(echo "$line" | grep -oP '\(.*?\.md\)' | tr -d '()');
-  [ ! -f "docs/technical/{domain}/$file" ] && echo "BROKEN: $line";
+# Referências locais
+for ref in $(ls -d referencias/*/); do
+  echo "=== $ref ==="
+  grep -rn "$KEYWORD" "$ref" --include='*.ts' --include='*.rs' --include='*.rb' -l | head -5
 done
 ```
 
-## improvement-roadmap.md Format
+| Claim | Source doc | Verified? | Evidence | Gap |
+|---|---|---|---|---|
+| [claim] | [doc:line] | YES/NO/PARTIAL | file:line | what's missing |
 
-```markdown
-# {Domain} Improvement Roadmap
+### Phase 3: Grep Adversarial em referencias/
 
-**Research date:** YYYY-MM-DD
-**Researcher:** Claude (SOTA Research Skill)
-**Current SOTA score:** N/5
-**Target SOTA score:** N/5
-**Gaps filled this session:** N of M from INDEX.md
+Para CADA referência local:
 
-## Executive Summary
-[3-5 sentences: where we are, where we should be, biggest gaps]
+```bash
+# 1. Extração técnica
+grep -rn "$KEYWORD" referencias/$REF/ --include='*.ts' --include='*.rs' --include='*.rb' --include='*.go' -l | head -20
 
-## Reference Evolution
-| Reference | Status | Update |
-|-----------|--------|--------|
-| [ref] | Current / Updated / Superseded | [what changed] |
-| [new ref] | NEW | [what it adds] |
+# 2. API pública
+grep -rn "export.*$KEYWORD" referencias/$REF/ --include='*.ts' | head -15
 
-## Gaps Filled
-1. **[Gap from INDEX]** — [answer found] -> [source]
+# 3. Tipos exportados (TypeScript)
+grep -rn "export type.*$KEYWORD\|export interface.*$KEYWORD" referencias/$REF/ --include='*.ts' | head -10
 
-## Competitive Position
-| Dimension | Theo | Best-in-class | Gap | Effort |
-|-----------|------|---------------|-----|--------|
-| ... | N/5 | 5/5 (who) | ... | S/M/L |
+# 4. TODOs/FIXMEs/HACKs (FRAQUEZAS)
+grep -rn "TODO\|FIXME\|HACK\|XXX" referencias/$REF/ --include='*.ts' --include='*.rb' | grep -i "$KEYWORD" | head -20
 
-## Quick Wins (1-2 sessions each)
-1. **[Title]** — [what] -> [impact] -> [package:file]
+# 5. Tamanho do módulo (proxy de complexidade)
+find referencias/$REF -path "*$KEYWORD*" \( -name "*.ts" -o -name "*.rb" \) 2>/dev/null | xargs wc -l 2>/dev/null | tail -5
 
-## Sprint Targets
-1. **[Title]** — [what] -> [impact] -> [packages]
-
-## Post-Launch
-1. **[Title]** — [what] -> [impact]
-
-## Anti-Patterns to Eliminate
-1. **[Pattern]** — [why bad] -> [what instead] -> [file:line]
-
-## Sources (New + Updated)
-- [Source](URL) — what we learned (NEW/UPDATED)
+# 6. Git arqueologia (paranoid mode)
+cd referencias/$REF && git log --oneline --grep="$KEYWORD" 2>/dev/null | head -20
+cd referencias/$REF && git log --oneline --grep="revert\|breaking\|hotfix" 2>/dev/null | grep -i "$KEYWORD" | head -10
 ```
 
-## Quality Bar
+### Phase 4: Web Search Agressivo
 
-Each domain research MUST:
+**Queries específicas, não genéricas:**
+
+- ❌ `web framework routing best practices` — vago
+- ✅ `"next.js" "app router" use after navigation memory leak 2025`
+- ✅ `tRPC v11 type inference subscription patterns`
+- ✅ `hono "zod-openapi" RPC client type safety`
+
+**Fontes prioritárias:**
+1. GitHub Issues do framework alvo (filter `is:closed label:bug`)
+2. GitHub RFCs (em `framework/rfcs/` ou `discussions`)
+3. Conf talks recentes (ViteConf, NextConf, Remix Conf, JSNation)
+4. Twitter/X dos autores (Tim Neutkens, Ryan Florence, Yusuke Wada, Tanner Linsley, Evan You)
+5. Official docs (não blog SEO)
+6. RFC specs (W3C, WHATWG, TC39)
+
+**Web search patterns:**
+
+```
+"{framework}" "{topic}" bug
+"{framework}" "{topic}" slow
+"{framework}" "{topic}" why
+"{framework}" "{topic}" RFC
+"{framework}" "{topic}" 2025
+"{framework}" vs "{competitor}" "{topic}"
+"{topic}" pattern typescript framework 2025
+```
+
+### Phase 5: Benchmark Numérico Duro
+
+Score **1-10 com critérios objetivos**, NÃO 1-5 vago:
+
+| Dimension | Theo | Next.js | Remix | Hono | TanStack | Best | Evidence |
+|---|---|---|---|---|---|---|---|
+| Type-safety E2E (no codegen) | N | N | N | N | N | quem | [arquivo:linha de referência] |
+| Web Standards (Request/Response) | N | N | N | N | N | quem | [evidência] |
+| Multi-runtime | N | N | N | N | N | quem | [evidência] |
+| LOC do módulo (menor = melhor) | N | N | N | N | N | quem | [contagem real] |
+| Deps transitivas | N | N | N | N | N | quem | [package.json] |
+| Bundle KB (se aplicável) | N | N | N | N | N | quem | [build output ou bundlephobia] |
+| Cold start ms (se aplicável) | N | N | N | N | N | quem | [benchmark reportado] |
+| HMR latency ms | N | N | N | N | N | quem | [benchmark reportado] |
+| API surface (count de funções exportadas) | N | N | N | N | N | quem | [grep count] |
+| Type-check time s | N | N | N | N | N | quem | [tsc --diagnostics] |
+| DX score (subjetivo, mas justificado) | N | N | N | N | N | quem | [evidências] |
+
+**Critérios de score 1-10:**
+- 10/10: best-in-class confirmado por benchmark independente + sem fragilidade conhecida
+- 8-9/10: top-tier mas com pequenas fraquezas documentadas
+- 6-7/10: competitivo mas com gaps claros
+- 4-5/10: funcional mas inferior
+- 1-3/10: ausente ou broken
+- 0/10: não implementado
+
+**Se uma métrica não puder ser medida agora, marcar `TBD` com plano de medição** (ex: "rodar tsc --diagnostics no sprint X").
+
+### Phase 6: Adversarial Review
+
+#### 6a. Onde cada concorrente FALHA
+
+Para CADA framework competitor analisado:
+
+```markdown
+### {Framework} — Fragilidades
+
+| Fragilidade | Evidência | Bloqueia o quê | Theo pode explorar? |
+|---|---|---|---|
+| [descrição] | issue/commit/RFC | [caso de uso] | Sim/Não |
+```
+
+Exemplos reais (não inventados — pesquise):
+- Next.js App Router: "use server" boundary confusion, RSC mental model alto
+- Remix: dependência de bundler, ausência de RSC
+- Rails: ActiveRecord lento em queries complexas, sem types
+- Hono: ecossistema menor, sem SSR de UI nativo
+- tRPC: requer servidor compartilhado, latência de inferência em projetos grandes
+
+#### 6b. Adversarial Review do Theo
+
+| Crítico | Especialidade | Ataque provável ao Theo atual | Resposta defensável? | Ação |
+|---|---|---|---|---|
+| Tim Neutkens | Next.js | "..." | Sim/Não/Parcial | Manter/Mitigar/Refazer |
+| Ryan Florence | Remix | "..." | ... | ... |
+| Yusuke Wada | Hono | "..." | ... | ... |
+| Tanner Linsley | TanStack | "..." | ... | ... |
+| Evan You | Vite | "..." | ... | ... |
+| DHH | Rails | "..." | ... | ... |
+
+### Phase 7: Roadmap de Dominação
+
+**Não é "improvement roadmap". É "domination roadmap".**
+
+Estrutura obrigatória:
+
+1. **Gaps filled** — quais gaps do INDEX foram resolvidos
+2. **Gaps remaining** — quais precisam mais trabalho (com plano)
+3. **Gaps newly discovered** — descobertos durante a pesquisa
+4. **Quick wins (1-2 sessions)** — mínimo 5
+5. **Sprint targets (1-2 sprints)** — mínimo 3
+6. **Disruptive bets** — mínimo 3 apostas radicais com:
+   - Por que ninguém faz
+   - Por que o Theo faz agora
+   - Métrica de sucesso (10x melhor que estado da arte)
+   - Risco + plano B
+7. **Anti-patterns to eliminate** — com file:line do Theo onde existem
+8. **References evolved** — quais foram updated/superseded
+
+## Output Files
+
+Cada execução de domínio produz/atualiza:
+
+1. **`docs/technical/{domain}/INDEX.md`** — referências + gaps + arquivos
+2. **`docs/technical/{domain}/{domain}-domination-roadmap.md`** — roadmap completo
+3. **`docs/technical/SCORECARD.md`** — score atualizado
+4. **`docs/competitive/{domain}-benchmark.md`** — tabela de benchmark numérico (compartilhada com `/to-reference`)
+
+### Format: `{domain}-domination-roadmap.md`
+
+```markdown
+# {Domain} Domination Roadmap
+
+**Research date:** YYYY-MM-DD
+**Researcher:** Claude (SOTA Research)
+**Depth:** deep | paranoid
+**Current SOTA score:** N/10
+**Target SOTA score:** N/10
+**Gaps filled:** N of M
+
+## Mandate
+Dominate {domain}. Não imitar Next.js/Rails/Remix — superar com métrica dura.
+
+## Executive Summary
+[3-5 frases: onde estamos, onde precisamos estar, maiores gaps, maior aposta]
+
+## State of the Art (Today)
+
+| Aspect | Best-in-class | Score | Why |
+|---|---|---|---|
+| [aspect] | {framework} | N/10 | [evidência] |
+
+## Where State of the Art FAILS
+
+| Framework | Fragility | Evidence | Opportunity for Theo |
+|---|---|---|---|
+| Next.js | [...] | [issue/commit] | [como Theo explora] |
+| Remix | [...] | [...] | [...] |
+| Hono | [...] | [...] | [...] |
+
+## Trends in Motion (2025-2026)
+
+| Trend | Source | Impact for Theo |
+|---|---|---|
+| [tendência] | [RFC/talk/proposal] | [ação] |
+
+## Adversarial Review do Theo
+
+| Critic | Attack | Defensible? | Action |
+|---|---|---|---|
+| Tim Neutkens | "..." | ... | ... |
+| Ryan Florence | "..." | ... | ... |
+| Yusuke Wada | "..." | ... | ... |
+| DHH | "..." | ... | ... |
+| Tanner Linsley | "..." | ... | ... |
+| Evan You | "..." | ... | ... |
+
+## Numerical Benchmark
+
+| Dimension | Theo | Next.js | Remix | Hono | TanStack | Best | Target |
+|---|---|---|---|---|---|---|---|
+| ... | N/10 | N/10 | N/10 | N/10 | N/10 | who | N/10 |
+
+## Reference Evolution
+
+| Reference | Status | Update |
+|---|---|---|
+| [ref] | Current/Updated/Superseded | [o que mudou] |
+| [new ref] | NEW | [o que adiciona] |
+
+## Gaps Filled This Session
+
+1. **[Gap from INDEX]** — [answer] → [source]
+
+## Gaps Remaining
+
+1. **[Gap]** — [why hard] → [plan to fill]
+
+## Newly Discovered Gaps
+
+1. **[Gap]** — [why matters] → [priority]
+
+## Quick Wins (5+ obrigatórios)
+
+1. **[Title]** — [what] → [impact] → [package:file:line]
+2. ...
+
+## Sprint Targets (3+ obrigatórios)
+
+1. **[Title]** — [what] → [impact] → [packages] → [sprint]
+2. ...
+
+## Disruptive Bets (3+ obrigatórios)
+
+### Bet 1: [Title]
+- **Bet:** [1 frase]
+- **Why nobody does it:** [análise]
+- **Why Theo now:** [janela de oportunidade]
+- **Success metric (10x):** [número específico]
+- **Risk:** [o que pode dar errado]
+- **Plan B:** [fallback]
+
+### Bet 2: ...
+
+### Bet 3: ...
+
+## Anti-Patterns to Eliminate (do Theo)
+
+1. **[Pattern]** — [why bad] → [what instead] → [file:line]
+
+## Sources
+
+### New
+- [Source](URL) — what we learned
+
+### Updated
+- [Source](URL) — what changed
+
+### Superseded
+- [Old source] — replaced by [new source] because [reason]
+
+## Action Items (Concrete)
+
+- [ ] [Action 1 with file:line + owner + sprint]
+- [ ] [Action 2]
+- [ ] [Action 3]
+```
+
+## Quality Bar — Every Domain Research
+
 - [ ] Read INDEX.md and ALL existing SOTA docs (create INDEX.md if missing)
-- [ ] Read actual source code in the corresponding package(s)
-- [ ] Check `referencias/next.js/` and `referencias/rails/` for the topic
-- [ ] Attempt to fill at least 50% of gaps listed in INDEX.md
-- [ ] Perform 3-5 web searches per domain (specific queries)
-- [ ] Check for updates to at least 3 existing references
-- [ ] Benchmark against at least 3 competitor frameworks
-- [ ] Produce at least 3 quick wins with concrete package:file references
-- [ ] Update INDEX.md with new references and gap list
-- [ ] Produce `improvement-roadmap.md` with concrete actions
+- [ ] Read actual source code in Theo packages
+- [ ] Grep `referencias/*/` for the topic (all available refs)
+- [ ] Fill ≥ 50% of gaps from INDEX.md
+- [ ] Web searches: deep=5+, paranoid=15+, sem hard cap conservador
+- [ ] Check updates for ≥ 3 existing references
+- [ ] Benchmark against ≥ 5 competitors (10 in paranoid mode)
+- [ ] ≥ 5 quick wins with package:file references
+- [ ] ≥ 3 sprint targets
+- [ ] ≥ 3 disruptive bets with success metric
+- [ ] Adversarial review with ≥ 4 critics
+- [ ] Numerical benchmark with ≥ 8 dimensions
+- [ ] Update INDEX.md + create/update domination-roadmap.md
 - [ ] Update SCORECARD.md if score changes
-- [ ] Validate no file exceeds 800 lines
+- [ ] Validate every claim has file:line or URL evidence
 
-## Anti-Patterns of the Researcher
+## Anti-Patterns
 
-- **Don't** ignore existing references — build on them
-- **Don't** rely on hardcoded data — read from disk
-- **Don't** produce vague recommendations ("improve DX")
-- **Don't** benchmark without reading competitor source/docs
-- **Don't** propose improvements violating Theo's principles (CLAUDE.md)
-- **Don't** recommend libs without checking maintenance and license
-- **Don't** inflate scores — evidence required
-- **Don't** remove references from INDEX.md — mark as superseded
-- **Don't** process all 12 domains inline — use subagents for `all`
-- **Do** cite specific URLs, RFCs, GitHub repos
-- **Do** reference specific Theo files (package/module:line)
-- **Do** use `/research-reference` for structured local reference comparison
-- **Do** prioritize filling INDEX.md gaps over finding new topics
-- **Do** verify every claim against actual code
+- ❌ Score 1-5 vago — usar 1-10 com critérios objetivos
+- ❌ "Quick wins" sem package:file references
+- ❌ Disruptive bet sem métrica de sucesso numérica
+- ❌ Adversarial review com ataques genéricos
+- ❌ Recomendar lib sem checar maintenance + license
+- ❌ Inflar scores sem evidência
+- ❌ Remover refs do INDEX (sempre mark superseded)
+- ❌ Processar todos os domínios inline (use subagents)
+- ❌ Limitar pesquisa por budget conservador quando domínio é crítico
+- ❌ Ignorar referencias/*/ locais e ir direto para web
+- ❌ Pular adversarial review (é o que separa paridade de dominação)
+
+## Integração
+
+| Skill | Quando usar |
+|---|---|
+| `/to-reference` | ANTES de `/to-research` para extração técnica focada |
+| `/framework-scope-guardian` | DEPOIS, valida que disruptive bets cabem no MVP |
+| `/framework-api-reviewer` | DEPOIS, revisa API resultante |
+| `/meeting` | Para decisões controversas com personas técnicas |
+| `/to-plan` | Plano de implementação consome domination-roadmap.md |
+| `/edge-case-plan` | Identifica edge cases não cobertos pela pesquisa |
 
 ## Output Summary
 
 ```
-SOTA Research Complete
-======================
-| Domain          | Before | After | Gaps Filled | New Refs | Quick Wins |
-|-----------------|--------|-------|-------------|----------|------------|
-| [domain]        | N/5    | N/5   | N of M      | N        | N          |
+SOTA Domination Research Complete
+==================================
+| Domain          | Before | After | Gaps Filled | Quick Wins | Sprint | Bets |
+|-----------------|--------|-------|-------------|------------|--------|------|
+| [domain]        | N/10   | N/10  | N of M      | N          | N      | N    |
 
 Files updated: [list]
 Files created: [list]
+References evolved: [N updated, N new, N superseded]
 Validation: [PASS/FAIL]
+Top disruptive bet: [1 frase]
 ```
+
+## Ampliação de Referências
+
+Mesmo comando da skill `/to-reference`. Para esta skill, clone PELO MENOS Tier 1 antes de pesquisar domínios críticos:
+
+```bash
+cd /home/paulo/Projetos/usetheo/theo-agents/referencias
+
+# Tier 1 — essenciais para pesquisa SOTA
+git clone --depth 1 https://github.com/remix-run/remix.git remix
+git clone --depth 1 https://github.com/honojs/hono.git hono
+git clone --depth 1 https://github.com/nitrojs/nitro.git nitro
+git clone --depth 1 https://github.com/TanStack/router.git tanstack-router
+git clone --depth 1 https://github.com/vitejs/vite.git vite
+
+# Tier 2 — alto valor
+git clone --depth 1 https://github.com/trpc/trpc.git trpc
+git clone --depth 1 https://github.com/withastro/astro.git astro
+git clone --depth 1 https://github.com/sveltejs/kit.git sveltekit
+git clone --depth 1 https://github.com/fastify/fastify.git fastify
+
+# Tier 3 — opcionais
+git clone --depth 1 https://github.com/elysiajs/elysia.git elysia
+git clone --depth 1 https://github.com/solidjs/solid-start.git solid-start
+git clone --depth 1 https://github.com/QwikDev/qwik.git qwik
+```
+
+A skill detecta automaticamente o que estiver presente — não bloqueia se faltar Tier 2/3.

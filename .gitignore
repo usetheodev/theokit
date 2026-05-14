@@ -76,3 +76,6 @@ ONDAS.md
 
 # Local test project
 my-test/
+
+# Reference framework implementations (cloned for SOTA research)
+referencias/
