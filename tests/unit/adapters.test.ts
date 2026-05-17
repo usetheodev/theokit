@@ -7,6 +7,11 @@ describe('Adapter Interface', () => {
     expect(VALID_TARGETS).toContain('node')
     expect(VALID_TARGETS).toContain('vercel')
     expect(VALID_TARGETS).toContain('cloudflare')
+    expect(VALID_TARGETS).toContain('static')
+    expect(VALID_TARGETS).toContain('bun')
+    expect(VALID_TARGETS).toContain('deno-deploy')
+    expect(VALID_TARGETS).toContain('netlify')
+    expect(VALID_TARGETS).toContain('aws-lambda')
   })
 
   it('should reject invalid target', () => {

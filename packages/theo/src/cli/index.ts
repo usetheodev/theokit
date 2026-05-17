@@ -65,6 +65,27 @@ cli
   })
 
 cli
+  .command('check', 'Run typecheck + scan + (optional) eslint')
+  .action(async () => {
+    const { checkCommand } = await import('./commands/check.js')
+    await checkCommand()
+  })
+
+cli
+  .command('add <package>', 'Install a known TheoKit adapter or plugin (whitelist-only)')
+  .action(async (pkg: string) => {
+    const { addCommand } = await import('./commands/add.js')
+    await addCommand(pkg)
+  })
+
+cli
+  .command('info', 'Print environment info (runtime, config, routes)')
+  .action(async () => {
+    const { infoCommand } = await import('./commands/info.js')
+    await infoCommand()
+  })
+
+cli
   .command('docker', 'Generate Dockerfile for production')
   .option('--force', 'Overwrite existing Dockerfile')
   .action(async (options) => {

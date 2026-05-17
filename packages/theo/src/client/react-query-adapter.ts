@@ -1,0 +1,73 @@
+/**
+ * T5.3 — React Query adapter primitives.
+ *
+ * Exposes:
+ *  - `stableQueryKey(path, options)` — produces a deterministic queryKey
+ *    that is equal across calls when the logical content of query/body is
+ *    equal, regardless of property order or inline-object identity. Solves
+ *    EC-10 (inline-object → infinite refetch).
+ *  - `buildUseTheoQueryConfig(path, options, fetcher)` — produces the
+ *    `{ queryKey, queryFn }` pair that consumers pass to `useQuery` from
+ *    `@tanstack/react-query`.
+ *
+ * NOTE: this module ships inside `theokit/client` rather than as a separate
+ * `@theokit/react-query` npm package for the 0.2.0 release. A package split
+ * is cheap to add later once we have downstream adopters.
+ */
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value)
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map((v) => stableStringify(v)).join(',') + ']'
+  }
+  const keys = Object.keys(value as Record<string, unknown>).sort()
+  const pairs = keys.map(
+    (k) => JSON.stringify(k) + ':' + stableStringify((value as Record<string, unknown>)[k]),
+  )
+  return '{' + pairs.join(',') + '}'
+}
+
+export interface FetchOptionsLike {
+  query?: unknown
+  body?: unknown
+  params?: unknown
+}
+
+export type QueryKey = readonly unknown[]
+
+export function stableQueryKey(path: string, options: FetchOptionsLike): QueryKey {
+  const key: unknown[] = [path]
+  if (options.query !== undefined) {
+    key.push({ kind: 'query', payload: stableStringify(options.query) })
+  }
+  if (options.body !== undefined) {
+    key.push({ kind: 'body', payload: stableStringify(options.body) })
+  }
+  if (options.params !== undefined) {
+    key.push({ kind: 'params', payload: stableStringify(options.params) })
+  }
+  return key
+}
+
+export type Fetcher<TResult = unknown> = (
+  path: string,
+  options: FetchOptionsLike,
+) => Promise<TResult>
+
+export interface UseTheoQueryConfig<TResult = unknown> {
+  queryKey: QueryKey
+  queryFn: () => Promise<TResult>
+}
+
+export function buildUseTheoQueryConfig<TResult = unknown>(
+  path: string,
+  options: FetchOptionsLike,
+  fetcher: Fetcher<TResult>,
+): UseTheoQueryConfig<TResult> {
+  return {
+    queryKey: stableQueryKey(path, options),
+    queryFn: () => fetcher(path, options),
+  }
+}

@@ -9,6 +9,8 @@ export function generateEntryClient(ssr?: boolean): string {
     `import { ${rootMethod} } from 'react-dom/client'`,
     `import { createBrowserRouter, RouterProvider } from 'react-router'`,
     `import { routes } from '/@theo/route-manifest'`,
+    `// T1.3 — side-effect import sets globalThis.__THEO_TRANSFORMER__ for theoFetch`,
+    `import '/@theo/runtime-config'`,
     ``,
     `const router = createBrowserRouter(routes)`,
     `const el = document.getElementById('root')`,

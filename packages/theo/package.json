@@ -1,7 +1,8 @@
 {
   "name": "theokit",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "type": "module",
+  "license": "Apache-2.0",
   "scripts": {
     "build": "tsup"
   },
@@ -24,6 +25,14 @@
     "./client": {
       "types": "./dist/client/index.d.ts",
       "import": "./dist/client/index.js"
+    },
+    "./adapters/web-shim": {
+      "types": "./dist/adapters/web-shim.d.ts",
+      "import": "./dist/adapters/web-shim.js"
+    },
+    "./adapters/ws-shim": {
+      "types": "./dist/adapters/ws-shim.d.ts",
+      "import": "./dist/adapters/ws-shim.js"
     }
   },
   "files": [

@@ -1,4 +1,55 @@
 import type { z } from 'zod'
+import superjson from 'superjson'
+import { getGlobalBatcher } from './batch-transport.js'
+
+// --- Transformer (T1.3) ---
+
+/**
+ * Module-scoped flag preventing the transformer-mismatch warning from
+ * firing more than once per session (EC-6).
+ */
+let mismatchWarned = false
+
+/** Test-only helper to reset the warned flag between assertions. */
+export function __resetMismatchWarningForTests(): void {
+  mismatchWarned = false
+}
+
+/**
+ * Deserialize a fetch response body according to the negotiated transformer.
+ *
+ * `serverTransformerName` comes from the `x-theo-transformer` response header
+ * (null when absent — server is using the default JSON path).
+ * `clientTransformerName` is the transformer the client was built with
+ * (typically injected via a Vite virtual module; falls back to `'json'`).
+ *
+ * Mismatch fires a single console.warn and falls back to JSON.parse (EC-5/EC-6).
+ */
+export function deserializeFetchResponse(
+  raw: string,
+  serverTransformerName: string | null,
+  clientTransformerName: string,
+): unknown {
+  if (raw === '' || raw === null || raw === undefined) {
+    return null
+  }
+
+  const serverEffective = serverTransformerName ?? 'json'
+  if (serverEffective !== clientTransformerName && !mismatchWarned) {
+    mismatchWarned = true
+    console.warn(
+      `[theokit] transformer mismatch: server=${serverEffective}, client=${clientTransformerName}. Falling back to JSON.parse.`,
+    )
+  }
+
+  if (serverEffective === 'superjson' && clientTransformerName === 'superjson') {
+    const wrapped = JSON.parse(raw) as Parameters<typeof superjson.deserialize>[0]
+    return superjson.deserialize(wrapped)
+  }
+
+  // Default path (json) or mismatch fallback
+  return JSON.parse(raw)
+}
 
 // --- Utility Types ---
 
@@ -53,6 +104,27 @@ export async function theoFetch<T>(
   url: string,
   options?: TheoFetchOptions<T>,
 ): Promise<InferResponse<T>> {
+  // T1.5 — Transparent batching: when globalThis.__THEO_BATCHING__ is truthy
+  // (set via Vite virtual module when config.batching=true), route this call
+  // through the global batcher. Falls back to direct fetch on batcher failure
+  // (degrade gracefully).
+  const batcher = getGlobalBatcher()
+  if (batcher) {
+    try {
+      const method = (options as { method?: string } | undefined)?.method ?? 'GET'
+      const result = await batcher.dispatch({
+        path: url,
+        method,
+        query: (options as { query?: Record<string, unknown> } | undefined)?.query,
+        body: (options as { body?: unknown } | undefined)?.body,
+      })
+      return result as InferResponse<T>
+    } catch (err) {
+      // Fall through to direct fetch path below
+      void err
+    }
+  }
+
   const fetchUrl = new URL(url, globalThis.location?.origin ?? 'http://localhost:3000')
 
   // Append query params (skip undefined values)
@@ -99,5 +171,21 @@ export async function theoFetch<T>(
     return null as InferResponse<T>
   }
 
-  return response.json() as Promise<InferResponse<T>>
+  // T1.3 — transformer-aware deserialization
+  const serverTransformerName = response.headers.get('x-theo-transformer')
+  const clientTransformerName = resolveClientTransformerName()
+  const text = await response.text()
+  return deserializeFetchResponse(text, serverTransformerName, clientTransformerName) as InferResponse<T>
+}
+
+/**
+ * Read the client-configured transformer name. Default `'json'`.
+ *
+ * In a Vite build, this is overridden by virtual module
+ * `/@theo/runtime-config` which sets `globalThis.__THEO_TRANSFORMER__`.
+ * Outside Vite (Node SSR, tests) the default applies.
+ */
+function resolveClientTransformerName(): string {
+  const g = globalThis as { __THEO_TRANSFORMER__?: string }
+  return g.__THEO_TRANSFORMER__ ?? 'json'
 }

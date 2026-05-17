@@ -7,6 +7,8 @@ export default defineConfig([
       'server/index': 'src/server/index.ts',
       'vite-plugin/index': 'src/vite-plugin/index.ts',
       'client/index': 'src/client/index.ts',
+      'adapters/web-shim': 'src/adapters/web-shim.ts',
+      'adapters/ws-shim': 'src/adapters/ws-shim.ts',
     },
     format: ['esm'],
     dts: true,

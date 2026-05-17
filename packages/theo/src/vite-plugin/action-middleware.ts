@@ -6,14 +6,21 @@ import { sendError } from '../server/execute.js'
 import { createViteLoader } from '../server/module-loader.js'
 import { logRequest } from '../server/logger.js'
 import { findSuggestion } from '../server/suggest.js'
+import type { PluginRunner } from '../server/plugin-runner.js'
 
 const PREFIX = '/api/__actions/'
+
+export interface ActionMiddlewareOptions {
+  pluginRunner?: PluginRunner
+}
 
 export function createActionMiddleware(
   vite: ViteDevServer,
   serverDir: string,
+  options?: ActionMiddlewareOptions,
 ): Connect.NextHandleFunction {
   const loadModule = createViteLoader(vite)
+  const pluginRunner = options?.pluginRunner
   return async (req, res, next) => {
     const url = req.url ?? ''
     if (!url.startsWith(PREFIX)) {
@@ -50,7 +57,7 @@ export function createActionMiddleware(
       return
     }
 
-    await executeAction(action.filePath, exportName, req, res, loadModule, serverDir, requestId)
+    await executeAction(action.filePath, exportName, req, res, loadModule, serverDir, requestId, pluginRunner)
     logRequest({ method: req.method ?? 'POST', url, status: res.statusCode, duration: Date.now() - start, requestId })
   }
 }

@@ -28,6 +28,21 @@ export async function buildCommand(options?: { target?: string }): Promise<void>
   } else if (target === 'cloudflare') {
     const { cloudflareAdapter } = await import('../../adapters/cloudflare.js')
     await cloudflareAdapter.build(config, cwd)
+  } else if (target === 'static') {
+    const { staticAdapter } = await import('../../adapters/static.js')
+    await staticAdapter.build(config, cwd)
+  } else if (target === 'bun') {
+    const { bunAdapter } = await import('../../adapters/bun.js')
+    await bunAdapter.build(config, cwd)
+  } else if (target === 'deno-deploy') {
+    const { denoDeployAdapter } = await import('../../adapters/deno-deploy.js')
+    await denoDeployAdapter.build(config, cwd)
+  } else if (target === 'netlify') {
+    const { netlifyAdapter } = await import('../../adapters/netlify.js')
+    await netlifyAdapter.build(config, cwd)
+  } else if (target === 'aws-lambda') {
+    const { awsLambdaAdapter } = await import('../../adapters/aws-lambda.js')
+    await awsLambdaAdapter.build(config, cwd)
   }
 
   // Generate route manifest

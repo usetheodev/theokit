@@ -58,6 +58,15 @@ export function scanServerRoutes(serverDir: string): ServerRouteNode[] {
   const results: ServerRouteNode[] = []
   scanDir(routesDir, routesDir, results)
 
+  // T1.4 / EC-2 — refuse to scan if a user route collides with the reserved
+  // batch endpoint path. User must rename or disable batching.
+  const conflicting = results.find((r) => r.routePath === '/api/__theo_batch__')
+  if (conflicting) {
+    throw new Error(
+      `Server route ${conflicting.filePath} resolves to '/api/__theo_batch__' which is reserved for the batch endpoint. Rename the route or disable batching in theo.config.ts.`,
+    )
+  }
+
   // Sort: static first, then dynamic, then catch-all last
   const isCatchAll = (route: ServerRouteNode) => route.routePath.includes(':...')
   results.sort((a, b) => {

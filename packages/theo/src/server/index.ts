@@ -37,3 +37,39 @@ export type { SerializedResponse } from './serialization.js'
 
 export { generateManifest, writeManifest, loadManifest } from './manifest.js'
 export type { TheoManifest, ManifestRoute, ManifestAction, ManifestWebSocket, LoadedManifest } from './manifest.js'
+
+// Low-level pipeline primitives — exported so runtime adapters (Bun, Netlify,
+// AWS Lambda) can drive the same executeRoute pipeline that dev mode uses.
+export { scanServerRoutes } from './scan.js'
+export { matchRoute } from './match.js'
+export { executeRoute, sendError, sendJson } from './execute.js'
+export { createProductionLoader, createViteLoader } from './module-loader.js'
+export type { ServerRouteNode } from './match.js'
+export type { LoadModule } from './module-loader.js'
+
+export { defineTheoPlugin } from './define-plugin.js'
+export { PluginRunner, DuplicatePluginError, DuplicateDecorationError } from './plugin-runner.js'
+export { createPluginRunnerFromConfig, InvalidPluginShapeError } from './load-plugins.js'
+
+export {
+  superjsonTransformer,
+  jsonTransformer,
+  resolveTransformer,
+} from './transformer.js'
+export type { TheoTransformer } from './transformer.js'
+
+export { loadCustomErrorPages, MAX_ERROR_HTML_BYTES } from './error-pages.js'
+export type { CustomErrorPages } from './error-pages.js'
+export type {
+  TheoPlugin,
+  TheoApp,
+  PluginContext,
+  PluginErrorContext,
+  HookName,
+  HookResult,
+  OnRequestHook,
+  PreHandlerHook,
+  OnResponseHook,
+  OnErrorHook,
+  RunHookOptions,
+} from './plugin-types.js'

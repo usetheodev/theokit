@@ -5,6 +5,7 @@ import { sendJson, sendError } from './execute.js'
 import { parseRequestBody } from './body-parser.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
 import { AuthRequiredError } from './auth.js'
+import type { PluginRunner } from './plugin-runner.js'
 
 export async function executeAction(
   filePath: string,
@@ -14,7 +15,9 @@ export async function executeAction(
   loadModule: LoadModule,
   serverDir?: string,
   requestId?: string,
+  pluginRunner?: PluginRunner,
 ): Promise<void> {
+  void pluginRunner
   try {
     // 1. Only POST
     const method = (req.method ?? 'GET').toUpperCase()

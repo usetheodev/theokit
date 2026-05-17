@@ -15,6 +15,8 @@ import { createRateLimiter } from '../../server/rate-limit.js'
 import { findSuggestion } from '../../server/suggest.js'
 import { scanWebSocketRoutes } from '../../server/ws-scan.js'
 import { loadManifest } from '../../server/manifest.js'
+import { createPluginRunnerFromConfig } from '../../server/load-plugins.js'
+import { resolveTransformer } from '../../server/transformer.js'
 import type { ServerRouteNode } from '../../server/match.js'
 import type { ActionNode } from '../../server/action-scan.js'
 import type { WebSocketRouteNode } from '../../server/ws-scan.js'
@@ -38,6 +40,8 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const indexHtml = readFileSync(join(clientDir, 'index.html'), 'utf-8')
   const loadModule = createProductionLoader()
   const port = options.port ?? config.port
+  const pluginRunner = await createPluginRunnerFromConfig(config.plugins)
+  const transformer = resolveTransformer(config.serialization)
 
   // Custom error pages (optional)
   const custom404Path = join(clientDir, '404.html')
@@ -71,13 +75,24 @@ export async function startCommand(options: StartOptions): Promise<void> {
   // SSR setup (opt-in)
   const ssrServerPath = resolve(distDir, 'server/entry-server.js')
   const ssrEnabled = config.ssr && existsSync(ssrServerPath)
+  const ssrStreamingEnabled = ssrEnabled && config.ssrStreaming === true
   let ssrRender: ((url: string) => Promise<string | { redirect: Response }>) | null = null
+  let ssrRenderStreaming:
+    | ((
+        url: string,
+        response: import('node:http').ServerResponse,
+        options?: { signal?: AbortSignal },
+      ) => Promise<{ redirect: Response } | { streaming: true } | void>)
+    | null = null
   let htmlHead = ''
   let htmlTail = ''
 
   if (ssrEnabled) {
     const mod = await import(ssrServerPath)
     ssrRender = mod.render
+    // T6.1: renderStreaming is only exported when ssrStreaming was enabled
+    // at build time. Capture both so we can switch per request without re-importing.
+    ssrRenderStreaming = typeof mod.renderStreaming === 'function' ? mod.renderStreaming : null
     // Split HTML template on root div
     const rootDivMatch = indexHtml.match(/<div id=["']root["'][^>]*>/)
     if (rootDivMatch) {
@@ -161,7 +176,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
           return
         }
         const method = (req.method ?? 'GET').toUpperCase()
-        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId)
+        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer)
         logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
         return
       }
@@ -178,6 +193,35 @@ export async function startCommand(options: StartOptions): Promise<void> {
       }
 
       // 5. SSR or SPA fallback
+      // T6.1: prefer streaming when config.ssrStreaming AND the build emitted renderStreaming.
+      if (ssrStreamingEnabled && ssrRenderStreaming) {
+        // Wire client-disconnect → AbortController (EC-11)
+        const controller = new AbortController()
+        const onClose = (): void => controller.abort()
+        req.on('close', onClose)
+        try {
+          const result = await ssrRenderStreaming(url, res, { signal: controller.signal })
+          if (result && typeof result === 'object' && 'redirect' in result) {
+            res.writeHead(302, { Location: (result.redirect as Response).headers.get('location') ?? '/' })
+            res.end()
+            return
+          }
+          // When renderStreaming succeeds it has already piped + flushed headers.
+          // It is responsible for calling res.end() once the stream is drained.
+          return
+        } catch (streamErr) {
+          console.error('[SSR Stream Error]', (streamErr as Error).message)
+          if (!res.headersSent) {
+            res.writeHead(500, { 'Content-Type': 'text/html' })
+          }
+          if (!res.writableEnded) {
+            res.end(custom500Html ?? '<h1>500 — Server Error</h1>')
+          }
+          return
+        } finally {
+          req.removeListener('close', onClose)
+        }
+      }
       if (ssrRender) {
         try {
           const result = await ssrRender(url)

@@ -4,6 +4,9 @@ import type { LoadModule } from './module-loader.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
 import { AuthRequiredError } from './auth.js'
 import { parseRequestBody, type BodyParserOptions } from './body-parser.js'
+import type { PluginRunner } from './plugin-runner.js'
+import type { PluginContext } from './plugin-types.js'
+import type { TheoTransformer } from './transformer.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
 
@@ -11,13 +14,21 @@ export function sendJson(
   res: ServerResponse,
   data: unknown,
   status = 200,
+  transformer?: TheoTransformer,
 ): void {
-  const body = JSON.stringify(data)
+  // T1.2 — transformer-aware serialization. Default (no transformer) uses
+  // JSON.stringify direct for backward compat.
+  const body = transformer ? transformer.serialize(data) : JSON.stringify(data)
   res.writeHead(status, {
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(body),
   })
   res.end(body)
+}
+
+export interface SendErrorOptions {
+  custom404Html?: string
+  custom500Html?: string
 }
 
 export function sendError(
@@ -27,6 +38,7 @@ export function sendError(
   status: number,
   issues?: unknown[],
   requestId?: string,
+  options?: SendErrorOptions,
 ): void {
   const errorMessage =
     code === 'INTERNAL_ERROR' && process.env.NODE_ENV === 'production'
@@ -35,6 +47,26 @@ export function sendError(
 
   if (code === 'INTERNAL_ERROR') {
     console.error(`[${requestId ?? 'no-id'}] ${message}`)
+  }
+
+  // T2.4 — custom HTML for 404/500 when provided by adapter
+  if (status === 404 && options?.custom404Html) {
+    const body = options.custom404Html
+    res.writeHead(404, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': Buffer.byteLength(body),
+    })
+    res.end(body)
+    return
+  }
+  if (status === 500 && options?.custom500Html) {
+    const body = options.custom500Html
+    res.writeHead(500, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': Buffer.byteLength(body),
+    })
+    res.end(body)
+    return
   }
 
   sendJson(
@@ -89,14 +121,39 @@ export async function executeRoute(
   loadModule: LoadModule,
   serverDir?: string,
   requestId?: string,
+  pluginRunner?: PluginRunner,
+  transformer?: TheoTransformer,
 ): Promise<void> {
+  const buildPluginCtx = (ctxObj: Record<string, unknown>): PluginContext => ({
+    request: req,
+    response: res,
+    ctx: ctxObj,
+    requestId: requestId ?? 'no-id',
+  })
+
+  // T1.2 — emit x-theo-transformer header when a non-default transformer is in use.
+  // 'json' is treated as default (no header); any named transformer emits.
+  if (transformer && transformer.name !== 'json') {
+    res.setHeader('x-theo-transformer', transformer.name)
+  }
+
   try {
+    // T4.2 — onRequest hook (runs before middleware)
+    let ctx: Record<string, unknown> = {}
+    if (pluginRunner) {
+      pluginRunner.applyDecorations(ctx)
+      const onReqResult = await pluginRunner.runOnRequest(buildPluginCtx(ctx))
+      if (onReqResult.shortCircuited) return
+    }
+
     // Run middleware + context pipeline
-    let ctx: unknown = {}
     if (serverDir) {
       const result = await runMiddlewareAndContext(req, res, loadModule, serverDir)
       if (result.aborted) return
-      ctx = result.ctx
+      ctx = (result.ctx ?? {}) as Record<string, unknown>
+      // Re-apply decorations on top of middleware-produced ctx so plugin
+      // decorations win when middleware did not set the same key.
+      if (pluginRunner) pluginRunner.applyDecorations(ctx)
     }
 
     const mod = await loadModule(route.filePath)
@@ -164,12 +221,19 @@ export async function executeRoute(
       Object.assign(params, result.data)
     }
 
+    // T4.3 — preHandler hook (after Zod validation, before handler)
+    if (pluginRunner) {
+      const preResult = await pluginRunner.runPreHandler(buildPluginCtx(ctx))
+      if (preResult.shortCircuited) return
+    }
+
     // Execute handler
     const handlerResult = await handler({ query, body, params, request: req, ctx })
 
     // Handle result
     if (handlerResult === undefined || handlerResult === null) {
-      sendJson(res, null, (rc.status as number) ?? 204)
+      sendJson(res, null, (rc.status as number) ?? 204, transformer)
+      if (pluginRunner) await pluginRunner.runOnResponse(buildPluginCtx(ctx))
       return
     }
 
@@ -190,15 +254,42 @@ export async function executeRoute(
       }
 
       res.end()
+      if (pluginRunner) await pluginRunner.runOnResponse(buildPluginCtx(ctx))
       return
     }
 
-    sendJson(res, handlerResult, (rc.status as number) ?? 200)
+    sendJson(res, handlerResult, (rc.status as number) ?? 200, transformer)
+    if (pluginRunner) await pluginRunner.runOnResponse(buildPluginCtx(ctx))
   } catch (err) {
+    // T4.4 — onError hook (runs before default error response)
+    if (pluginRunner) {
+      // Best-effort: capture a ctx snapshot for plugins. Decorations were
+      // applied to local `ctx` above, but if the error came before that, we
+      // pass an empty ctx — the request/response are what matters here.
+      const errCtxObj: Record<string, unknown> = {}
+      pluginRunner.applyDecorations(errCtxObj)
+      await pluginRunner.runOnError(buildPluginCtx(errCtxObj), err)
+      // EC-9: response may already have been ended by an onError hook
+      if (res.writableEnded) {
+        // Still run onResponse but mark inErrorPath to prevent recursion
+        await pluginRunner.runOnResponse(buildPluginCtx(errCtxObj), { inErrorPath: true })
+        return
+      }
+    }
     if (err instanceof AuthRequiredError) {
       sendError(res, err.code, err.message, err.status, undefined, requestId)
+      if (pluginRunner) {
+        const errCtxObj: Record<string, unknown> = {}
+        pluginRunner.applyDecorations(errCtxObj)
+        await pluginRunner.runOnResponse(buildPluginCtx(errCtxObj), { inErrorPath: true })
+      }
       return
     }
     sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500, undefined, requestId)
+    if (pluginRunner) {
+      const errCtxObj: Record<string, unknown> = {}
+      pluginRunner.applyDecorations(errCtxObj)
+      await pluginRunner.runOnResponse(buildPluginCtx(errCtxObj), { inErrorPath: true })
+    }
   }
 }
