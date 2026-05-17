@@ -1,10 +1,45 @@
 # theo
 
+## 0.1.0-alpha.4
+
+### Patch Changes
+
+- Hotfix: default template now declares `react-router` and `zod` (theokit peer dependencies). Without these, `pnpm dev` failed immediately on a freshly scaffolded project — entry-client couldn't resolve `react-router`, and `server/routes/chat.ts` couldn't resolve `zod`. Found by running `pnpm dlx create-theokit my-app` end-to-end against the published packages. Regression test added in `tests/unit/scaffold-default-agent.test.ts` to keep peer deps locked to the template.
+
+  Also bumps the template's `theokit` pin to `^0.1.0-alpha.4` so freshly scaffolded projects pick up this hotfix.
+
+## 0.1.0-alpha.3
+
+### Minor Changes
+
+- TheoUI default integration — `npx create-theokit my-app` now scaffolds a working agent surface out of the box.
+
+  **`theokit`** (`0.1.0-alpha.2`)
+
+  - `defineAgentEndpoint({ handler })` (`theokit/server`) — sugar over `defineRoute` that turns an `async *handler(): AsyncGenerator<AgentEvent>` into a Server-Sent Events response. Standards-compliant `text/event-stream` framing; respects `request.signal` for prompt cancellation; emits a final `{ type: 'error', message }` event when the generator throws.
+  - `useAgentStream(path, options?)` (`theokit/client`) — React hook returning `{ events, status, send, abort, reset }`. Transport is `fetch + ReadableStream` (not `EventSource` — POST + body required). Cleans up on unmount (StrictMode-safe).
+  - `consumeAgentStream(path, options)` + `parseSSEChunk(line)` (`theokit/client`) — the pure primitive the hook glues, exposed for non-React consumers and for tests.
+  - Runtime `AgentEvent` discriminated union (`message | tool_call | tool_result | error`) exported from `theokit/server` and `theokit/client`. Server emits, client consumes — no cross-package type coupling with `@usetheo/ui`.
+  - Auto-injection of `@usetheo/ui` in the dev/build pipeline: when the user's project declares `@usetheo/ui` as a dependency and the package resolves, the Vite plugin emits `import '@usetheo/ui/styles.css'`, `import '@usetheo/ui/fonts.css'` (or `fonts-cdn.css` when configured), and wraps `RouterProvider` in `<TheoUIProvider theme={{ defaultTheme }}>`. New optional `ui` field in `theo.config.ts` (`false | { theme, fonts }`) for opt-out and theme selection. Conservative detection: package must be declared in `package.json` AND resolvable — prevents false positives in monorepos.
+
+  **`create-theokit`** (`0.1.0-alpha.2`)
+
+  - Default template now scaffolds an **agent surface**: `app/page.tsx` ships `AgentComposer` + `AgentTimeline` from `@usetheo/ui`, `server/routes/chat.ts` is a mock SSE endpoint emitting three `AgentEvent`s. Replace the mock with your real LLM provider.
+  - New `--bare` flag — skips the TheoUI defaults for users who want a minimal scaffold. Atomic rollback: if the bare transform fails for any reason (filesystem perms etc.), the entire target directory is removed so no half-scaffolded project is left behind. `--bare` is only valid with `--template=default`.
+  - `@usetheo/ui ^0.1.0-next.0` is now a direct dependency of the default template.
+
 ## [Unreleased]
 
 > Cross-Domain Uplift: 18 tasks from `docs/plans/cross-domain-uplift-plan.md`, lifting TheoKit toward 0.2.0. Server (plugin system), adapters (5 new targets), CLI (3 new commands), router (streaming SSR), client (batching + transformer + react-query), Vite integration API. Release engineer bumps the version when shipping.
 
 ### Added
+
+- **TheoUI default integration — Phase 6: Dogfood checks** — `scripts/dogfood-smoke.sh` extended from 15 to 19 checks. Four new theoui-specific gates: (#16) default template ships `@usetheo/ui` + `AgentTimeline` + `server/routes/chat.ts`, (#17) vite-plugin auto-detects TheoUI and injects CSS + `TheoUIProvider` wrap in entry.ts, (#18) `create-theokit --bare` opt-out with EC-4 atomic rollback (`applyBareTransform` + `rmSync`), (#19) `defineAgentEndpoint` + `useAgentStream` + `consumeAgentStream` surfaces all exported. Current run: **19/19 PASS**.
+- **TheoUI default integration — Phase 5: `defineAgentEndpoint` + `useAgentStream`** — closes the loop between server-emitted `AgentEvent`s and React state, with no manual SSE parser in user code.
+  - **`defineAgentEndpoint({ handler })`** (server): sugar over `defineRoute` (ADR D4). Accepts `async *handler(ctx): AsyncGenerator<AgentEvent>` and returns a `RouteConfig` whose handler responds with `text/event-stream` (`data: <JSON>\n\n` framing, `cache-control: no-cache, no-transform`, `connection: keep-alive`). Observes `request.signal` and calls `generator.return()` on abort — infinite streams shut down in &lt; 100ms. Errors thrown mid-stream emit a final `{ type: 'error', message }` event before the stream closes. Re-exported via `theokit/server`.
+  - **`useAgentStream(path, options?)`** (client): React hook returning `{ events, status, send, abort, reset }` where `status` is `idle | streaming | done | error`. Internally uses `fetch + ReadableStream` — **not `EventSource`** (EC-3: EventSource is GET-only and cannot carry a request body). New `send(body)` cancels any in-flight stream before opening a new connection; unmount cleanup aborts the controller (EC-8, StrictMode-safe). Re-exported via `theokit/client`.
+  - **Pure SSE primitive `consumeAgentStream(path, options)` + `parseSSEChunk(line)`** extracted to `theokit/client` so the wire behavior is testable without React/DOM (handles chunk re-assembly across `read()` boundaries, malformed JSON tolerance, comment/blank-line skipping). Re-exported via `theokit/client`.
+  - 7 unit tests for `defineAgentEndpoint` (header/happy/error/abort/empty/ctx) + 12 for `useAgentStream` (3 parser + 6 primitive + 3 architectural EC-3 checks).
 - **`@theokit/react-query` published as its own package (closes T5.3 ressalva)** — moved the React Query primitives from `theokit/client` into `packages/theokit-react-query/`. Idiomatic install path is now `pnpm add @theokit/react-query @tanstack/react-query`. The original exports under `theokit/client` remain in place for backward compatibility (a single source of truth lives in the new package and `theokit/client` re-exports it conceptually — the implementation is duplicated as a small file rather than a runtime dependency, so `theokit` does not pull in `@tanstack/react-query`). New package version: `0.2.0`. 3 unit tests cover the public surface of the standalone package.
 - **T1.2 Deno Deploy runtime wiring (CLOSURE)** — Deno adapter now drives the full `executeRoute` pipeline. Earlier iteration documented this as "blocked"; re-evaluation showed the web-shim is Web Standards-only (`Uint8Array`/`Response`/`TextEncoder`/`Headers` — no `Buffer`) and Deno Deploy supports `node:fs`/`node:path`/`node:url` compat. Template imports `theokit/server` and `theokit/adapters/web-shim` via `npm:` specifier (Deno Deploy ≥ 1.40 native). 2 new tests confirm the npm specifier wiring and pipeline import surface.
 - **`scripts/dogfood-smoke.sh`** — reproducible 10-check dogfood proxy. Validates TS strict, sequential vitest, build, publint, zero-any audit, adapter dispatcher coverage, plugin/integration exports, web-shim presence, client surface. Exit code reflects PASS/FAIL with a `Health Score: X/Y` line that mirrors `/dogfood full`. Designed for environments where the slash skill cannot be invoked (CI, automation, Ralph Loop iterations). Current run: **10/10 PASS**.
@@ -29,6 +64,7 @@
 - **Static adapter (T1.5, partial — pure logic + adapter shell shipped, Vite SSR render pending)** — new `static` build target that pre-renders pages to HTML files in `.theo/static/`. Supports `[id]` dynamic routes and `[...slug]` catch-all routes via `static-paths.ts` convention (EC-3 covered). Aborts the build with `StaticApiRoutesDetectedError` when `server/routes/` is present, since static export cannot host runtime API handlers. Pure path-resolution logic (`parseSegment`, `collectStaticPaths`, `StaticPathsRequiredError`) is fully tested (11 unit tests). Adapter orchestration (`buildStatic`, `staticAdapter`, `detectApiRoutes`, `StaticRenderError`) is tested with 12 unit tests using dependency injection for I/O. The default `renderHtml` throws a clear "not yet wired" error — wiring to real Vite SSR render is queued for a follow-up iteration. New `'static'` value added to `BuildTarget` enum and `VALID_TARGETS`. Fixture in `fixtures/adapter-static/` demonstrates root page, static `/about`, dynamic `/blog/[id]`, and catch-all `/docs/[...slug]`.
 
 ### Changed
+
 - License set to **Apache-2.0** (was unset in `package.json`). Aligns with usetheo open-core pillars — see root `CLAUDE.md` strategic review of 2026-05-14.
 
 ## [0.1.0-alpha.0] - 2026-05-09

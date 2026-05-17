@@ -1,0 +1,13 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "create-theokit": "0.1.0-alpha.2",
+    "theokit": "0.1.0-alpha.2",
+    "@theokit/react-query": "0.2.0"
+  },
+  "changesets": [
+    "hotfix-template-peer-deps",
+    "theoui-default-integration"
+  ]
+}

@@ -9,11 +9,12 @@ export function main(): void {
   const projectName = positionalArgs[0]
 
   if (!projectName) {
-    console.error('Usage: create-theokit <project-name> [--template=name]')
+    console.error('Usage: create-theokit <project-name> [--template=name] [--bare]')
     console.error('')
     console.error('Example:')
     console.error('  npx create-theokit my-app')
     console.error('  npx create-theokit my-app --template=dashboard')
+    console.error('  npx create-theokit my-app --bare    (skip @usetheo/ui defaults)')
     process.exit(1)
   }
 
@@ -21,12 +22,16 @@ export function main(): void {
   const templateFlag = args.find((a) => a.startsWith('--template='))
   const templateName = templateFlag ? templateFlag.split('=')[1] : 'default'
 
+  // Parse --bare flag (only applies to default template)
+  const bare = args.includes('--bare')
+
   const targetDir = resolve(process.cwd(), projectName)
 
   try {
-    console.log(`\nCreating TheoKit project "${projectName}" (template: ${templateName})...\n`)
+    const suffix = bare ? ' [--bare: skipping TheoUI defaults]' : ''
+    console.log(`\nCreating TheoKit project "${projectName}" (template: ${templateName})${suffix}...\n`)
 
-    scaffold(targetDir, projectName, templateName)
+    scaffold(targetDir, projectName, templateName, { bare })
 
     const pkgManager = detectPkgManager()
     console.log(`Installing dependencies with ${pkgManager}...\n`)

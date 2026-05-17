@@ -1,6 +1,9 @@
 export { defineRoute } from './define-route.js'
 export type { RouteConfig } from './define-route.js'
 
+export { defineAgentEndpoint } from './define-agent-endpoint.js'
+export type { AgentEndpointConfig, AgentEndpointHandlerArgs } from './define-agent-endpoint.js'
+
 export { defineAction } from './define-action.js'
 export type { ActionConfig } from './define-action.js'
 
@@ -59,6 +62,14 @@ export {
 export type { TheoTransformer } from './transformer.js'
 
 export { loadCustomErrorPages, MAX_ERROR_HTML_BYTES } from './error-pages.js'
+// T1.1 — Agent runtime event variant (standalone in TheoKit; no TheoUI coupling)
+export type {
+  AgentEvent,
+  AgentMessageEvent,
+  AgentToolCallEvent,
+  AgentToolResultEvent,
+  AgentErrorEvent,
+} from './agent-types.js'
 export type { CustomErrorPages } from './error-pages.js'
 export type {
   TheoPlugin,

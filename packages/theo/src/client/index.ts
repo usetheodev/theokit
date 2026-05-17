@@ -8,6 +8,26 @@ export {
   stableQueryKey,
   buildUseTheoQueryConfig,
 } from './react-query-adapter.js'
+
+// T5.2 — Agent stream hook + pure SSE primitive
+export { useAgentStream } from './use-agent-stream.js'
+export type {
+  UseAgentStreamReturn,
+  UseAgentStreamOptions,
+  AgentStreamStatus,
+} from './use-agent-stream.js'
+
+export { consumeAgentStream, parseSSEChunk } from './agent-stream-core.js'
+export type { ConsumeOptions } from './agent-stream-core.js'
+
+// T1.1 — Re-export AgentEvent for client consumers (useAgentStream, etc.)
+export type {
+  AgentEvent,
+  AgentMessageEvent,
+  AgentToolCallEvent,
+  AgentToolResultEvent,
+  AgentErrorEvent,
+} from '../server/agent-types.js'
 export type {
   Fetcher,
   FetchOptionsLike,

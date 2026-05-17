@@ -40,6 +40,17 @@ export const theoConfigSchema = z.object({
       z.object({ max: z.number().int().positive().optional() }),
     ])
     .optional(),
+  /** TheoUI auto-wire (T2.1). `false` = opt-out; object = explicit theme/fonts;
+   * undefined = enabled when @usetheo/ui is detected in node_modules. */
+  ui: z
+    .union([
+      z.literal(false),
+      z.object({
+        theme: z.enum(['violet-forge', 'noir', 'paper']).optional(),
+        fonts: z.enum(['bundled', 'cdn']).optional(),
+      }),
+    ])
+    .optional(),
 })
 
 export type TheoConfig = z.infer<typeof theoConfigSchema>

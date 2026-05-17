@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=15
+MAX=19
 FAILS=()
 
 pass() {
@@ -162,11 +162,51 @@ else
   fail "registry still pointing at non-existing npm packages"
 fi
 
+# 16. TheoUI default integration — template ships @usetheo/ui (theoui plan T3.1)
+echo "→ TheoUI default template (@usetheo/ui in default scaffold)"
+if grep -q '"@usetheo/ui"' packages/create-theo/templates/default/package.json.tmpl \
+   && grep -q "AgentTimeline" packages/create-theo/templates/default/app/page.tsx \
+   && test -f packages/create-theo/templates/default/server/routes/chat.ts; then
+  pass "default scaffold = agent surface (TheoUI + mock chat SSE)"
+else
+  fail "default scaffold missing TheoUI / AgentTimeline / chat route"
+fi
+
+# 17. TheoUI auto-injection by vite-plugin (theoui plan T2.1+T2.2+T2.3)
+echo "→ TheoUI auto-injection (detect + CSS + Provider wrap)"
+if test -f packages/theo/src/vite-plugin/theoui-detect.ts \
+   && grep -q "TheoUIProvider" packages/theo/src/router/entry.ts \
+   && grep -q "@usetheo/ui/styles.css" packages/theo/src/router/entry.ts; then
+  pass "vite-plugin auto-detects + injects CSS + Provider"
+else
+  fail "TheoUI auto-injection not wired in vite-plugin / entry-client"
+fi
+
+# 18. --bare opt-out path (theoui plan T4.1)
+echo "→ create-theokit --bare opt-out"
+if grep -q "applyBareTransform" packages/create-theo/src/index.ts \
+   && grep -q -- "--bare" packages/create-theo/src/cli.ts \
+   && grep -q "rmSync" packages/create-theo/src/index.ts; then
+  pass "--bare flag + EC-4 atomic rollback wired"
+else
+  fail "--bare flag or EC-4 rollback missing"
+fi
+
+# 19. Agent endpoint + hook (theoui plan T5.1+T5.2)
+echo "→ defineAgentEndpoint + useAgentStream surfaces"
+if grep -q "defineAgentEndpoint" packages/theo/src/server/index.ts \
+   && grep -q "useAgentStream" packages/theo/src/client/index.ts \
+   && grep -q "consumeAgentStream" packages/theo/src/client/use-agent-stream.ts; then
+  pass "agent endpoint helper + hook + pure primitive exported"
+else
+  fail "defineAgentEndpoint / useAgentStream surfaces incomplete"
+fi
+
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 12 ]; then
-  echo "Status: PASS (>= 12/15 = >= 80%)"
+if [ "$SCORE" -ge 16 ]; then
+  echo "Status: PASS (>= 16/19 = >= 80%)"
   exit 0
 else
   echo "Status: FAIL"

@@ -15,6 +15,7 @@ import { createPluginRunnerFromConfig } from '../server/load-plugins.js'
 import type { PluginRunner } from '../server/plugin-runner.js'
 import { loadConfig } from '../config/load-config.js'
 import { resolveTransformer, type TheoTransformer } from '../server/transformer.js'
+import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
 
 export {
   defineTheoIntegration,
@@ -65,6 +66,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let pluginRunner: PluginRunner | undefined
   let transformer: TheoTransformer | undefined
   let resolvedBatching: { max?: number } | undefined
+  let theoUi: TheoUiDetectResult | undefined
   let configLoadedOnce = false
 
   return {
@@ -87,6 +89,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         ) {
           resolvedBatching = userConfig.batching as { max?: number }
         }
+        // T2.1 — detect TheoUI presence + resolve config
+        theoUi = detectTheoUi(projectRoot, userConfig.ui as never)
       } catch (err) {
         // Config load errors are surfaced elsewhere (validate-structure).
         // Plugin runner remains undefined; middlewares run without hooks.
@@ -117,7 +121,11 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
 
     load(id: string) {
       if (id === RESOLVED_ENTRY_ID) {
-        return generateEntryClient(ssrEnabled)
+        return generateEntryClient(ssrEnabled, {
+          theoUi: theoUi?.enabled
+            ? { fonts: theoUi.config.fonts, theme: theoUi.config.theme }
+            : undefined,
+        })
       }
       if (id === RESOLVED_MANIFEST_ID) {
         const tree = scanRoutes(appDir)
