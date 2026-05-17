@@ -118,14 +118,14 @@ else
   fail "client surface incomplete"
 fi
 
-# 11. @theokit/react-query package built + publishable
-echo "→ @theokit/react-query package"
-if [ -f packages/theokit-react-query/dist/index.js ] \
-   && [ -f packages/theokit-react-query/dist/index.d.ts ] \
-   && grep -q '"name": "@theokit/react-query"' packages/theokit-react-query/package.json; then
-  pass "@theokit/react-query 0.2.0 built"
+# 11. theokit/react-query subpath built + exported
+echo "→ theokit/react-query subpath"
+if [ -f packages/theo/dist/react-query/index.js ] \
+   && [ -f packages/theo/dist/react-query/index.d.ts ] \
+   && grep -q '"./react-query"' packages/theo/package.json; then
+  pass "theokit/react-query subpath built and exported"
 else
-  fail "@theokit/react-query missing or not built"
+  fail "theokit/react-query subpath missing or not exported"
 fi
 
 # 12. ws-shim entry built (gap-closure T3.1)

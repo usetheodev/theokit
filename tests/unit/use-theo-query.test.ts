@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
-import { stableQueryKey } from '../../packages/theokit-react-query/src/index.js'
+import { describe, it, expect } from 'vitest'
 import {
+  stableQueryKey,
   buildUseTheoQueryInternals,
   type FetcherFn,
-} from '../../packages/theokit-react-query/src/use-theo-query.js'
+} from '../../packages/theo/src/react-query/index.js'
 
 describe('useTheoQuery internals (T4.1)', () => {
   it('exposes the queryKey via stableQueryKey', () => {

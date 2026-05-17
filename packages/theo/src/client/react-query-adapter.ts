@@ -10,9 +10,11 @@
  *    `{ queryKey, queryFn }` pair that consumers pass to `useQuery` from
  *    `@tanstack/react-query`.
  *
- * NOTE: this module ships inside `theokit/client` rather than as a separate
- * `@theokit/react-query` npm package for the 0.2.0 release. A package split
- * is cheap to add later once we have downstream adopters.
+ * The canonical implementation lives here in `theokit/client`. The
+ * dedicated subpath `theokit/react-query` re-exports this surface so
+ * consumers who only need the React Query bridge can import from a
+ * clearly named entry point — same shape as `theokit/server`,
+ * `theokit/vite-plugin`, etc. No separate npm package.
  */
 
 function stableStringify(value: unknown): string {
