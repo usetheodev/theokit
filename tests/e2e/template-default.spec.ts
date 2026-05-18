@@ -175,6 +175,24 @@ test.describe('Default template — agent surface', () => {
     await expect(page.getByPlaceholder('Run a command…')).toHaveCount(0)
   })
 
+  test('Phase 7 — every response carries an x-trace-id header (traceparent / x-request-id / generated)', async ({ page }) => {
+    // No header → generated UUID propagates as x-trace-id (and x-request-id).
+    const generatedResp = await page.request.get('/api/chat')
+    const generatedTrace = generatedResp.headers()['x-trace-id']
+    expect(generatedTrace).toBeTruthy()
+    expect(generatedTrace).toBe(generatedResp.headers()['x-request-id'])
+
+    // Honors a W3C traceparent header by extracting the 32-hex trace-id.
+    const traced = await page.request.post('/api/chat', {
+      headers: {
+        'content-type': 'application/json',
+        traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+      },
+      data: { message: 'trace' },
+    })
+    expect(traced.headers()['x-trace-id']).toBe('4bf92f3577b34da6a3ce929d0e0e4736')
+  })
+
   test('no unhandled console errors during full session', async ({ page }) => {
     const errors = collectConsoleErrors(page)
     await page.goto('/')

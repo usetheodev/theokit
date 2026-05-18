@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=45
+MAX=46
 FAILS=()
 
 pass() {
@@ -408,6 +408,18 @@ else
   fail "theoui-autoinject or saas template missing"
 fi
 
+# 46. Phase 7 — TraceId propagation (T7.1)
+echo "→ TraceId propagation (Phase 7 — T7.1)"
+if [ -f packages/theo/src/server/trace-context.ts ] \
+   && grep -q "extractTraceId" packages/theo/src/server/trace-context.ts \
+   && grep -q "parseTraceparent" packages/theo/src/server/trace-context.ts \
+   && grep -q "extractTraceId" packages/theo/src/vite-plugin/api-middleware.ts \
+   && grep -q "x-trace-id" packages/theo/src/vite-plugin/api-middleware.ts; then
+  pass "traceId wired (traceparent + x-request-id fallback + x-trace-id response)"
+else
+  fail "traceId wiring incomplete"
+fi
+
 # 45. Phase 6 — Default security headers (T6.1 / EC-2)
 echo "→ Default security headers (Phase 6 — T6.1)"
 if [ -f packages/theo/src/server/security-headers.ts ] \
@@ -456,8 +468,8 @@ fi
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 39 ]; then
-  echo "Status: PASS (>= 39/45 = >= 85%)"
+if [ "$SCORE" -ge 40 ]; then
+  echo "Status: PASS (>= 40/46 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

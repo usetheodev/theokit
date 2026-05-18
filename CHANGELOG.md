@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (TraceId propagation — Phase 7 T7.1, 2026-05-18)
+- **Every `/api/*` response now carries an `x-trace-id` header** in addition to the existing `x-request-id`. The traceId follows W3C-aware precedence: incoming `traceparent` (Trace Context spec) is parsed to extract the 32-hex trace-id; on miss, fall back to `x-request-id`; on miss, generate a fresh UUID. The same value flows into `sendError` and `logRequest`, so a single identifier correlates the client request, every server log line, and the response envelope.
+- **`packages/theo/src/server/trace-context.ts`** — new module exports `extractTraceId(req)` + `parseTraceparent(value)` + constants (`TRACE_HEADER`, `TRACE_PARENT_HEADER`, `REQUEST_ID_HEADER`). Pure helpers — no side effects.
+- W3C edge cases handled: wrong version byte (`99-…`) → null. All-zeros trace-id (spec reserved invalid) → null. Malformed strings → null. Multi-value `x-request-id` (proxy doubled the header) → takes first non-empty value. Empty strings → treated as absent.
+- Backward compat: `requestId` field name preserved in log lines and error envelopes — same value, just available under two names while consumers migrate to `traceId`.
+- 12 unit tests cover the parser + extractor + header precedence + uniqueness. Live curl confirms all three paths (generated, traceparent, x-request-id). Playwright spec adds a scenario asserting the response surfaces `x-trace-id` for both the generated and the traceparent-honored case.
+- Dogfood check #46 wired.
+
 ### Added (Default security headers — Phase 6 T6.1 / EC-2, 2026-05-18)
 - **Every `/api/*` response now carries OWASP-recommended security headers by default** — `Content-Security-Policy-Report-Only`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security: max-age=31536000; includeSubDomains` in production (skipped in dev — no TLS on localhost).
 - **CSP ships in `report-only` mode for 0.2.0** (EC-2 backward compat): existing apps with inline scripts or third-party CDN scripts keep working, but every violation lands in DevTools / CSP report collector so consumers can audit before the 0.3.0 cutover to `enforce`.

@@ -45,11 +45,11 @@ Persistent state across iterations. Mark task DONE only when tests are green AND
 |---|---|---|
 | T6.1 Headers + CSP report-only | **DONE** | `packages/theo/src/server/security-headers.ts` exports pure `buildSecurityHeaders(config, env)` + `applySecurityHeaders(res, ...)`. `securityHeadersSchema` added to config (`csp` / `cspMode` / `hsts` / `frameOptions` / `contentTypeOptions` / `referrerPolicy`). Wired into `api-middleware.ts` BEFORE handler invocation so route handlers can still override via `res.setHeader`. EC-2: default `cspMode = 'report-only'` so existing apps with inline scripts don't break — 0.3.0 will flip to `enforce`. HSTS prod-only. Live curl confirmed all 4 default headers + report-only CSP on `/api/chat`. 15 unit tests cover defaults, override semantics, env gating, opt-out paths. Dogfood check #45 wired. |
 
-## Phase 7 — Observability
+## Phase 7 — Observability ✅ COMPLETE
 
 | Task | Status | Notes |
 |---|---|---|
-| T7.1 TraceId end-to-end | PENDING | |
+| T7.1 TraceId end-to-end | **DONE** | `packages/theo/src/server/trace-context.ts` exports `parseTraceparent` + `extractTraceId` with precedence: W3C `traceparent` → `x-request-id` → generated UUID. Wired into `api-middleware.ts` (replaces ad-hoc `randomUUID`). Every response carries BOTH `x-trace-id` (canonical) and `x-request-id` (legacy alias). Backward compat preserved — existing `sendError`/`logRequest` continue to receive the same value under the `requestId` field name. 12 unit tests cover W3C parsing edge cases (zero trace-id, wrong version byte, malformed), header precedence, array headers, uniqueness. Live smoke confirmed: generated UUID round-trips, traceparent extracts 32-hex, x-request-id falls through. Playwright spec test `Phase 7 — every response carries an x-trace-id` validates two paths end-to-end. Dogfood check #46 wired. |
 
 ## Phase 8 — Argon2id (EC-4)
 

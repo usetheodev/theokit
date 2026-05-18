@@ -1,5 +1,4 @@
 import type { ViteDevServer, Connect } from 'vite'
-import { randomUUID } from 'node:crypto'
 import { scanServerRoutes } from '../server/scan.js'
 import { matchRoute } from '../server/match.js'
 import { executeRoute, sendError } from '../server/execute.js'
@@ -16,6 +15,7 @@ import {
   type BatchPayload,
 } from '../server/batch-handler.js'
 import { applySecurityHeaders } from '../server/security-headers.js'
+import { extractTraceId, TRACE_HEADER } from '../server/trace-context.js'
 
 export interface ApiMiddlewareOptions {
   rateLimitConfig?: RateLimitConfig
@@ -56,9 +56,14 @@ export function createApiMiddleware(
       return next()
     }
 
-    const requestId = randomUUID()
+    // Phase 7 — traceId resolution. Reads traceparent / x-request-id /
+    // generates UUID. The `requestId` name is kept for backward compat
+    // with downstream helpers (sendError, logRequest) — same value flows
+    // under both `x-request-id` (legacy) and `x-trace-id` (canonical).
+    const requestId = extractTraceId(req)
     const start = Date.now()
     res.setHeader('x-request-id', requestId)
+    res.setHeader(TRACE_HEADER, requestId)
     // Phase 6 — Apply security headers BEFORE the handler runs so route
     // handlers can still override via res.setHeader (last write wins).
     applySecurityHeaders(res, securityHeadersConfig, securityEnv)
