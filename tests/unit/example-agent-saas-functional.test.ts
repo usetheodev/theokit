@@ -8,15 +8,17 @@ import { hashPassword, verifyPassword } from '../../examples/agent-saas/server/p
  * channel broadcast bookkeeping).
  */
 
-describe('agent-saas/password (functional — real PBKDF2 round-trip)', () => {
+describe('agent-saas/password (functional — Argon2id round-trip, Phase 8)', () => {
   it('hashed password verifies', async () => {
     const hash = await hashPassword('correct-horse-battery-staple')
-    expect(await verifyPassword('correct-horse-battery-staple', hash)).toBe(true)
+    const result = await verifyPassword('correct-horse-battery-staple', hash)
+    expect(result.ok).toBe(true)
   })
 
   it('wrong password fails to verify', async () => {
     const hash = await hashPassword('correct-horse-battery-staple')
-    expect(await verifyPassword('wrong', hash)).toBe(false)
+    const result = await verifyPassword('wrong', hash)
+    expect(result.ok).toBe(false)
   })
 
   it('two hashes of the same password differ (salted)', async () => {
@@ -24,23 +26,23 @@ describe('agent-saas/password (functional — real PBKDF2 round-trip)', () => {
     const b = await hashPassword('same-password')
     expect(a).not.toBe(b)
     // But both verify against the original
-    expect(await verifyPassword('same-password', a)).toBe(true)
-    expect(await verifyPassword('same-password', b)).toBe(true)
+    expect((await verifyPassword('same-password', a)).ok).toBe(true)
+    expect((await verifyPassword('same-password', b)).ok).toBe(true)
   })
 
-  it('malformed stored hash returns false (no throw)', async () => {
-    expect(await verifyPassword('whatever', 'not-a-valid-hash')).toBe(false)
-    expect(await verifyPassword('whatever', '')).toBe(false)
-    expect(await verifyPassword('whatever', 'pbkdf2$0$$')).toBe(false)
+  it('malformed stored hash returns ok=false (no throw)', async () => {
+    expect((await verifyPassword('whatever', 'not-a-valid-hash')).ok).toBe(false)
+    expect((await verifyPassword('whatever', '')).ok).toBe(false)
+    expect((await verifyPassword('whatever', 'pbkdf2$0$$')).ok).toBe(false)
   })
 
-  it('hash format is parseable: pbkdf2$iter$salt$key', async () => {
+  it('hash format is parseable: argon2id PHC string with v/m/t/p params', async () => {
     const hash = await hashPassword('x')
-    const parts = hash.split('$')
-    expect(parts[0]).toBe('pbkdf2')
-    expect(parseInt(parts[1]!, 10)).toBeGreaterThan(0)
-    expect(parts[2]).toMatch(/^[0-9a-f]+$/) // salt hex
-    expect(parts[3]).toMatch(/^[0-9a-f]+$/) // key hex
+    expect(hash.startsWith('argon2id$')).toBe(true)
+    expect(hash).toContain('v=19')
+    expect(hash).toContain('m=')
+    expect(hash).toContain('t=')
+    expect(hash).toContain('p=')
   })
 })
 

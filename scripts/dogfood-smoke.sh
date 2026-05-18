@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=46
+MAX=47
 FAILS=()
 
 pass() {
@@ -408,6 +408,17 @@ else
   fail "theoui-autoinject or saas template missing"
 fi
 
+# 47. Phase 8 — Argon2id password hashing (T8.1 / EC-4)
+echo "→ Argon2id password hashing (Phase 8 — T8.1)"
+if grep -q "hash-wasm" examples/agent-saas/package.json \
+   && grep -q "argon2id" examples/agent-saas/server/password.ts \
+   && grep -q "rehashAs" examples/agent-saas/server/password.ts \
+   && grep -q "rehashAs" examples/agent-saas/server/routes/login.ts; then
+  pass "argon2id wired (hash-wasm + legacy PBKDF2 verify + transparent rehash on login)"
+else
+  fail "argon2id wiring incomplete"
+fi
+
 # 46. Phase 7 — TraceId propagation (T7.1)
 echo "→ TraceId propagation (Phase 7 — T7.1)"
 if [ -f packages/theo/src/server/trace-context.ts ] \
@@ -468,8 +479,8 @@ fi
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 40 ]; then
-  echo "Status: PASS (>= 40/46 = >= 85%)"
+if [ "$SCORE" -ge 41 ]; then
+  echo "Status: PASS (>= 41/47 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

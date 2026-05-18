@@ -83,6 +83,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.0
         version: 0.45.2(postgres@3.4.9)
+      hash-wasm:
+        specifier: ^4.12.0
+        version: 4.12.0
       postgres:
         specifier: ^3.4.0
         version: 3.4.9
@@ -2127,6 +2130,9 @@ packages:
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
+
+  hash-wasm@4.12.0:
+    resolution: {integrity: sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==}
 
   hasown@2.0.3:
     resolution: {integrity: sha512-ej4AhfhfL2Q2zpMmLo7U1Uv9+PyhIZpgQLGT1F9miIGmiCJIoCgSmczFdrc97mWT4kVY72KA+WnnhJ5pghSvSg==}
@@ -4740,6 +4746,8 @@ snapshots:
   graceful-fs@4.2.11: {}
 
   has-flag@4.0.0: {}
+
+  hash-wasm@4.12.0: {}
 
   hasown@2.0.3:
     dependencies:

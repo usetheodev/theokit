@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed (Argon2id password hashing — Phase 8 T8.1 / EC-4, 2026-05-18)
+- **`examples/agent-saas` upgrades password hashing from PBKDF2 to Argon2id** via [hash-wasm](https://github.com/Daninet/hash-wasm). Pure WebAssembly — no native build step, works on Alpine and Vercel Edge (EC-4 amendment: chose hash-wasm over `@node-rs/argon2` precisely to avoid runtime portability issues). OWASP 2023 interactive parameters baked in: memory 19 MiB, iterations 2, parallelism 1.
+- **Transparent migration** — `verifyPassword` routes by hash prefix. Legacy `pbkdf2$...` hashes still verify, and on success the function returns `{ ok: true, rehashAs: '<fresh argon2id$ hash>' }`. The login handler in `routes/login.ts` writes the new hash back to the user row, so each existing user upgrades on their next login without a downtime migration.
+- **API shape change:** `verifyPassword(plain, stored)` now returns `{ ok: boolean, rehashAs?: string }` (was `boolean`). Callers update accordingly. The internal `_legacyHashForTests` is exposed for the regression test that proves the migration round-trip.
+- 12 unit tests in `tests/unit/example-agent-saas-password.test.ts` covering argon2id round-trip, PBKDF2 legacy round-trip + rehash flag, malformed input safety, and uniqueness across hashes. Functional tests in `example-agent-saas-functional.test.ts` updated to the new return shape.
+- Dogfood check #47 wired.
+
 ### Added (TraceId propagation — Phase 7 T7.1, 2026-05-18)
 - **Every `/api/*` response now carries an `x-trace-id` header** in addition to the existing `x-request-id`. The traceId follows W3C-aware precedence: incoming `traceparent` (Trace Context spec) is parsed to extract the 32-hex trace-id; on miss, fall back to `x-request-id`; on miss, generate a fresh UUID. The same value flows into `sendError` and `logRequest`, so a single identifier correlates the client request, every server log line, and the response envelope.
 - **`packages/theo/src/server/trace-context.ts`** — new module exports `extractTraceId(req)` + `parseTraceparent(value)` + constants (`TRACE_HEADER`, `TRACE_PARENT_HEADER`, `REQUEST_ID_HEADER`). Pure helpers — no side effects.

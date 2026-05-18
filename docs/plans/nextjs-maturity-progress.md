@@ -51,11 +51,11 @@ Persistent state across iterations. Mark task DONE only when tests are green AND
 |---|---|---|
 | T7.1 TraceId end-to-end | **DONE** | `packages/theo/src/server/trace-context.ts` exports `parseTraceparent` + `extractTraceId` with precedence: W3C `traceparent` → `x-request-id` → generated UUID. Wired into `api-middleware.ts` (replaces ad-hoc `randomUUID`). Every response carries BOTH `x-trace-id` (canonical) and `x-request-id` (legacy alias). Backward compat preserved — existing `sendError`/`logRequest` continue to receive the same value under the `requestId` field name. 12 unit tests cover W3C parsing edge cases (zero trace-id, wrong version byte, malformed), header precedence, array headers, uniqueness. Live smoke confirmed: generated UUID round-trips, traceparent extracts 32-hex, x-request-id falls through. Playwright spec test `Phase 7 — every response carries an x-trace-id` validates two paths end-to-end. Dogfood check #46 wired. |
 
-## Phase 8 — Argon2id (EC-4)
+## Phase 8 — Argon2id (EC-4) ✅ COMPLETE
 
 | Task | Status | Notes |
 |---|---|---|
-| T8.1 hash-wasm Argon2 + PBKDF2 legacy | PENDING | |
+| T8.1 hash-wasm Argon2 + PBKDF2 legacy | **DONE** | `examples/agent-saas/server/password.ts` rewritten: `hashPassword` produces `argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>` via `hash-wasm` (pure WASM — works on Alpine + Vercel Edge per EC-4). `verifyPassword` routes by prefix: argon2id$ uses `argon2Verify`; pbkdf2$ uses the legacy WebCrypto path. Successful PBKDF2 verify returns `{ ok: true, rehashAs: <fresh argon2id hash> }`. `routes/login.ts` writes `rehashAs` back to the user row so the next login uses the upgraded format. 12 unit tests + 5 functional tests updated. OWASP 2023 interactive params used (memory 19 MiB, iter 2, parallelism 1). Dogfood check #47 wired. |
 
 ## Phase 9 — index.html audit ✅ COMPLETE
 

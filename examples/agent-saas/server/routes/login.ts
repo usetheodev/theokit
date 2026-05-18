@@ -27,12 +27,21 @@ export const POST = defineRoute<
         { status: 401, headers: { 'content-type': 'application/json' } },
       )
     }
-    const ok = await verifyPassword(body.password, user.passwordHash)
-    if (!ok) {
+    const result = await verifyPassword(body.password, user.passwordHash)
+    if (!result.ok) {
       return new Response(
         JSON.stringify({ error: 'invalid_credentials' }),
         { status: 401, headers: { 'content-type': 'application/json' } },
       )
+    }
+    // Phase 8 — transparent migration: if the stored hash was the legacy
+    // pbkdf2 format, verifyPassword returns a fresh argon2id rehash. Persist
+    // it so subsequent logins use the upgraded scheme.
+    if (result.rehashAs) {
+      await ctx.db
+        .update(users)
+        .set({ passwordHash: result.rehashAs })
+        .where(eq(users.id, user.id))
     }
     await ctx.sessions.createSession(ctx.res, {
       userId: user.id,
