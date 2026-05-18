@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Playwright browser tests for default template — Phase 10 T10.1, 2026-05-18)
+- **`fixtures/template-default/`** — full mirror of the default scaffold template, added to `pnpm-workspace.yaml` so it installs against `theokit` via workspace link. Lives under fixtures because it's not a customer-facing example, it's a test surface.
+- **`tests/e2e/template-default.spec.ts`** — 7 Playwright scenarios in real Chromium covering the canonical first-run surface: app shell renders (TopNav + Sidebar + main), regression check that the layout receives `<Outlet />` (the black-page bug from this week), chat composer accepts input and round-trips through SSE, streaming response arrives as 3 events in DOM order, CommandPalette opens via leading-button + Escape closes, keyboard shortcut (Ctrl+K) toggles the palette, zero unhandled console errors during a full chat session.
+- **Playwright config** — fifth project `template-default` on port 3460 with its own webServer. Full e2e suite now: **20/20 PASS**.
+- The spec also serves as a visibility test for the Phase 5 CSRF warn — every chat POST emits `csrf.warn` to the Playwright web server stdout, confirming the warn-first default is active end-to-end.
+- Dogfood check #43: validates the spec + fixture + playwright wiring are all committed. Health now **43/43**.
+
 ### Added (CSRF warn-first — Phase 5, 2026-05-18)
 - **Default CSRF enforcement on `defineRoute` POST/PUT/PATCH/DELETE** with three-mode policy: `off` / `warn` / `strict`. Default for 0.2.0 is `warn` — existing apps keep working and emit a structured `{"event":"csrf.warn",…}` log line for every state-mutating request without an `X-Theo-Action: 1` header. 0.3.0 will flip the default to `strict`. The check piggybacks on the same custom-header + Origin defense already used by `defineAction`, so no token state machine is added.
 - **`config.security.csrf`** (`off | warn | strict`) — new optional config field, default `warn`. Set explicitly to `strict` to opt into the future default early, or `off` to disable for apps using a non-cookie auth scheme.

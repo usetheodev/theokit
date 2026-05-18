@@ -63,12 +63,12 @@ Persistent state across iterations. Mark task DONE only when tests are green AND
 |---|---|---|
 | T9.1 Fix 4 missing scripts + validator | **DONE** | 4 files patched (saas, theoui-autoinject, ssr-streaming, adapter-targets/_base); validator `tests/unit/template-html-validator.test.ts` (17 tests, all 20 tracked index.html files validated). Auto-inject (T2.1) is the runtime safety net; this is the source-of-truth tripwire. |
 
-## Phase 10 — Playwright e2e
+## Phase 10 — Playwright e2e (T10.1 ✅)
 
 | Task | Status | Notes |
 |---|---|---|
-| T10.1 Templates browser test | PENDING | |
-| T10.2 agent-saas full-flow browser test | PENDING | |
+| T10.1 Templates browser test | **DONE (default)** | `fixtures/template-default/` wired into pnpm workspace + playwright.config; `tests/e2e/template-default.spec.ts` 7 tests covering app shell + black-page regression + chat composer + SSE order + CommandPalette via button + Ctrl+K shortcut + zero console errors. Full Playwright suite 20/20 PASS. Other templates (dashboard / api-only / postgres / saas) deferred — same fixture pattern can be reused. |
+| T10.2 agent-saas full-flow browser test | PENDING | Postgres required — defer to Phase 11 |
 
 ## Phase 11 — Dogfood QA final
 

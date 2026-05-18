@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=42
+MAX=43
 FAILS=()
 
 pass() {
@@ -408,6 +408,16 @@ else
   fail "theoui-autoinject or saas template missing"
 fi
 
+# 43. Phase 10 — Playwright browser test for default template (T10.1)
+echo "→ Playwright template-default spec (Phase 10 — T10.1)"
+if [ -f tests/e2e/template-default.spec.ts ] \
+   && [ -d fixtures/template-default ] \
+   && grep -q "template-default" playwright.config.ts; then
+  pass "template-default e2e spec + fixture wired in playwright.config"
+else
+  fail "template-default spec, fixture, or playwright wiring missing"
+fi
+
 # 42. Phase 5 — CSRF warn-first (EC-1)
 echo "→ CSRF warn-first (Phase 5 — EC-1)"
 if grep -q "enforceCsrf" packages/theo/src/server/csrf.ts \
@@ -424,8 +434,8 @@ fi
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 36 ]; then
-  echo "Status: PASS (>= 36/42 = >= 85%)"
+if [ "$SCORE" -ge 37 ]; then
+  echo "Status: PASS (>= 37/43 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

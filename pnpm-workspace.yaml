@@ -2,3 +2,4 @@ packages:
   - 'packages/*'
   - 'my-test'
   - 'examples/*'
+  - 'fixtures/template-default'

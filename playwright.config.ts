@@ -34,6 +34,11 @@ export default defineConfig({
       use: { baseURL: 'http://localhost:3459' },
       testMatch: 'app-router-not-found.spec.ts',
     },
+    {
+      name: 'template-default',
+      use: { baseURL: 'http://localhost:3460' },
+      testMatch: 'template-default.spec.ts',
+    },
   ],
   webServer: [
     {
@@ -63,6 +68,13 @@ export default defineConfig({
       port: 3459,
       reuseExistingServer: false,
       timeout: 30000,
+    },
+    {
+      command: `npx tsx ${cliPath} dev --port 3460`,
+      cwd: fixture('template-default'),
+      port: 3460,
+      reuseExistingServer: false,
+      timeout: 60000,
     },
   ],
 })
