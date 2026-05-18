@@ -46,7 +46,7 @@ export function scaffold(
 
   if (!existsSync(templateDir)) {
     throw new Error(
-      `Template "${templateName}" not found. Available templates: default, dashboard, api-only, postgres`,
+      `Template "${templateName}" not found. Available templates: default, dashboard, api-only, postgres, saas`,
     )
   }
 

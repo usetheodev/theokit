@@ -1,0 +1,5 @@
+{
+  "name": "adapter-cloudflare",
+  "private": true,
+  "type": "module"
+}

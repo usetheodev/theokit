@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=19
+MAX=41
 FAILS=()
 
 pass() {
@@ -165,11 +165,11 @@ fi
 # 16. TheoUI default integration — template ships @usetheo/ui (theoui plan T3.1)
 echo "→ TheoUI default template (@usetheo/ui in default scaffold)"
 if grep -q '"@usetheo/ui"' packages/create-theo/templates/default/package.json.tmpl \
-   && grep -q "AgentTimeline" packages/create-theo/templates/default/app/page.tsx \
+   && grep -qE "ChatThread|ChatMessage|AgentTimeline" packages/create-theo/templates/default/app/page.tsx \
    && test -f packages/create-theo/templates/default/server/routes/chat.ts; then
   pass "default scaffold = agent surface (TheoUI + mock chat SSE)"
 else
-  fail "default scaffold missing TheoUI / AgentTimeline / chat route"
+  fail "default scaffold missing TheoUI conversation components / chat route"
 fi
 
 # 17. TheoUI auto-injection by vite-plugin (theoui plan T2.1+T2.2+T2.3)
@@ -202,11 +202,217 @@ else
   fail "defineAgentEndpoint / useAgentStream surfaces incomplete"
 fi
 
+# =============================================================
+# Full Coverage Examples — fixture & template checks (#20–#41)
+# Each block validates a fixture/template from `docs/plans/full-coverage-examples-plan.md`
+# =============================================================
+
+# 20. fixtures README index (T0.1)
+echo "→ fixtures/README.md (T0.1)"
+if [ -f fixtures/README.md ] && grep -q "Fixture.*Demonstrates.*Phase" fixtures/README.md; then
+  pass "fixtures index exists with proper header"
+else
+  fail "fixtures/README.md missing or malformed"
+fi
+
+# 21. agent-endpoint-mock (T2.2 — wire-format reference)
+echo "→ agent-endpoint-mock fixture (T2.2)"
+if [ -f fixtures/agent-endpoint-mock/server/routes/agent.ts ] \
+   && grep -q "defineAgentEndpoint" fixtures/agent-endpoint-mock/server/routes/agent.ts; then
+  pass "agent-endpoint-mock present"
+else
+  fail "agent-endpoint-mock fixture missing"
+fi
+
+# 22. define-channel (T2.1)
+echo "→ define-channel fixture (T2.1)"
+if [ -f fixtures/define-channel/server/channels/notifications.ts ] \
+   && grep -q "defineChannel" fixtures/define-channel/server/channels/notifications.ts; then
+  pass "define-channel fixture present"
+else
+  fail "define-channel fixture missing"
+fi
+
+# 23. define-integration (T2.3)
+echo "→ define-integration fixture (T2.3)"
+if [ -f fixtures/define-integration/integrations/banner.ts ] \
+   && grep -q "defineTheoIntegration" fixtures/define-integration/integrations/banner.ts; then
+  pass "define-integration fixture present"
+else
+  fail "define-integration fixture missing"
+fi
+
+# 24. sessions-auth + assertProductionSecret (T3.1 + EC-2)
+echo "→ sessions-auth fixture + assertProductionSecret guard (T3.1, EC-2)"
+if [ -f fixtures/sessions-auth/server/context.ts ] \
+   && grep -q "assertProductionSecret" fixtures/sessions-auth/server/context.ts \
+   && grep -q "export function assertProductionSecret" packages/theo/src/server/session.ts; then
+  pass "sessions-auth + EC-2 helper wired"
+else
+  fail "sessions-auth fixture or assertProductionSecret missing"
+fi
+
+# 25. typed-client (T4.1)
+echo "→ typed-client fixture (T4.1)"
+if [ -f fixtures/typed-client/app/page.tsx ] \
+   && grep -q "theoFetch<typeof GET>" fixtures/typed-client/app/page.tsx; then
+  pass "typed-client demonstrates typeof inference"
+else
+  fail "typed-client fixture missing or no typeof GET"
+fi
+
+# 26. use-agent-stream-react (T4.2)
+echo "→ use-agent-stream-react fixture (T4.2)"
+if [ -f fixtures/use-agent-stream-react/app/page.tsx ] \
+   && grep -q "useAgentStream" fixtures/use-agent-stream-react/app/page.tsx \
+   && ! grep -q "@usetheo/ui" fixtures/use-agent-stream-react/app/page.tsx; then
+  pass "use-agent-stream-react: hook in plain React, no TheoUI"
+else
+  fail "use-agent-stream-react fixture missing or coupled to @usetheo/ui"
+fi
+
+# 27. batching (T4.3)
+echo "→ batching fixture (T4.3)"
+if [ -f fixtures/batching/app/page.tsx ] \
+   && grep -q "createBatcher" fixtures/batching/app/page.tsx; then
+  pass "batching fixture present"
+else
+  fail "batching fixture missing"
+fi
+
+# 28. react-query-integration (T4.4)
+echo "→ react-query-integration fixture (T4.4)"
+if [ -f fixtures/react-query-integration/app/page.tsx ] \
+   && grep -q "buildUseTheoQueryConfig" fixtures/react-query-integration/app/page.tsx \
+   && grep -q "@tanstack/react-query" fixtures/react-query-integration/package.json; then
+  pass "react-query-integration wired (tanstack + theokit/react-query)"
+else
+  fail "react-query-integration fixture incomplete"
+fi
+
+# 29. loading-states (T5.1)
+echo "→ loading-states fixture (T5.1)"
+if [ -f fixtures/loading-states/app/loading.tsx ] \
+   && [ -f fixtures/loading-states/app/slow/loading.tsx ]; then
+  pass "loading-states has root + segment-level loading.tsx"
+else
+  fail "loading-states fixture missing"
+fi
+
+# 30. dynamic-routes (T5.2)
+echo "→ dynamic-routes fixture (T5.2)"
+if [ -f "fixtures/dynamic-routes/app/blog/[id]/page.tsx" ] \
+   && [ -f "fixtures/dynamic-routes/app/docs/[...slug]/page.tsx" ]; then
+  pass "dynamic-routes has [id] + [...slug]"
+else
+  fail "dynamic-routes fixture missing"
+fi
+
+# 31. ssr-streaming (T6.1)
+echo "→ ssr-streaming fixture (T6.1)"
+if [ -f fixtures/ssr-streaming/theo.config.ts ] \
+   && grep -q "ssrStreaming:\s*true" fixtures/ssr-streaming/theo.config.ts; then
+  pass "ssr-streaming fixture configures streaming"
+else
+  fail "ssr-streaming fixture missing or not configured"
+fi
+
+# 32. multipart-upload (T6.2)
+echo "→ multipart-upload fixture (T6.2)"
+if [ -f fixtures/multipart-upload/server/routes/upload.ts ] \
+   && grep -q "parseRequestBody" fixtures/multipart-upload/server/routes/upload.ts; then
+  pass "multipart-upload uses parseRequestBody"
+else
+  fail "multipart-upload fixture missing"
+fi
+
+# 33. rate-limit (T7.1)
+echo "→ rate-limit fixture (T7.1)"
+if [ -f fixtures/rate-limit/theo.config.ts ] \
+   && grep -q "windowMs" fixtures/rate-limit/theo.config.ts; then
+  pass "rate-limit fixture configured"
+else
+  fail "rate-limit fixture missing"
+fi
+
+# 34. custom-transformer (T7.2)
+echo "→ custom-transformer fixture (T7.2)"
+if [ -f fixtures/custom-transformer/transformer.ts ] \
+   && grep -q "TheoTransformer" fixtures/custom-transformer/transformer.ts; then
+  pass "custom-transformer implements TheoTransformer interface"
+else
+  fail "custom-transformer fixture missing"
+fi
+
+# 35. adapter-bun (T8.1)
+echo "→ adapter-bun fixture (T8.1)"
+if [ -f fixtures/adapter-targets/bun/README.md ] \
+   && grep -q -- "--target=bun" fixtures/adapter-targets/bun/README.md; then
+  pass "adapter-bun fixture documented"
+else
+  fail "adapter-bun fixture missing"
+fi
+
+# 36. adapter-deno-deploy (T8.2)
+echo "→ adapter-deno-deploy fixture (T8.2)"
+if [ -f fixtures/adapter-targets/deno-deploy/README.md ] \
+   && grep -q -- "--target=deno-deploy" fixtures/adapter-targets/deno-deploy/README.md; then
+  pass "adapter-deno-deploy fixture documented"
+else
+  fail "adapter-deno-deploy fixture missing"
+fi
+
+# 37. adapter-cloudflare (T8.3)
+echo "→ adapter-cloudflare fixture (T8.3)"
+if [ -f fixtures/adapter-targets/cloudflare/wrangler.toml ]; then
+  pass "adapter-cloudflare fixture has wrangler.toml"
+else
+  fail "adapter-cloudflare fixture missing"
+fi
+
+# 38. adapter-vercel (T8.4)
+echo "→ adapter-vercel fixture (T8.4)"
+if [ -f fixtures/adapter-targets/vercel/vercel.json ]; then
+  pass "adapter-vercel fixture has vercel.json"
+else
+  fail "adapter-vercel fixture missing"
+fi
+
+# 39. adapter-netlify (T8.5)
+echo "→ adapter-netlify fixture (T8.5)"
+if [ -f fixtures/adapter-targets/netlify/netlify.toml ] \
+   && grep -q "\[build\]" fixtures/adapter-targets/netlify/netlify.toml; then
+  pass "adapter-netlify fixture has pre-existing netlify.toml (merge test)"
+else
+  fail "adapter-netlify fixture missing"
+fi
+
+# 40. adapter-aws-lambda (T8.6)
+echo "→ adapter-aws-lambda fixture (T8.6)"
+if [ -f fixtures/adapter-targets/aws-lambda/README.md ] \
+   && grep -q "API Gateway HTTP API v2" fixtures/adapter-targets/aws-lambda/README.md; then
+  pass "adapter-aws-lambda fixture documented"
+else
+  fail "adapter-aws-lambda fixture missing"
+fi
+
+# 41. theoui-autoinject (T9.1) + saas template (T10.1)
+echo "→ theoui-autoinject fixture (T9.1) + saas template (T10.1)"
+if [ -f fixtures/theoui-autoinject/theo.config.ts ] \
+   && grep -q "ui:" fixtures/theoui-autoinject/theo.config.ts \
+   && [ -d packages/create-theo/templates/saas ] \
+   && [ -f packages/create-theo/templates/saas/server/routes/agent.ts ] \
+   && grep -q "requireAuth" packages/create-theo/templates/saas/server/routes/agent.ts; then
+  pass "theoui-autoinject + saas template both present"
+else
+  fail "theoui-autoinject or saas template missing"
+fi
+
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 16 ]; then
-  echo "Status: PASS (>= 16/19 = >= 80%)"
+if [ "$SCORE" -ge 35 ]; then
+  echo "Status: PASS (>= 35/41 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

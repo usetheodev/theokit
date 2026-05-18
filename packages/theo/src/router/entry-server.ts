@@ -2,23 +2,56 @@ export interface EntryServerOptions {
   /** When true, emit a streaming entry using onShellReady + signal cleanup.
    *  When false (default), emit the legacy single-shot onAllReady entry. */
   streaming?: boolean
+  /**
+   * TheoUI config — when present, the SSR React tree wraps StaticRouterProvider
+   * in <TheoUIProvider> + <Suspense> to MATCH the client entry exactly. Without
+   * this, hydration falls back silently because the trees differ — button
+   * onClick handlers never get attached and the page looks dead.
+   *
+   * EC-2 (CSS): the SSR entry never imports CSS. Only the React tree is
+   * mirrored — the CSS stays client-only.
+   */
+  theoUi?: { theme?: 'violet-forge' | 'noir' | 'paper' }
 }
 
 export function generateEntryServer(options: EntryServerOptions = {}): string {
   if (options.streaming) {
-    return generateStreamingEntry()
+    return generateStreamingEntry(options)
   }
-  return generateSingleShotEntry()
+  return generateSingleShotEntry(options)
 }
 
-function generateSingleShotEntry(): string {
+/**
+ * Build the React element tree the server renders. Must mirror the client
+ * tree shape from `generateEntryClient` — same wrapper components, same
+ * order — or hydration silently falls back to client-only render.
+ */
+function buildAppTreeJs(options: EntryServerOptions): string {
+  const theme = options.theoUi?.theme ?? 'violet-forge'
+  if (options.theoUi) {
+    return [
+      `React.createElement(TheoUIProvider, { theme: { defaultTheme: '${theme}' } },`,
+      `      React.createElement(Suspense, { fallback: null },`,
+      `        React.createElement(StaticRouterProvider, { router, context })`,
+      `      )`,
+      `    )`,
+    ].join('\n')
+  }
+  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context })\n    )`
+}
+
+function generateSingleShotEntry(options: EntryServerOptions): string {
+  const theoUiImport = options.theoUi
+    ? `import { TheoUIProvider } from '@usetheo/ui'\n`
+    : ''
+  const appTree = buildAppTreeJs(options)
   return [
-    `import React from 'react'`,
+    `import React, { Suspense } from 'react'`,
     `import { renderToPipeableStream } from 'react-dom/server'`,
     `import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router'`,
     `import { PassThrough } from 'node:stream'`,
     `import { routes } from '/@theo/route-manifest'`,
-    ``,
+    theoUiImport,
     `export async function render(url, options = {}) {`,
     `  const handler = createStaticHandler(routes)`,
     `  const request = new Request('http://localhost' + url)`,
@@ -29,17 +62,22 @@ function generateSingleShotEntry(): string {
     `  }`,
     ``,
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
-    `  const app = React.createElement(StaticRouterProvider, { router, context })`,
+    `  const app = ${appTree}`,
     ``,
     `  return new Promise((resolve, reject) => {`,
     `    let html = ''`,
+    `    let piped = false`,
     `    const passthrough = new PassThrough()`,
     `    passthrough.on('data', (chunk) => { html += chunk.toString() })`,
     `    passthrough.on('end', () => { resolve(html) })`,
     `    passthrough.on('error', reject)`,
     ``,
+    `    // T3.1 — Pipe on onShellReady (Next.js pattern). Calling pipe()`,
+    `    // twice throws "React currently only supports piping to one`,
+    `    // writable stream". The \`piped\` flag is a belt-and-suspenders`,
+    `    // guard if onShellReady fires unexpectedly more than once.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
-    `      onAllReady() { pipe(passthrough) },`,
+    `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,
     `      onShellError(err) { reject(err) },`,
     `      onError(err) { console.error('[SSR Error]', err) },`,
     `    })`,
@@ -48,12 +86,17 @@ function generateSingleShotEntry(): string {
   ].join('\n')
 }
 
-function generateStreamingEntry(): string {
+function generateStreamingEntry(options: EntryServerOptions): string {
+  const theoUiImport = options.theoUi
+    ? `import { TheoUIProvider } from '@usetheo/ui'\n`
+    : ''
+  const appTree = buildAppTreeJs(options)
   return [
-    `import React from 'react'`,
+    `import React, { Suspense } from 'react'`,
     `import { renderToPipeableStream, renderToReadableStream } from 'react-dom/server'`,
     `import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router'`,
     `import { routes } from '/@theo/route-manifest'`,
+    theoUiImport,
     ``,
     `// T2.3 — Web Standards streaming entry for edge runtimes (Cloudflare,`,
     `// Bun, Deno, Vercel Edge). Uses renderToReadableStream and returns a`,
@@ -69,7 +112,7 @@ function generateStreamingEntry(): string {
     `  }`,
     ``,
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
-    `  const app = React.createElement(StaticRouterProvider, { router, context })`,
+    `  const app = ${appTree}`,
     ``,
     `  const stream = await renderToReadableStream(app, {`,
     `    signal: request.signal,`,
@@ -97,7 +140,7 @@ function generateStreamingEntry(): string {
     `  }`,
     ``,
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
-    `  const app = React.createElement(StaticRouterProvider, { router, context })`,
+    `  const app = ${appTree}`,
     ``,
     `  return new Promise((resolve, reject) => {`,
     `    let didError = false`,
@@ -142,18 +185,23 @@ function generateStreamingEntry(): string {
     `  }`,
     ``,
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
-    `  const app = React.createElement(StaticRouterProvider, { router, context })`,
+    `  const app = ${appTree}`,
     ``,
     `  const { PassThrough } = await import('node:stream')`,
     `  return new Promise((resolve, reject) => {`,
     `    let html = ''`,
+    `    let piped = false`,
     `    const passthrough = new PassThrough()`,
     `    passthrough.on('data', (chunk) => { html += chunk.toString() })`,
     `    passthrough.on('end', () => { resolve(html) })`,
     `    passthrough.on('error', reject)`,
     ``,
+    `    // T3.1 — Pipe on onShellReady (Next.js pattern). Calling pipe()`,
+    `    // twice throws "React currently only supports piping to one`,
+    `    // writable stream". The \`piped\` flag is a belt-and-suspenders`,
+    `    // guard if onShellReady fires unexpectedly more than once.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
-    `      onAllReady() { pipe(passthrough) },`,
+    `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,
     `      onShellError(err) { reject(err) },`,
     `      onError(err) { console.error('[SSR Error]', err) },`,
     `    })`,

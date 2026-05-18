@@ -1,0 +1,5 @@
+{
+  "name": "adapter-aws-lambda",
+  "private": true,
+  "type": "module"
+}

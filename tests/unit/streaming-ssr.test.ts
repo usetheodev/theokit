@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest'
 import { generateEntryServer } from '../../packages/theo/src/router/entry-server.js'
 
 describe('generateEntryServer — default (single-shot)', () => {
-  it('emits a render function using onAllReady (non-streaming)', () => {
+  it('emits a render function using onShellReady to pipe (T3.1 — pipe-once)', () => {
+    // Previously this test expected `onAllReady` but the production bug
+    // "React currently only supports piping to one writable stream"
+    // forced the move to onShellReady with a piped-guard flag.
     const out = generateEntryServer()
-    expect(out).toContain('onAllReady')
+    expect(out).toContain('onShellReady')
     expect(out).toContain('export async function render')
   })
 

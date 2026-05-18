@@ -1,12 +1,10 @@
-import { defineRoute } from 'theokit/server'
-import { z } from 'zod'
-import type { AgentEvent } from 'theokit/server'
+import { defineAgentEndpoint, type AgentEvent } from 'theokit/server'
 
 /**
  * MOCK AGENT ENDPOINT — REPLACE WITH YOUR REAL LLM PROVIDER.
  *
  * What this is:
- *   A demo that emits 3 hardcoded events so the default scaffold has
+ *   A demo that yields 3 hardcoded events so the default scaffold has
  *   something to render from the first `theokit dev`.
  *
  * What to do here:
@@ -18,42 +16,32 @@ import type { AgentEvent } from 'theokit/server'
  *
  * Example real handler:
  *   import { OpenAI } from 'openai'
- *   const stream = await openai.chat.completions.create({ stream: true, ... })
- *   for await (const chunk of stream) {
- *     // yield { type: 'message', content: chunk.choices[0].delta.content }
- *   }
+ *   export const POST = defineAgentEndpoint({
+ *     async *handler({ body }) {
+ *       const { message } = body as { message: string }
+ *       const stream = await openai.chat.completions.create({ stream: true, ... })
+ *       let acc = ''
+ *       for await (const chunk of stream) {
+ *         acc += chunk.choices[0].delta.content ?? ''
+ *         yield { type: 'message', content: acc }
+ *       }
+ *     },
+ *   })
  *
- * The shape on the wire is server-sent events (text/event-stream):
+ * The `body` is already parsed by the framework (JSON / multipart). Use
+ * `body` instead of `request.json()` — `request` is the underlying Node
+ * `IncomingMessage` and does not expose a Web-Fetch `.json()` method.
+ *
+ * The wire format is Server-Sent Events (text/event-stream), produced
+ * automatically by `defineAgentEndpoint`:
  *   data: {"type":"message","content":"..."}\n\n
  *   data: {"type":"tool_call","name":"...","args":{...}}\n\n
- *   ...
  */
-export const POST = defineRoute({
-  body: z.object({ message: z.string().min(1) }),
-  handler: ({ body }) => {
-    const events: AgentEvent[] = [
-      { type: 'message', content: `Recebi: "${body.message}"` },
-      { type: 'tool_call', name: 'search', args: { q: body.message } },
-      { type: 'message', content: 'Pronto. (Este é um mock — conecte seu LLM aqui.)' },
-    ]
-
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        const encoder = new TextEncoder()
-        for (const event of events) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-        }
-        controller.close()
-      },
-    })
-
-    return new Response(stream, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
-    })
+export const POST = defineAgentEndpoint({
+  async *handler({ body }): AsyncGenerator<AgentEvent> {
+    const { message = '' } = (body ?? {}) as { message?: string }
+    yield { type: 'message', content: `Recebi: "${message}"` }
+    yield { type: 'tool_call', name: 'search', args: { q: message } }
+    yield { type: 'message', content: 'Pronto. (Este é um mock — conecte seu LLM aqui.)' }
   },
 })

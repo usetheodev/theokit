@@ -34,7 +34,26 @@ Single-source-of-truth simplificado: TheoKit owns runtime variant (server emits,
 
 ## Promise
 
-`TODAS AS TASKS, CRITERIOS DE ACEITES E DODS CONCLUIDOS E VALIDADOS` — **TRUE** (9/9 tasks DONE, dogfood 19/19, suite 941/941, zero TS errors).
+`TODAS AS TASKS, CRITERIOS DE ACEITES E DODS CONCLUIDOS E VALIDADOS` — **TRUE** (9/9 tasks DONE, dogfood 41/41, suite 1237/1237, zero TS errors, **cross-validation APROVADO 2026-05-18**).
+
+## Iter 8 — 2026-05-18 (Formal Cross-Validation closure)
+
+Validação final do plano contra implementação, linha por linha (skill `cross-validation`).
+
+- ADRs: 7/7 conformes (D3 descartado em iter 1 por decisão explícita do user — não é divergência).
+- Tasks: 9/9 conformes.
+- DoD: 14/14 itens satisfeitos (incluindo o checklist plan-specific completo).
+- Coverage Matrix: 10/10 gaps cobertos.
+- Edge cases: 12/12 resolvidos ou documentados conforme planejado.
+- Divergências: 0 BLOCKER, 0 CRITICAL, 0 MAJOR, 0 MINOR, 1 INFO (drift positivo no dogfood).
+
+**Veredicto: APROVADO (100%).** Report em `docs/reviews/cross-validation/theoui-default-integration-xval-2026-05-18.md`.
+
+Validation snapshot 2026-05-18:
+- `npx tsc --noEmit` → zero errors
+- `npx vitest run` → 1237/1237 PASS (163 files)
+- `bash scripts/dogfood-smoke.sh` → 41/41 PASS (Health 100%, target era ≥85%)
+- Os 4 theoui-specific dogfood gates (#16-19) intactos.
 
 ## Iter 7 — 2026-05-17 (Real smoke test — found 3 bugs, all fixed)
 

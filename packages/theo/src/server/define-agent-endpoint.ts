@@ -48,6 +48,45 @@ function encodeSSE(event: AgentEvent): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
 }
 
+/**
+ * Resolve an AbortSignal from either a Web `Request` (`.signal`) or a
+ * Node `IncomingMessage` (`.aborted` flag + `'close'`/'aborted' events).
+ *
+ * The framework's `executeRoute` passes IncomingMessage to route handlers
+ * today, but `defineAgentEndpoint` was designed for the Web Standards
+ * `Request` shape. This helper bridges both — preventing a runtime crash
+ * (`Cannot read properties of undefined (reading 'aborted')`) that would
+ * otherwise abort the SSE stream silently before the first yield.
+ */
+function resolveAbortSignal(request: unknown): AbortSignal {
+  const r = request as {
+    signal?: unknown
+    aborted?: boolean
+    on?: (event: string, cb: () => void) => void
+  }
+  if (
+    r &&
+    typeof r.signal === 'object' &&
+    r.signal !== null &&
+    'aborted' in r.signal &&
+    typeof (r.signal as AbortSignal).addEventListener === 'function'
+  ) {
+    return r.signal as AbortSignal
+  }
+
+  const controller = new AbortController()
+  if (r && r.aborted === true) controller.abort()
+  if (r && typeof r.on === 'function') {
+    r.on('close', () => {
+      if (!controller.signal.aborted) controller.abort()
+    })
+    r.on('aborted', () => {
+      if (!controller.signal.aborted) controller.abort()
+    })
+  }
+  return controller.signal
+}
+
 export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
   config: AgentEndpointConfig<TCtx, TBody>,
 ): RouteConfig<z.ZodUndefined, z.ZodUndefined, z.ZodUndefined, TCtx, Response> {
@@ -61,33 +100,30 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
         params: params as undefined,
       })
 
+      const signal = resolveAbortSignal(request)
+
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
           const onAbort = () => {
-            // Best-effort: cancel the generator, then close the stream.
-            // generator.return() is the documented way to short-circuit
-            // an async generator from outside.
             void generator.return(undefined as unknown as void)
           }
 
-          if (request.signal.aborted) {
+          if (signal.aborted) {
             controller.close()
             return
           }
-          request.signal.addEventListener('abort', onAbort, { once: true })
+          signal.addEventListener('abort', onAbort, { once: true })
 
           try {
             for await (const event of generator) {
-              if (request.signal.aborted) break
+              if (signal.aborted) break
               controller.enqueue(encodeSSE(event))
             }
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err)
-            controller.enqueue(
-              encodeSSE({ type: 'error', message }),
-            )
+            controller.enqueue(encodeSSE({ type: 'error', message }))
           } finally {
-            request.signal.removeEventListener('abort', onAbort)
+            signal.removeEventListener('abort', onAbort)
             controller.close()
           }
         },

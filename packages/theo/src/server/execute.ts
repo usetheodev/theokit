@@ -276,8 +276,20 @@ export async function executeRoute(
         return
       }
     }
-    if (err instanceof AuthRequiredError) {
-      sendError(res, err.code, err.message, err.status, undefined, requestId)
+    // Duck-type the auth error: under Vite dev / vitest the module-loader
+    // can produce a duplicate `AuthRequiredError` class identity, so
+    // `instanceof` returns false even though the thrown value carries the
+    // expected `code` + `status` fields. We fall back to a shape check.
+    const isAuthError =
+      err instanceof AuthRequiredError ||
+      (err !== null &&
+        typeof err === 'object' &&
+        (err as { code?: unknown }).code === 'AUTH_REQUIRED' &&
+        (err as { status?: unknown }).status === 401)
+
+    if (isAuthError) {
+      const authErr = err as { code: string; message: string; status: number }
+      sendError(res, authErr.code, authErr.message, authErr.status, undefined, requestId)
       if (pluginRunner) {
         const errCtxObj: Record<string, unknown> = {}
         pluginRunner.applyDecorations(errCtxObj)

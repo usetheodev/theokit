@@ -16,6 +16,8 @@ import type { PluginRunner } from '../server/plugin-runner.js'
 import { loadConfig } from '../config/load-config.js'
 import { resolveTransformer, type TheoTransformer } from '../server/transformer.js'
 import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
+import { resolveTheoRootDir } from './resolve-theo-root.js'
+import { injectEntryClient } from './inject-entry-client.js'
 
 export {
   defineTheoIntegration,
@@ -56,9 +58,10 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   const appDir = resolve(projectRoot, 'app')
   const ssrEnabled = options.ssr ?? false
 
-  // Resolve paths for SSR module loading
+  // Resolve paths for SSR module loading. Pure helper extracted for T1.3
+  // regression test — see resolve-theo-root.ts for branch documentation.
   const currentDir = dirname(fileURLToPath(import.meta.url))
-  const theoSrcDir = resolve(currentDir, '..')
+  const theoSrcDir = resolveTheoRootDir(currentDir)
 
   // EC-1: plugin runner cached in module closure. Instantiated in configResolved
   // (non-HMR-able). theo.config.ts edits during dev emit a warn but do NOT
@@ -105,11 +108,34 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         envPrefix: 'THEO_PUBLIC_',
         resolve: {
           alias: [
+            // Order matters: most-specific first so `theokit/X` doesn't
+            // get matched by the bare `theokit` alias.
             { find: 'theokit/server', replacement: resolve(theoSrcDir, `server/index${ext}`) },
+            { find: 'theokit/client', replacement: resolve(theoSrcDir, `client/index${ext}`) },
+            { find: 'theokit/react-query', replacement: resolve(theoSrcDir, `react-query/index${ext}`) },
+            { find: 'theokit/vite-plugin', replacement: resolve(theoSrcDir, `vite-plugin/index${ext}`) },
+            { find: 'theokit/adapters/web-shim', replacement: resolve(theoSrcDir, `adapters/web-shim${ext}`) },
+            { find: 'theokit/adapters/ws-shim', replacement: resolve(theoSrcDir, `adapters/ws-shim${ext}`) },
             { find: 'theokit', replacement: resolve(theoSrcDir, `index${ext}`) },
           ],
         },
       }
+    },
+
+    // Auto-inject the entry-client `<script>` into every served HTML
+    // (Phase 2 of nextjs-maturity plan). Runs BEFORE Vite's own
+    // transform so the injection lands inside <body>, not after
+    // Vite-injected content. Idempotent: if the user already wrote
+    // the script tag, the HTML is returned unchanged.
+    transformIndexHtml: {
+      order: 'pre' as const,
+      handler(html: string): string {
+        const result = injectEntryClient(html)
+        if (result.warning) {
+          console.warn(result.warning)
+        }
+        return result.html
+      },
     },
 
     resolveId(id: string) {
@@ -132,7 +158,16 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         return generateRouteManifest(tree)
       }
       if (id === RESOLVED_ENTRY_SERVER_ID) {
-        return generateEntryServer({ streaming: options.ssrStreaming === true })
+        // SSR tree MUST mirror client tree shape — pass theoUi through so
+        // <TheoUIProvider> wraps in both. Without this, React detects a
+        // hydration mismatch and silently falls back to client-only
+        // render — onClick handlers never get attached.
+        return generateEntryServer({
+          streaming: options.ssrStreaming === true,
+          theoUi: theoUi?.enabled
+            ? { theme: theoUi.config.theme }
+            : undefined,
+        })
       }
       if (id === RESOLVED_RUNTIME_CONFIG_ID) {
         // T1.3 — set globalThis.__THEO_TRANSFORMER__ so theoFetch picks it up

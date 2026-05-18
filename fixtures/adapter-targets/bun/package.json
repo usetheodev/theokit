@@ -1,0 +1,5 @@
+{
+  "name": "adapter-bun",
+  "private": true,
+  "type": "module"
+}

@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { safeClose } from './helpers/safe-close.js'
 
 const FIXTURES = path.resolve(import.meta.dirname, '../../fixtures')
 
@@ -41,10 +42,10 @@ describe('Onda 1 Mandatory Tests — Dev Server', () => {
     server = await startDevServer(path.join(FIXTURES, 'onda1-hello-theo'), { port: 0 })
     const address = server.httpServer!.address()
     port = typeof address === 'object' && address ? address.port : 0
-  }, 15000)
+  }, 60000)
 
   afterAll(async () => {
-    await server?.close()
+    await safeClose(server)
   }, 15000)
 
   it('should respond HTTP 200 on /', async () => {

@@ -34,6 +34,20 @@ export function generateEntryClient(
     ? `  ${rootMethod}(el,\n    ${routerTree}\n  )`
     : `  ${rootMethod}(el).render(\n    ${routerTree}\n  )`
 
+  // SSR hydration: <StaticRouterProvider hydrate> emits
+  // `<script>window.__staticRouterHydrationData = …</script>` into the
+  // server HTML. The browser router MUST receive this so it continues
+  // from the server's state instead of re-fetching everything.
+  //
+  // Without `hydrationData`, `createBrowserRouter` boots from scratch,
+  // React detects a DOM mismatch with the SSR-rendered HTML, and
+  // hydration silently falls back to client-only render — every
+  // `onClick` handler attached during hydration is lost. The page
+  // looks fine but is "dead HTML".
+  const hydrationLine = ssr
+    ? `const router = createBrowserRouter(routes, { hydrationData: window.__staticRouterHydrationData })`
+    : `const router = createBrowserRouter(routes)`
+
   return [
     `import React, { Suspense } from 'react'`,
     `import { ${rootMethod} } from 'react-dom/client'`,
@@ -43,7 +57,7 @@ export function generateEntryClient(
     `import '/@theo/runtime-config'`,
     ...theoUiImports,
     ``,
-    `const router = createBrowserRouter(routes)`,
+    hydrationLine,
     `const el = document.getElementById('root')`,
     `if (el) {`,
     renderCall,

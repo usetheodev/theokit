@@ -1,0 +1,6 @@
+name = "adapter-cloudflare-demo"
+main = ".theo/cloudflare/worker.mjs"
+compatibility_date = "2026-05-17"
+
+# Real deploy would use `wrangler deploy`. This fixture is compile-only:
+# we validate that the worker bundle is emitted with the correct shape.

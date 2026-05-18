@@ -1,0 +1,5 @@
+{
+  "name": "adapter-netlify",
+  "private": true,
+  "type": "module"
+}

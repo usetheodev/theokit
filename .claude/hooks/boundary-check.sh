@@ -26,10 +26,13 @@ if echo "$FILE_PATH" | grep -qE '^(.*/)?(packages/agents|src/agents)/'; then
   exit 2
 fi
 
-# Guard: app/ files should not import from server/ internals directly
+# Guard: app/ files should not import from server/ internals as RUNTIME values.
+# `import type {...} from '../server/...'` is fine — it's erased at compile time
+# and is the canonical TheoKit pattern for `theoFetch<typeof GET>` inference.
 if echo "$FILE_PATH" | grep -qE 'packages/theo-frontend/|packages/theo-app/|app/.*\.(ts|tsx)$'; then
-  if echo "$CONTENT" | grep -qE "from\s+['\"].*server/(routes|actions|middleware|context)"; then
-    echo '{"decision":"block","reason":"BOUNDARY VIOLATION: Frontend code must NOT import server internals directly. Use the typed client or server actions."}' >&2
+  # Find lines with `from '.*/server/...'` that are NOT type-only imports
+  if echo "$CONTENT" | grep -E "from\s+['\"].*server/(routes|actions|middleware|context)" | grep -vE "^\s*import\s+type\b" | grep -q .; then
+    echo '{"decision":"block","reason":"BOUNDARY VIOLATION: Frontend code must NOT import server runtime values directly. Use the typed client or server actions. (Type-only imports via `import type {...}` are allowed for theoFetch<typeof GET> inference.)"}' >&2
     exit 2
   fi
 fi

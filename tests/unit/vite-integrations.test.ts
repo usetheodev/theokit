@@ -20,11 +20,14 @@ describe('defineTheoIntegration', () => {
 })
 
 describe('IntegrationRegistry — virtual modules (EC-6)', () => {
-  it('accepts a virtual module ID with the correct prefix', () => {
+  it('accepts a virtual module ID with the correct prefix', async () => {
     const reg = createIntegrationRegistry({ existingRoutes: [] })
-    reg.callHook('foo', 'theo:config:setup', {
-      addVirtualModule: (id, code) => {
-        expect(id).toBe('virtual:integration:foo/myModule')
+    // `callHook` fabricates the id as `virtual:integration:<name>/test`
+    // — match that so the expect runs cleanly (no unhandled rejection
+    // from a mismatched assertion in an async callback).
+    await reg.callHook('foo', 'theo:config:setup', {
+      addVirtualModule: (id, _code) => {
+        expect(id).toBe('virtual:integration:foo/test')
       },
     })
     // Direct call to underlying API

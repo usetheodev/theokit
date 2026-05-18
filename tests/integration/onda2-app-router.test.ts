@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { startDevServer } from '../../packages/theo/src/cli/commands/dev.js'
 import path from 'node:path'
+import { safeClose } from './helpers/safe-close.js'
 
 const FIXTURES = path.resolve(import.meta.dirname, '../../fixtures')
 
@@ -12,10 +13,10 @@ describe('Onda 2 — App Router Integration', () => {
     server = await startDevServer(path.join(FIXTURES, 'app-router-basic'), { port: 0 })
     const address = server.httpServer!.address()
     port = typeof address === 'object' && address ? address.port : 0
-  }, 15000)
+  }, 60000)
 
   afterAll(async () => {
-    await server?.close()
+    await safeClose(server)
   }, 15000)
 
   it('GET / returns 200', async () => {

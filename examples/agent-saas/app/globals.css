@@ -1,0 +1,21 @@
+/* TheoUI tokens (CSS custom properties for the Violet Forge theme). MUST
+ * come first — PostCSS requires @import before any other statement. */
+@import "@usetheo/ui/tokens.css";
+
+/* Tailwind directives — processed by PostCSS via postcss.config.js. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Reasonable defaults. The TheoUI tokens provide the colors; we just wire
+ * body to use them so the page background isn't pure white in dark mode. */
+html,
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-body, system-ui, sans-serif);
+}
+
+* {
+  box-sizing: border-box;
+}

@@ -58,9 +58,22 @@ export function generateRouteManifest(tree: RouteNode): string {
 
   collectImports(tree)
 
-  // Build import lines
+  // IMPORTANT: route components are imported STATICALLY, not via React.lazy.
+  //
+  // With `lazy(() => import(...))` the components are unresolved at client
+  // boot. The first render of `<RouterProvider>` throws a promise and the
+  // outer Suspense fallback takes over — replacing the SSR DOM with the
+  // fallback content. React 19 then detects a hydration mismatch and falls
+  // back to a client-only re-render, during which `onClick` handlers
+  // attached by hydration are lost and the page becomes "dead HTML" —
+  // visible but unresponsive.
+  //
+  // Static imports trade bundle size for correct hydration. Per-route code
+  // splitting can be re-added later, but only with an SSR-aware pre-load
+  // mechanism that resolves the matched route's modules before
+  // `hydrateRoot` runs.
   const lines: string[] = [
-    `import React, { Suspense, lazy } from 'react'`,
+    `import React, { Suspense } from 'react'`,
   ]
 
   if (hasLayout) {
@@ -70,9 +83,7 @@ export function generateRouteManifest(tree: RouteNode): string {
   lines.push('')
 
   for (const imp of imports) {
-    lines.push(
-      `const ${imp.varName} = lazy(() => import('${imp.importPath}'))`,
-    )
+    lines.push(`import ${imp.varName} from '${imp.importPath}'`)
   }
 
   lines.push('')
@@ -119,7 +130,12 @@ export function generateRouteManifest(tree: RouteNode): string {
       const pathPart = isRoot
         ? `path: '/'`
         : `path: '${node.segment}'`
-      return `{ ${pathPart}, element: React.createElement(${layoutVar}), children: ${childrenArray} }`
+      // Layout receives `<Outlet />` as `children` prop. This supports BOTH
+      // conventions: Next.js-style layouts that render `{children}` AND
+      // layouts that call `<Outlet />` directly (the prop is the same element,
+      // ignored by the latter). Without this, Next.js-style templates render
+      // empty because react-router does not pass a `children` prop by default.
+      return `{ ${pathPart}, element: React.createElement(${layoutVar}, { children: React.createElement(Outlet) }), children: ${childrenArray} }`
     }
 
     // No layout — if root, wrap in path '/'

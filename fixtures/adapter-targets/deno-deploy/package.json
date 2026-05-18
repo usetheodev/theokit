@@ -1,0 +1,5 @@
+{
+  "name": "adapter-deno-deploy",
+  "private": true,
+  "type": "module"
+}

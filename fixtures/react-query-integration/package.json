@@ -1,0 +1,8 @@
+{
+  "name": "react-query-integration",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tanstack/react-query": "^5.0.0"
+  }
+}
