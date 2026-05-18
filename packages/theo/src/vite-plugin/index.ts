@@ -71,6 +71,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let resolvedBatching: { max?: number } | undefined
   let theoUi: TheoUiDetectResult | undefined
   let csrfMode: 'off' | 'warn' | 'strict' = 'warn'
+  let securityHeaders: import('../server/security-headers.js').SecurityHeadersConfig | undefined
   let configLoadedOnce = false
 
   return {
@@ -97,6 +98,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         theoUi = detectTheoUi(projectRoot, userConfig.ui as never)
         // Phase 5 — CSRF warn-first (EC-1)
         csrfMode = (userConfig.security?.csrf ?? 'warn') as 'off' | 'warn' | 'strict'
+        // Phase 6 — Default security headers (D4 / EC-2)
+        securityHeaders = userConfig.security?.headers as never
       } catch (err) {
         // Config load errors are surfaced elsewhere (validate-structure).
         // Plugin runner remains undefined; middlewares run without hooks.
@@ -194,6 +197,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
           batching: resolvedBatching,
           transformer,
           csrfMode,
+          securityHeaders,
         }),
       )
 

@@ -15,6 +15,7 @@ import {
   BATCH_PATH,
   type BatchPayload,
 } from '../server/batch-handler.js'
+import { applySecurityHeaders } from '../server/security-headers.js'
 
 export interface ApiMiddlewareOptions {
   rateLimitConfig?: RateLimitConfig
@@ -24,6 +25,8 @@ export interface ApiMiddlewareOptions {
   batching?: { max?: number }
   /** Phase 5 — CSRF enforcement mode. Default 'warn' (0.2.0). */
   csrfMode?: 'off' | 'warn' | 'strict'
+  /** Phase 6 — Default security headers config. */
+  securityHeaders?: import('../server/security-headers.js').SecurityHeadersConfig
 }
 
 export function createApiMiddleware(
@@ -44,6 +47,8 @@ export function createApiMiddleware(
   const transformer = opts.transformer
   const batching = opts.batching
   const csrfMode = opts.csrfMode ?? 'warn'
+  const securityHeadersConfig = opts.securityHeaders ?? {}
+  const securityEnv = { production: process.env.NODE_ENV === 'production' }
 
   return async (req, res, next) => {
     const url = req.url ?? ''
@@ -54,6 +59,9 @@ export function createApiMiddleware(
     const requestId = randomUUID()
     const start = Date.now()
     res.setHeader('x-request-id', requestId)
+    // Phase 6 — Apply security headers BEFORE the handler runs so route
+    // handlers can still override via res.setHeader (last write wins).
+    applySecurityHeaders(res, securityHeadersConfig, securityEnv)
 
     // Rate limit check
     if (rateLimiter) {

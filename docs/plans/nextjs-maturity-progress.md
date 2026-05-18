@@ -39,11 +39,11 @@ Persistent state across iterations. Mark task DONE only when tests are green AND
 |---|---|---|
 | T5.1 CSRF default-warn rollout | **DONE** | `enforceCsrf(req, mode, logger?)` + `CsrfMode` union in `csrf.ts`; wired into `execute.ts` for POST/PUT/PATCH/DELETE; `defineRoute({ csrf: false })` opt-out; `securitySchema` in config; `X-Theo-Action: 1` auto-attached in `theoFetch`. 10 unit + 8 integration tests + dogfood check #42 + live smoke (curl POST without header → warn line in stderr + 200; with header → silent 200). EC-1 closed. |
 
-## Phase 6 — Security headers (EC-2)
+## Phase 6 — Security headers (EC-2) ✅ COMPLETE
 
 | Task | Status | Notes |
 |---|---|---|
-| T6.1 Headers + CSP report-only | PENDING | |
+| T6.1 Headers + CSP report-only | **DONE** | `packages/theo/src/server/security-headers.ts` exports pure `buildSecurityHeaders(config, env)` + `applySecurityHeaders(res, ...)`. `securityHeadersSchema` added to config (`csp` / `cspMode` / `hsts` / `frameOptions` / `contentTypeOptions` / `referrerPolicy`). Wired into `api-middleware.ts` BEFORE handler invocation so route handlers can still override via `res.setHeader`. EC-2: default `cspMode = 'report-only'` so existing apps with inline scripts don't break — 0.3.0 will flip to `enforce`. HSTS prod-only. Live curl confirmed all 4 default headers + report-only CSP on `/api/chat`. 15 unit tests cover defaults, override semantics, env gating, opt-out paths. Dogfood check #45 wired. |
 
 ## Phase 7 — Observability
 

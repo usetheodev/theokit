@@ -26,8 +26,30 @@ export const loggingSchema = z.object({
  * or `off` to disable CSRF entirely (only valid when you have another
  * defense — bearer auth, no session cookies, etc).
  */
+/**
+ * Phase 6 — Default security headers (D4 / EC-2).
+ *
+ * 0.2.0 defaults:
+ *   - CSP in `report-only` mode (EC-2: don't break existing apps)
+ *   - X-Frame-Options: DENY · X-Content-Type-Options: nosniff
+ *   - Referrer-Policy: strict-origin-when-cross-origin
+ *   - HSTS in production only (no TLS on localhost)
+ *
+ * Users override individual headers, swap CSP to `enforce`, or disable
+ * CSP entirely (`csp: false` / `cspMode: 'off'`).
+ */
+export const securityHeadersSchema = z.object({
+  csp: z.union([z.string(), z.literal(false)]).optional(),
+  cspMode: z.enum(['enforce', 'report-only', 'off']).default('report-only'),
+  hsts: z.union([z.string(), z.literal(false)]).optional(),
+  frameOptions: z.enum(['DENY', 'SAMEORIGIN']).default('DENY'),
+  contentTypeOptions: z.literal('nosniff').default('nosniff'),
+  referrerPolicy: z.string().default('strict-origin-when-cross-origin'),
+})
+
 export const securitySchema = z.object({
   csrf: z.enum(['off', 'warn', 'strict']).default('warn'),
+  headers: securityHeadersSchema.optional(),
 })
 
 export const theoConfigSchema = z.object({

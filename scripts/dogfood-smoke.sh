@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=44
+MAX=45
 FAILS=()
 
 pass() {
@@ -408,6 +408,17 @@ else
   fail "theoui-autoinject or saas template missing"
 fi
 
+# 45. Phase 6 — Default security headers (T6.1 / EC-2)
+echo "→ Default security headers (Phase 6 — T6.1)"
+if [ -f packages/theo/src/server/security-headers.ts ] \
+   && grep -q "applySecurityHeaders" packages/theo/src/vite-plugin/api-middleware.ts \
+   && grep -q "securityHeadersSchema" packages/theo/src/config/schema.ts \
+   && grep -q "Content-Security-Policy-Report-Only" packages/theo/src/server/security-headers.ts; then
+  pass "security headers wired (CSP report-only default + Frame/Content-Type/Referrer + HSTS prod)"
+else
+  fail "security headers incomplete"
+fi
+
 # 44. Phase 4 — Code-splitting back with matchRoutes safeguard (T4.1 / EC-3)
 echo "→ Code-splitting + matchRoutes safeguard (Phase 4 — T4.1)"
 if grep -q "React\.lazy" packages/theo/src/router/generate.ts \
@@ -445,8 +456,8 @@ fi
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 38 ]; then
-  echo "Status: PASS (>= 38/44 = >= 85%)"
+if [ "$SCORE" -ge 39 ]; then
+  echo "Status: PASS (>= 39/45 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Default security headers — Phase 6 T6.1 / EC-2, 2026-05-18)
+- **Every `/api/*` response now carries OWASP-recommended security headers by default** — `Content-Security-Policy-Report-Only`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security: max-age=31536000; includeSubDomains` in production (skipped in dev — no TLS on localhost).
+- **CSP ships in `report-only` mode for 0.2.0** (EC-2 backward compat): existing apps with inline scripts or third-party CDN scripts keep working, but every violation lands in DevTools / CSP report collector so consumers can audit before the 0.3.0 cutover to `enforce`.
+- **New config field `config.security.headers`** with full control: `csp` (string override or `false`), `cspMode` (`'enforce' | 'report-only' | 'off'`), `hsts` (string override or `false`), `frameOptions` (`'DENY' | 'SAMEORIGIN'`), `contentTypeOptions`, `referrerPolicy`. Handler-level `res.setHeader()` always wins (framework applies headers BEFORE the handler runs).
+- **`packages/theo/src/server/security-headers.ts`** — new pure helpers `buildSecurityHeaders(config, env)` + `applySecurityHeaders(res, config, env)` + the exported `DEFAULT_CSP` policy string so docs and tests can reference it.
+- 15 unit tests in `tests/unit/security-headers.test.ts` covering defaults, `cspMode` variants, env-gated HSTS, opt-out via `csp: false`, override precedence, and the `applySecurityHeaders` setHeader integration.
+- Live verified: `curl -I /api/chat` against the dev server emits CSP report-only + Frame DENY + nosniff + Referrer-Policy. Dogfood check #45 wired.
+
 ### Added (Code-splitting back — Phase 4 T4.1, 2026-05-18)
 - **Per-route lazy loading** with EC-3 safeguards. `generate.ts` emits `React.lazy(() => import(…))` for pages and a parallel `__theoPreloadMap` keyed by absolute route path. Layouts, errors, loading, and not-found components stay as static imports because they're always needed at boot — only pages get the split.
 - **SSR-aware preload** in the entry-client: when `ssr: true`, the generated bootstrap imports `matchRoutes` from react-router, computes the matched routes against `window.location.pathname` (not a server-emitted hint — EC-3 safeguard against URL-drift races), and awaits the matched-route preload promises BEFORE calling `hydrateRoot`. By that point the `React.lazy` modules are cache-resolved, so no Suspense fallback fires during hydration → DOM matches SSR → onClick handlers survive.
