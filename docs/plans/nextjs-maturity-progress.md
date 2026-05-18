@@ -27,11 +27,11 @@ Persistent state across iterations. Mark task DONE only when tests are green AND
 |---|---|---|
 | T3.1 Single-pipe per request | **DONE** | Switched from `onAllReady` to `onShellReady` (Next.js pattern) + `piped` guard flag. Smoke real: 5 prod requests, 0 pipe errors. 5 regression tests + 1 existing test updated. |
 
-## Phase 4 — Code-splitting back (EC-3 safeguard)
+## Phase 4 — Code-splitting back (EC-3 safeguard) ✅ COMPLETE
 
 | Task | Status | Notes |
 |---|---|---|
-| T4.1 SSR-aware preload with matchRoutes safeguard | PENDING | |
+| T4.1 SSR-aware preload with matchRoutes safeguard | **DONE** | `generate.ts` emits `React.lazy()` for pages and a parallel `__theoPreloadMap` keyed by absolute route path. Layouts/error/loading/not-found stay static (always-needed). `entry.ts` (SSR mode) imports `matchRoutes`, awaits matched-route preloads with a 1500ms timeout, THEN calls `hydrateRoot`. EC-3 safeguards in place: client-side re-match (no SSR hint trust) and timeout fallback. **Bundle measurement** (default template prod build): initial JS gzipped **193.90 KB** (target ≤350 KB) + lazy page chunk **6.77 KB gzipped** separated. 14 unit tests + Playwright `template-default.spec.ts` validates hydration still works end-to-end (7/7 PASS). Regression-5 + regression-6 tests rewritten to lock the new invariant ("layouts static, pages lazy") so future PRs can't accidentally lazy() the layout and re-introduce the original hydration bug. |
 
 ## Phase 5 — CSRF warn-first (EC-1) ✅ COMPLETE
 

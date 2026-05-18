@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=43
+MAX=44
 FAILS=()
 
 pass() {
@@ -408,6 +408,17 @@ else
   fail "theoui-autoinject or saas template missing"
 fi
 
+# 44. Phase 4 — Code-splitting back with matchRoutes safeguard (T4.1 / EC-3)
+echo "→ Code-splitting + matchRoutes safeguard (Phase 4 — T4.1)"
+if grep -q "React\.lazy" packages/theo/src/router/generate.ts \
+   && grep -q "__theoPreloadMap" packages/theo/src/router/generate.ts \
+   && grep -q "matchRoutes" packages/theo/src/router/entry.ts \
+   && grep -q "1500" packages/theo/src/router/entry.ts; then
+  pass "code-splitting wired (React.lazy + preload map + matchRoutes + 1500ms timeout)"
+else
+  fail "code-splitting incomplete (missing one of: React.lazy / preload map / matchRoutes / timeout)"
+fi
+
 # 43. Phase 10 — Playwright browser test for default template (T10.1)
 echo "→ Playwright template-default spec (Phase 10 — T10.1)"
 if [ -f tests/e2e/template-default.spec.ts ] \
@@ -434,8 +445,8 @@ fi
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 37 ]; then
-  echo "Status: PASS (>= 37/43 = >= 85%)"
+if [ "$SCORE" -ge 38 ]; then
+  echo "Status: PASS (>= 38/44 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

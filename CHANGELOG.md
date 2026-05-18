@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Code-splitting back — Phase 4 T4.1, 2026-05-18)
+- **Per-route lazy loading** with EC-3 safeguards. `generate.ts` emits `React.lazy(() => import(…))` for pages and a parallel `__theoPreloadMap` keyed by absolute route path. Layouts, errors, loading, and not-found components stay as static imports because they're always needed at boot — only pages get the split.
+- **SSR-aware preload** in the entry-client: when `ssr: true`, the generated bootstrap imports `matchRoutes` from react-router, computes the matched routes against `window.location.pathname` (not a server-emitted hint — EC-3 safeguard against URL-drift races), and awaits the matched-route preload promises BEFORE calling `hydrateRoot`. By that point the `React.lazy` modules are cache-resolved, so no Suspense fallback fires during hydration → DOM matches SSR → onClick handlers survive.
+- **Timeout fallback** — preload awaits with a 1500ms ceiling. On slow networks the framework proceeds to hydrate anyway; Suspense will then handle the lazy fallback as normal. Better to lose hydration on one slow request than hang every connection on a logic bug.
+- **Bundle measurement** (default template, production build): initial JS **193.90 KB gzipped** (well below the 350 KB target) + a lazy page chunk **6.77 KB gzipped** separated. Code-splitting actually splits.
+- 14 unit tests in `tests/unit/code-split-aware-hydrate.test.ts` covering manifest shape (lazy pages, static layouts, preload map keys), entry-client wiring (matchRoutes import, Promise.all order, 1500ms timeout, CSR mode emits no preload), and backward compatibility (Suspense still imported, Outlet wrap intact).
+- Pre-existing Phase 1 regression tests (T1.5 `regression-5-hydration-data-wired.test.ts` and T1.6 `regression-6-route-manifest-static-imports.test.ts`) rewritten to lock the new invariant ("layouts static, pages lazy") instead of the old one ("nothing is lazy"). Any future PR that lazies the layout — which would re-introduce the hydration bug — now fails loudly.
+- Playwright `template-default.spec.ts` updated: page-mounted waits replace synchronous DOM counts where page.tsx is now lazy. All 7 scenarios pass against the new code-split build.
+- Dogfood check #44: validates `React.lazy` + `__theoPreloadMap` + `matchRoutes` + 1500ms timeout are all present.
+
 ### Added (Playwright browser tests for default template — Phase 10 T10.1, 2026-05-18)
 - **`fixtures/template-default/`** — full mirror of the default scaffold template, added to `pnpm-workspace.yaml` so it installs against `theokit` via workspace link. Lives under fixtures because it's not a customer-facing example, it's a test surface.
 - **`tests/e2e/template-default.spec.ts`** — 7 Playwright scenarios in real Chromium covering the canonical first-run surface: app shell renders (TopNav + Sidebar + main), regression check that the layout receives `<Outlet />` (the black-page bug from this week), chat composer accepts input and round-trips through SSE, streaming response arrives as 3 events in DOM order, CommandPalette opens via leading-button + Escape closes, keyboard shortcut (Ctrl+K) toggles the palette, zero unhandled console errors during a full chat session.

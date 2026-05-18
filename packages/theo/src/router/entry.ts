@@ -48,19 +48,79 @@ export function generateEntryClient(
     ? `const router = createBrowserRouter(routes, { hydrationData: window.__staticRouterHydrationData })`
     : `const router = createBrowserRouter(routes)`
 
+  // Phase 4 — Code-splitting + matchRoutes safeguard (EC-3).
+  //
+  // SSR mode: pages are React.lazy()-wrapped in the manifest. If we render
+  // before the matched route's module is loaded, React.lazy throws a
+  // promise, the outer Suspense fires its fallback (null), and the SSR
+  // DOM is wiped before hydration → onClick handlers die.
+  //
+  // The fix:
+  //   1. matchRoutes(routes, location.pathname) on the client to discover
+  //      which routes actually render at this URL. Using the client matcher
+  //      (not a server hint) avoids URL-drift races: SSR may have prepared
+  //      /foo while a browser auto-redirect now points at /bar.
+  //   2. Look up each matched route's path in __theoPreloadMap and call
+  //      the import() factory. Browsers cache modules by URL — when
+  //      React.lazy fires its own import() during render, it gets the
+  //      cached promise instantly.
+  //   3. Promise.all with a 1500ms timeout. On slow networks we'd rather
+  //      lose hydration on ONE request than hang the page forever. The
+  //      fallback path proceeds to hydrate anyway — React.lazy will then
+  //      Suspense its fallback as usual.
+  const preloadBlock = ssr
+    ? [
+        `// Phase 4 — preload matched-route modules before hydrate (EC-3 safeguard)`,
+        `const __theoMatches = matchRoutes(routes, window.location.pathname) ?? []`,
+        `const __theoPreloadPaths = __theoMatches`,
+        `  .map((m) => m.route && (m.route).path)`,
+        `  .filter((p) => typeof p === 'string' && p in __theoPreloadMap)`,
+        `const __theoPreloadPromise = Promise.all(`,
+        `  __theoPreloadPaths.map((p) => __theoPreloadMap[p]().catch((err) => { console.error('[theo] preload failed', p, err); return null }))`,
+        `)`,
+        `const __theoTimeout = new Promise((resolve) => setTimeout(() => resolve('timeout'), 1500))`,
+        `await Promise.race([__theoPreloadPromise, __theoTimeout])`,
+        '',
+      ]
+    : []
+
+  // The hydrate/render call needs to live inside an async IIFE when we
+  // await preloads. In CSR-only mode we keep the existing synchronous
+  // block for backward compat.
+  const renderBlock = ssr
+    ? [
+        `if (el) {`,
+        `  ;(async () => {`,
+        ...preloadBlock.map((l) => '    ' + l),
+        `${renderCall}`,
+        `  })()`,
+        `}`,
+      ]
+    : [
+        `if (el) {`,
+        renderCall,
+        `}`,
+      ]
+
+  const manifestImports = ssr
+    ? `import { routes, __theoPreloadMap } from '/@theo/route-manifest'`
+    : `import { routes } from '/@theo/route-manifest'`
+
+  const reactRouterImports = ssr
+    ? `import { createBrowserRouter, RouterProvider, matchRoutes } from 'react-router'`
+    : `import { createBrowserRouter, RouterProvider } from 'react-router'`
+
   return [
     `import React, { Suspense } from 'react'`,
     `import { ${rootMethod} } from 'react-dom/client'`,
-    `import { createBrowserRouter, RouterProvider } from 'react-router'`,
-    `import { routes } from '/@theo/route-manifest'`,
+    reactRouterImports,
+    manifestImports,
     `// T1.3 — side-effect import sets globalThis.__THEO_TRANSFORMER__ for theoFetch`,
     `import '/@theo/runtime-config'`,
     ...theoUiImports,
     ``,
     hydrationLine,
     `const el = document.getElementById('root')`,
-    `if (el) {`,
-    renderCall,
-    `}`,
+    ...renderBlock,
   ].join('\n')
 }

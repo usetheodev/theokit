@@ -32,13 +32,25 @@ describe('T1.5 — Entry-client passes hydrationData to createBrowserRouter (ssr
     expect(generateEntryClient(false)).toContain('createBrowserRouter(')
   })
 
-  it('only the createBrowserRouter line differs between ssr=true and ssr=false (no other drift)', () => {
-    const linesA = generateEntryClient(true).split('\n')
-    const linesB = generateEntryClient(false).split('\n')
-    // hydrateRoot vs createRoot is also expected to differ — count both
-    const diffs = linesA.filter((line, i) => line !== linesB[i])
-    // Expected diffs: import line (hydrateRoot vs createRoot), createBrowserRouter line,
-    // and the render-call line. At most 4 lines.
-    expect(diffs.length).toBeLessThanOrEqual(5)
+  it('the SSR-only branch carries the hydrate flow (hydrationData + matchRoutes preload)', () => {
+    // Post-Phase-4 (2026-05-18): the SSR entry-client is deliberately
+    // richer than the CSR one — it imports `matchRoutes`, awaits the
+    // matched-route preloads, and only then calls hydrateRoot. The CSR
+    // path stays a simple synchronous render.
+    //
+    // We assert the shape rather than counting line diffs, since the
+    // line count grows with the preload block.
+    const ssr = generateEntryClient(true)
+    const csr = generateEntryClient(false)
+
+    // SSR-only signals
+    expect(ssr).toContain('hydrationData')
+    expect(ssr).toContain('matchRoutes')
+    expect(ssr).toContain('Promise.all')
+
+    // CSR must NOT have those (no SSR HTML to hydrate against)
+    expect(csr).not.toContain('hydrationData')
+    expect(csr).not.toContain('matchRoutes')
+    expect(csr).not.toContain('Promise.all')
   })
 })

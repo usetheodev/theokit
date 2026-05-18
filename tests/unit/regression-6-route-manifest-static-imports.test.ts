@@ -3,22 +3,26 @@ import { generateRouteManifest } from '../../packages/theo/src/router/generate.j
 import type { RouteNode } from '../../packages/theo/src/router/types.js'
 
 /**
- * Regression for nextjs-maturity T1.6.
+ * Regression for nextjs-maturity T1.6 — UPDATED for Phase 4 (2026-05-18).
  *
- * Original bug (previous session): the route manifest emitted
- *   `const Page_X = lazy(() => import(...))`
- * for every route. At hydration time, React rendered the outer Suspense
- * fallback (null) while the lazy chunks loaded, REPLACING the SSR DOM —
- * which made React fall back to client-only render and lose every
- * onClick handler.
+ * History:
+ *   - Pre-Phase-4: pages were emitted as `lazy()` which broke hydration
+ *     (outer Suspense fired during hydrate, SSR DOM wiped, onClick lost).
+ *     T1.6 originally pinned "no lazy() anywhere".
+ *   - Phase 4: code-splitting comes back, but only for PAGES (lazy + a
+ *     preload map keyed by route path). Hydration is safe because the
+ *     entry-client awaits the matched-route preloads BEFORE hydrate
+ *     (EC-3 safeguard — see tests/unit/code-split-aware-hydrate.test.ts).
  *
- * The fix uses static `import X from '...'` for every route component.
- * Trade-off: bigger initial bundle (Phase 4 of this plan re-introduces
- * code-splitting with an SSR-aware preload safeguard).
+ * What remains static:
+ *   - Layouts (always needed at boot, regardless of route)
+ *   - Errors / loading / not-found (defensive paths, must be available)
  *
- * These tests pin the static-import shape so a casual "let's add lazy()
- * back for code-splitting" PR fails loudly instead of silently breaking
- * hydration.
+ * What is lazy:
+ *   - Pages (per-route code split)
+ *
+ * These tests pin THAT invariant so a future PR that lazy()s the layout
+ * (which would re-introduce the hydration bug) fails loudly.
  */
 
 function makeTree(): RouteNode {
@@ -34,37 +38,39 @@ function makeTree(): RouteNode {
   }
 }
 
-describe('T1.6 — Route manifest uses static imports, never lazy()', () => {
-  it('output contains zero `lazy(` calls', () => {
+describe('T1.6 (post-Phase-4) — layouts/errors/loading stay static; pages are lazy', () => {
+  it('layout is imported with `import X from` — NOT lazy', () => {
     const out = generateRouteManifest(makeTree())
-    expect(out.includes('lazy(')).toBe(false)
+    expect(out).toMatch(/import\s+Layout_root\s+from\s+['"]\/app\/layout\.tsx['"]/)
+    expect(out).not.toMatch(/React\.lazy\([^)]*\/app\/layout\.tsx/)
   })
 
-  it('output does not import lazy from react', () => {
+  it('error / loading / not-found are imported statically', () => {
     const out = generateRouteManifest(makeTree())
-    // Imports `React, { Suspense }` — Suspense is still needed for loading.tsx
-    expect(out).toMatch(/import React, \{ Suspense \} from 'react'/)
-    expect(out).not.toMatch(/\blazy\b/)
+    expect(out).toMatch(/import\s+Error_root\s+from\s+['"]\/app\/error\.tsx['"]/)
+    expect(out).toMatch(/import\s+Loading_root\s+from\s+['"]\/app\/loading\.tsx['"]/)
+    expect(out).toMatch(/import\s+NotFound_root\s+from\s+['"]\/app\/not-found\.tsx['"]/)
   })
 
-  it('emits one static `import X from` line per route file', () => {
-    const tree = makeTree()
-    const out = generateRouteManifest(tree)
-    // tree above has 5 route files (page, layout, error, loading, notFound)
-    const importLines = out.match(/^import [A-Z][a-zA-Z_]+ from '/gm) ?? []
-    expect(importLines).toHaveLength(5)
+  it('pages use React.lazy() (Phase 4 — code-splitting back)', () => {
+    const out = generateRouteManifest(makeTree())
+    expect(out).toMatch(/React\.lazy\(\s*\(\)\s*=>\s*import\(['"]\/app\/page\.tsx['"]\s*\)\s*\)/)
   })
 
-  it('Suspense is still imported (needed by loading.tsx wrapping)', () => {
+  it('Suspense is imported (needed because lazy() pages can suspend)', () => {
     const out = generateRouteManifest(makeTree())
-    expect(out).toContain('Suspense')
+    expect(out).toMatch(/import\s+React,\s*\{\s*Suspense\s*\}/)
   })
 
-  it('regression: future PR adding lazy() back to manifest fails this test', () => {
-    // Belt-and-suspenders sanity. If anyone reverts generate.ts to use
-    // lazy() this will fail.
+  it('regression: future PR lazying the LAYOUT fails this test (would re-introduce hydration bug)', () => {
     const out = generateRouteManifest(makeTree())
-    expect(out).not.toContain('lazy(()')
-    expect(out).not.toContain('() => import(')
+    // Layout-level lazy() would re-introduce the hydrate-then-Suspense
+    // bug because the layout renders unconditionally on every route.
+    expect(out).not.toMatch(/React\.lazy[^)]*layout/i)
+  })
+
+  it('emits the __theoPreloadMap export (Phase 4)', () => {
+    const out = generateRouteManifest(makeTree())
+    expect(out).toMatch(/export\s+const\s+__theoPreloadMap/)
   })
 })

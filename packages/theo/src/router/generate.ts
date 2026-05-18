@@ -14,64 +14,83 @@ interface ImportEntry {
   importPath: string
 }
 
+interface PreloadEntry {
+  routePath: string
+  importPath: string
+}
+
+/**
+ * Build the absolute route path for a node by accumulating segments from
+ * the root. Used to key the preload map exactly as react-router's
+ * `matchRoutes` reports `match.route.path`.
+ */
+function buildRoutePath(parents: string[], segment: string): string {
+  const joined = [...parents, segment].filter(Boolean).join('/')
+  return '/' + joined
+}
+
 export function generateRouteManifest(tree: RouteNode): string {
-  const imports: ImportEntry[] = []
+  // Static imports (always-needed at boot): layouts, errors, loading, not-found.
+  const staticImports: ImportEntry[] = []
+  // Lazy-loaded pages — tracked separately so we emit React.lazy() and
+  // build the preload map.
+  const lazyPages: { varName: string; importPath: string; routePath: string }[] = []
   let hasLayout = false
 
-  function collectImports(node: RouteNode): void {
+  function walk(node: RouteNode, parents: string[]): void {
     const seg = node.segment || 'root'
+    const routePath = buildRoutePath(parents, node.segment)
+
     if (node.page) {
-      imports.push({
+      lazyPages.push({
         varName: safeVarName(seg, 'Page'),
         importPath: normalizePath(node.page),
+        routePath,
       })
     }
     if (node.layout) {
       hasLayout = true
-      imports.push({
+      staticImports.push({
         varName: safeVarName(seg, 'Layout'),
         importPath: normalizePath(node.layout),
       })
     }
     if (node.error) {
-      imports.push({
+      staticImports.push({
         varName: safeVarName(seg, 'Error'),
         importPath: normalizePath(node.error),
       })
     }
     if (node.loading) {
-      imports.push({
+      staticImports.push({
         varName: safeVarName(seg, 'Loading'),
         importPath: normalizePath(node.loading),
       })
     }
     if (node.notFound) {
-      imports.push({
+      staticImports.push({
         varName: safeVarName(seg, 'NotFound'),
         importPath: normalizePath(node.notFound),
       })
     }
     for (const child of node.children) {
-      collectImports(child)
+      const nextParents = node.segment ? [...parents, node.segment] : parents
+      walk(child, nextParents)
     }
   }
 
-  collectImports(tree)
+  walk(tree, [])
 
-  // IMPORTANT: route components are imported STATICALLY, not via React.lazy.
+  // Phase 4 — Code-splitting + matchRoutes safeguard (EC-3).
   //
-  // With `lazy(() => import(...))` the components are unresolved at client
-  // boot. The first render of `<RouterProvider>` throws a promise and the
-  // outer Suspense fallback takes over — replacing the SSR DOM with the
-  // fallback content. React 19 then detects a hydration mismatch and falls
-  // back to a client-only re-render, during which `onClick` handlers
-  // attached by hydration are lost and the page becomes "dead HTML" —
-  // visible but unresponsive.
+  // PAGES are lazy. LAYOUTS / ERROR / LOADING / NOT-FOUND stay static
+  // because they're always needed at boot regardless of route.
   //
-  // Static imports trade bundle size for correct hydration. Per-route code
-  // splitting can be re-added later, but only with an SSR-aware pre-load
-  // mechanism that resolves the matched route's modules before
-  // `hydrateRoot` runs.
+  // The preload map exposes the same `import()` calls keyed by absolute
+  // route path. The entry-client re-matches `routes` against
+  // `location.pathname` and awaits the matched entries BEFORE
+  // `hydrateRoot`, so React.lazy modules resolve from cache and no
+  // Suspense fallback fires during hydration.
   const lines: string[] = [
     `import React, { Suspense } from 'react'`,
   ]
@@ -82,10 +101,29 @@ export function generateRouteManifest(tree: RouteNode): string {
 
   lines.push('')
 
-  for (const imp of imports) {
+  // Static imports first
+  for (const imp of staticImports) {
     lines.push(`import ${imp.varName} from '${imp.importPath}'`)
   }
 
+  // Lazy-loaded pages
+  for (const lp of lazyPages) {
+    lines.push(`const ${lp.varName} = React.lazy(() => import('${lp.importPath}'))`)
+  }
+
+  lines.push('')
+
+  // Preload map — keys are absolute route paths, values are factories that
+  // return the same import() the lazy() above resolves. Browsers cache the
+  // module by URL so the preload + lazy() share a single promise.
+  const preloadEntries = lazyPages.map(
+    (lp) => `  '${lp.routePath}': () => import('${lp.importPath}'),`,
+  )
+  // No TS type annotation — this manifest is emitted as a virtual JS module
+  // and Rollup rejects type annotations in production builds.
+  lines.push('export const __theoPreloadMap = {')
+  for (const e of preloadEntries) lines.push(e)
+  lines.push('}')
   lines.push('')
 
   // Generate route config
@@ -93,14 +131,15 @@ export function generateRouteManifest(tree: RouteNode): string {
     const seg = node.segment || 'root'
     const childConfigs: string[] = []
 
-    // Index route for this node's page
+    // Index route for this node's page — wrap in Suspense (the lazy module
+    // is preloaded on initial hydrate, so this fallback never fires there;
+    // it covers client-side navigation to other routes too).
     if (node.page) {
       const pageVar = safeVarName(seg, 'Page')
-      let pageElement = `React.createElement(${pageVar})`
-      if (node.loading) {
-        const loadVar = safeVarName(seg, 'Loading')
-        pageElement = `React.createElement(Suspense, { fallback: React.createElement(${loadVar}) }, ${pageElement})`
-      }
+      const fallbackEl = node.loading
+        ? `React.createElement(${safeVarName(seg, 'Loading')})`
+        : 'null'
+      const pageElement = `React.createElement(Suspense, { fallback: ${fallbackEl} }, React.createElement(${pageVar}))`
       childConfigs.push(`{ index: true, element: ${pageElement} }`)
     }
 
@@ -150,11 +189,10 @@ export function generateRouteManifest(tree: RouteNode): string {
     // Child segment without layout — just a route
     if (node.page && node.children.length === 0 && !node.error && !node.notFound) {
       const pageVar = safeVarName(seg, 'Page')
-      let pageElement = `React.createElement(${pageVar})`
-      if (node.loading) {
-        const loadVar = safeVarName(seg, 'Loading')
-        pageElement = `React.createElement(Suspense, { fallback: React.createElement(${loadVar}) }, ${pageElement})`
-      }
+      const fallbackEl = node.loading
+        ? `React.createElement(${safeVarName(seg, 'Loading')})`
+        : 'null'
+      const pageElement = `React.createElement(Suspense, { fallback: ${fallbackEl} }, React.createElement(${pageVar}))`
       return `{ path: '${node.segment}', element: ${pageElement} }`
     }
 

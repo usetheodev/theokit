@@ -68,8 +68,10 @@ test.describe('Default template — agent surface', () => {
     // the page body proves the Outlet rendered.
     await expect(page.locator('main')).toBeVisible()
 
-    const headingCount = await page.locator('h1, [class*="font-display"]').count()
-    expect(headingCount).toBeGreaterThan(0)
+    // Phase 4 makes pages lazy. Wait for the rendered heading rather than
+    // snap-counting — the heading lives inside the page module which
+    // loads after the layout shell.
+    await expect(page.locator('h1, [class*="font-display"]').first()).toBeVisible()
   })
 
   test('chat composer accepts input + auto-attaches X-Theo-Action header', async ({ page }) => {
@@ -155,6 +157,12 @@ test.describe('Default template — agent surface', () => {
 
   test('keyboard shortcut (Ctrl/Meta+K) toggles the command palette', async ({ page }) => {
     await page.goto('/')
+
+    // Phase 4: page.tsx is now lazy. Wait for the page to finish mounting
+    // BEFORE pressing the shortcut — the keydown handler is wired in a
+    // useEffect inside the page component, so it doesn't exist until the
+    // lazy module loads.
+    await expect(page.getByText('What should we build today?')).toBeVisible()
 
     // Body must have focus so the window-level keydown handler fires.
     await page.locator('body').click({ position: { x: 10, y: 10 } })
