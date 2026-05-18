@@ -33,11 +33,11 @@ Persistent state across iterations. Mark task DONE only when tests are green AND
 |---|---|---|
 | T4.1 SSR-aware preload with matchRoutes safeguard | PENDING | |
 
-## Phase 5 — CSRF warn-first (EC-1)
+## Phase 5 — CSRF warn-first (EC-1) ✅ COMPLETE
 
 | Task | Status | Notes |
 |---|---|---|
-| T5.1 CSRF default-warn rollout | PENDING | |
+| T5.1 CSRF default-warn rollout | **DONE** | `enforceCsrf(req, mode, logger?)` + `CsrfMode` union in `csrf.ts`; wired into `execute.ts` for POST/PUT/PATCH/DELETE; `defineRoute({ csrf: false })` opt-out; `securitySchema` in config; `X-Theo-Action: 1` auto-attached in `theoFetch`. 10 unit + 8 integration tests + dogfood check #42 + live smoke (curl POST without header → warn line in stderr + 200; with header → silent 200). EC-1 closed. |
 
 ## Phase 6 — Security headers (EC-2)
 

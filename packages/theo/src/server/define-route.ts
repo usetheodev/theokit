@@ -11,6 +11,15 @@ export interface RouteConfig<
   body?: TBody
   params?: TParams
   status?: number
+  /**
+   * Opt out of CSRF enforcement for this route. Use for endpoints that
+   * legitimately receive third-party POSTs (Stripe webhooks, GitHub
+   * webhooks, OAuth callbacks). Defaults to enforced per `config.security.csrf`.
+   *
+   * Setting `csrf: false` only disables the per-route check — it does NOT
+   * disable the global mode setting for other routes.
+   */
+  csrf?: false
   handler: (ctx: {
     query: z.infer<TQuery>
     body: z.infer<TBody>

@@ -7,8 +7,11 @@ import { parseRequestBody, type BodyParserOptions } from './body-parser.js'
 import type { PluginRunner } from './plugin-runner.js'
 import type { PluginContext } from './plugin-types.js'
 import type { TheoTransformer } from './transformer.js'
+import { enforceCsrf, type CsrfMode } from './csrf.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
+// CSRF policy applies to every state-mutating method, including DELETE.
+const CSRF_PROTECTED_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 export function sendJson(
   res: ServerResponse,
@@ -123,6 +126,7 @@ export async function executeRoute(
   requestId?: string,
   pluginRunner?: PluginRunner,
   transformer?: TheoTransformer,
+  csrfMode: CsrfMode = 'warn',
 ): Promise<void> {
   const buildPluginCtx = (ctxObj: Record<string, unknown>): PluginContext => ({
     request: req,
@@ -168,6 +172,34 @@ export async function executeRoute(
     if (typeof handler !== 'function') {
       sendError(res, 'INTERNAL_ERROR', 'Route handler is not a function', 500, undefined, requestId)
       return
+    }
+
+    // Phase 5 — CSRF enforcement (warn-first default; strict in 0.3.0).
+    // Skips: safe methods (GET/HEAD/OPTIONS), per-route opt-out (`csrf: false`),
+    // and bare function exports (legacy style — no opt-out hook available).
+    const routeOptOut =
+      typeof routeConfig === 'object' &&
+      routeConfig !== null &&
+      (routeConfig as { csrf?: unknown }).csrf === false
+    if (CSRF_PROTECTED_METHODS.has(method) && !routeOptOut) {
+      const decision = enforceCsrf(req, csrfMode, {
+        warn: (payload) => {
+          // structured stderr line — apps grep for `event":"csrf.warn"`
+          console.warn(JSON.stringify(payload))
+        },
+        path: req.url,
+      })
+      if (!decision.allow) {
+        sendError(
+          res,
+          'CSRF_INVALID',
+          decision.reason ?? 'CSRF check failed',
+          403,
+          undefined,
+          requestId,
+        )
+        return
+      }
     }
 
     // Parse query

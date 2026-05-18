@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=41
+MAX=42
 FAILS=()
 
 pass() {
@@ -408,11 +408,24 @@ else
   fail "theoui-autoinject or saas template missing"
 fi
 
+# 42. Phase 5 — CSRF warn-first (EC-1)
+echo "→ CSRF warn-first (Phase 5 — EC-1)"
+if grep -q "enforceCsrf" packages/theo/src/server/csrf.ts \
+   && grep -q "CsrfMode" packages/theo/src/server/csrf.ts \
+   && grep -q "enforceCsrf" packages/theo/src/server/execute.ts \
+   && grep -q "csrf?: false" packages/theo/src/server/define-route.ts \
+   && grep -q "securitySchema" packages/theo/src/config/schema.ts \
+   && grep -q "X-Theo-Action" packages/theo/src/client/theo-fetch.ts; then
+  pass "CSRF warn-first wired (enforceCsrf + schema + theoFetch auto-attach + opt-out)"
+else
+  fail "CSRF warn-first incomplete (missing one of: enforceCsrf / schema / opt-out / theoFetch header)"
+fi
+
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
-if [ "$SCORE" -ge 35 ]; then
-  echo "Status: PASS (>= 35/41 = >= 85%)"
+if [ "$SCORE" -ge 36 ]; then
+  echo "Status: PASS (>= 36/42 = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

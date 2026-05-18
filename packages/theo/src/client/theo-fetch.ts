@@ -148,6 +148,17 @@ export async function theoFetch<T>(
     }
   }
 
+  // Phase 5 — Auto-attach `X-Theo-Action: 1` for state-mutating methods so
+  // the framework's CSRF check passes when servers run in `strict` mode.
+  // Safe methods (GET/HEAD/OPTIONS) skip the header to keep them cacheable.
+  const method = (init.method ?? 'GET').toUpperCase()
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    init.headers = {
+      ...(init.headers as Record<string, string> ?? {}),
+      'X-Theo-Action': '1',
+    }
+  }
+
   const response = await fetch(fetchUrl.toString(), init)
 
   if (!response.ok) {

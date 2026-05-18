@@ -22,6 +22,8 @@ export interface ApiMiddlewareOptions {
   transformer?: TheoTransformer
   /** When defined, enables /api/__theo_batch__ endpoint with given options. */
   batching?: { max?: number }
+  /** Phase 5 — CSRF enforcement mode. Default 'warn' (0.2.0). */
+  csrfMode?: 'off' | 'warn' | 'strict'
 }
 
 export function createApiMiddleware(
@@ -41,6 +43,7 @@ export function createApiMiddleware(
   const pluginRunner = opts.pluginRunner
   const transformer = opts.transformer
   const batching = opts.batching
+  const csrfMode = opts.csrfMode ?? 'warn'
 
   return async (req, res, next) => {
     const url = req.url ?? ''
@@ -109,7 +112,7 @@ export function createApiMiddleware(
     }
 
     const method = (req.method ?? 'GET').toUpperCase()
-    await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer)
+    await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer, csrfMode)
     logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
   }
 }

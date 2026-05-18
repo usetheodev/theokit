@@ -70,6 +70,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let transformer: TheoTransformer | undefined
   let resolvedBatching: { max?: number } | undefined
   let theoUi: TheoUiDetectResult | undefined
+  let csrfMode: 'off' | 'warn' | 'strict' = 'warn'
   let configLoadedOnce = false
 
   return {
@@ -94,6 +95,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         }
         // T2.1 — detect TheoUI presence + resolve config
         theoUi = detectTheoUi(projectRoot, userConfig.ui as never)
+        // Phase 5 — CSRF warn-first (EC-1)
+        csrfMode = (userConfig.security?.csrf ?? 'warn') as 'off' | 'warn' | 'strict'
       } catch (err) {
         // Config load errors are surfaced elsewhere (validate-structure).
         // Plugin runner remains undefined; middlewares run without hooks.
@@ -190,6 +193,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
           pluginRunner,
           batching: resolvedBatching,
           transformer,
+          csrfMode,
         }),
       )
 

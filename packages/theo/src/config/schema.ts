@@ -15,6 +15,21 @@ export const loggingSchema = z.object({
   level: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
 })
 
+/**
+ * Phase 5 — CSRF warn-first (EC-1).
+ *
+ * 0.2.0 default: `warn`. Existing apps keep working but get structured
+ * warnings about every state-mutating request that does not carry the
+ * `X-Theo-Action: 1` header. 0.3.0 will flip the default to `strict`.
+ *
+ * Set explicitly to `strict` to opt into the future default early,
+ * or `off` to disable CSRF entirely (only valid when you have another
+ * defense — bearer auth, no session cookies, etc).
+ */
+export const securitySchema = z.object({
+  csrf: z.enum(['off', 'warn', 'strict']).default('warn'),
+})
+
 export const theoConfigSchema = z.object({
   appDir: z.string().default('app'),
   serverDir: z.string().default('server'),
@@ -27,6 +42,7 @@ export const theoConfigSchema = z.object({
   rateLimit: rateLimitSchema.optional(),
   upload: uploadSchema.optional(),
   logging: loggingSchema.optional(),
+  security: securitySchema.optional(),
   serialization: z.enum(['json', 'superjson']).default('json'),
   // Plugins are validated structurally at runtime by createPluginRunnerFromConfig.
   // Zod only checks the shape minimally (must be array). Type-level safety is
