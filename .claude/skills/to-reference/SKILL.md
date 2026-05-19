@@ -3,7 +3,7 @@ name: to-reference
 description: "Deep dive nas implementações de referência em `referencias/` para extrair técnicas, padrões, dependências externas, design patterns, algoritmos, edge cases — TUDO necessário para escrever o módulo equivalente no TheoKit. Gera um guia de implementação completo em `.claude/knowledge-base/reference/{topic}.md`. Use ANTES de começar a codar qualquer módulo não-trivial."
 user-invocable: true
 allowed-tools: Read, Glob, Grep, Bash, Write, Agent
-argument-hint: "<topic> [--impl nextjs,hono,...] [--depth standard|exhaustive]"
+argument-hint: "<topic> [--impl nextjs,hono,...] [--depth exhaustive|standard]"
 ---
 
 # to-reference: Deep Dive → Guia de Implementação
@@ -23,9 +23,9 @@ Quem ler esse documento depois deve conseguir abrir um editor e começar a digit
 
 - `$ARGUMENTS` primeira parte = tópico em natural language (ex: `Server Components (RSC)`, `routing`, `HMR`, `type-safe forms`)
 - `--impl <names>` = subset de implementações em `referencias/` (default: todas que tiverem o keyword)
-- `--depth standard|exhaustive` (default `standard`)
-  - `standard` ≈ 45–60 min — 3+ frameworks, padrões extraídos, deps catalogadas, implementation guide
-  - `exhaustive` ≈ 2h — todos os frameworks com keyword, git arqueologia, RFCs públicas, edge case enumeration
+- `--depth exhaustive|standard` (**default `exhaustive`** — o output desta skill é o blueprint da implementação; vale a hora extra)
+  - `exhaustive` ≈ 2h — TODOS os frameworks com keyword, deep read do inventário completo, git arqueologia, RFCs públicas, edge case enumeration. **Padrão.**
+  - `standard` ≈ 45–60 min — escape hatch quando o tópico já tem `.claude/knowledge-base/reference/{slug}.md` recente e você só precisa de refresh pontual. 3+ frameworks, padrões extraídos, deps catalogadas, implementation guide. Quality bar é o mesmo — só o número mínimo de frameworks cai de "todos com keyword" para 3.
 
 ---
 
@@ -222,7 +222,7 @@ Cada item da lista DEVE ser concretamente acionável — alguém abre o editor e
 # Reference: {Topic}
 
 **Date:** YYYY-MM-DD
-**Depth:** standard | exhaustive
+**Depth:** exhaustive (default) | standard
 **Frameworks analyzed:** [lista com versões / commit hash]
 **TheoKit package affected:** [path]
 **Related references:** [outros docs em .claude/knowledge-base/reference/ que tocam o assunto]
@@ -471,7 +471,7 @@ Toda asserção no documento DEVE estar ancorada num item desta seção 11. Sem 
 
 ## Quality bar
 
-Toda execução em modo `standard` ou `exhaustive` DEVE produzir:
+Toda execução (default `exhaustive`, ou `standard` quando explicitamente passado) DEVE produzir:
 
 - [ ] Discovery dinâmica de `referencias/*/` (não hardcoded)
 - [ ] **Inventário completo de arquivos por framework** — todos os hits das 3 passadas (nome + conteúdo + docs), triados em `core` / `support` / `test` / `doc`, sem cherry-picking
