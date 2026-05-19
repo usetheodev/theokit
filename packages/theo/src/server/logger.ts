@@ -82,6 +82,47 @@ export function createLogger(options?: {
   }
 }
 
+// --- warnOnce (T2.1) ---
+
+/**
+ * Per-key dedup state. Module-scoped Set; reset per-process at boot.
+ * For long-running prod with thousands of unique keys, document the
+ * trade-off; future enhancement could be a TTL'd Map.
+ */
+const _warnOnceSeen = new Set<string>()
+
+/**
+ * Reset internal state. Test-only export — do not call from production.
+ */
+export function _resetWarnOnceForTests(): void {
+  _warnOnceSeen.clear()
+}
+
+/**
+ * Emit a structured warning ONCE per key. Subsequent calls with the same
+ * key are suppressed. Used for cutover-style warnings (e.g. CSRF warn)
+ * that would otherwise flood logs under load.
+ *
+ * Convention: key is `<event>:<method>:<path>` — see callers in csrf.ts.
+ *
+ * EC-2: payload may contain circular references. Wrap `JSON.stringify`
+ * in try/catch so a malformed payload doesn't crash the request handler.
+ */
+export function warnOnce(key: string, payload: Record<string, unknown>): void {
+  if (_warnOnceSeen.has(key)) return
+  _warnOnceSeen.add(key)
+
+  let line: string
+  try {
+    line = JSON.stringify({ ...payload, warnOnce: true })
+  } catch {
+    // EC-2 fallback — preserve the key for grep-ability even when payload
+    // can't serialize (e.g., circular references, BigInt, etc.).
+    line = `[warnOnce] ${key} — (payload could not be serialized)`
+  }
+  console.warn(line)
+}
+
 // --- Backward compat ---
 
 export interface RequestLog {

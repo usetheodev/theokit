@@ -88,6 +88,8 @@ export function enforceCsrf(
   }
 
   if (mode === 'warn') {
+    // T2.1: emit via warnOnce by default — callers can override via the
+    // injected logger.warn (tests, custom log routers).
     logger?.warn({
       event: 'csrf.warn',
       method: req.method ?? 'UNKNOWN',

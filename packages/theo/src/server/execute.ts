@@ -8,6 +8,7 @@ import type { PluginRunner } from './plugin-runner.js'
 import type { PluginContext } from './plugin-types.js'
 import type { TheoTransformer } from './transformer.js'
 import { enforceCsrf, type CsrfMode } from './csrf.js'
+import { warnOnce } from './logger.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
 // CSRF policy applies to every state-mutating method, including DELETE.
@@ -184,8 +185,11 @@ export async function executeRoute(
     if (CSRF_PROTECTED_METHODS.has(method) && !routeOptOut) {
       const decision = enforceCsrf(req, csrfMode, {
         warn: (payload) => {
-          // structured stderr line — apps grep for `event":"csrf.warn"`
-          console.warn(JSON.stringify(payload))
+          // T2.1 — warnOnce dedupes by event+method+path so a request
+          // loop with 1000 POSTs doesn't flood logs with 1000 identical
+          // warnings. Apps grep for `event":"csrf.warn"`.
+          const key = `${payload.event}:${payload.method}:${payload.path ?? ''}`
+          warnOnce(key, payload as unknown as Record<string, unknown>)
         },
         path: req.url,
       })
