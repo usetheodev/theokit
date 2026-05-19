@@ -7,14 +7,14 @@
 TheoKit e `@usetheo/ui` são irmãos no monorepo `usetheo/` (referência em `../../CLAUDE.md`):
 
 - **TheoKit** (`packages/theo/`, `packages/create-theo/`) — meta-framework Vite + React 19 para "build the app your agent lives in".
-- **`@usetheo/ui`** (`/home/paulo/Projetos/usetheo/theo-ui/`) — React component library, 102 componentes com foco em AI-agent surfaces e PaaS dashboards. Peer-dep React only. Framework-agnostic.
+- **`@usetheo/ui`** (`/home/paulo/Projetos/usetheo/theo-ui/`) — React component library, 102 componentes com foco em AI-agent surfaces e cloud dashboards. Peer-dep React only. Framework-agnostic.
 
 Hoje a integração é zero: `create-theokit` instala apenas `theokit` + `react`. User que quer TheoUI faz `pnpm add @usetheo/ui`, importa CSS manual, wrap `<ThemeProvider />` manual, escreve scaffold do zero. Atrito desnecessário dado que os dois foram **criados para trabalhar juntos**.
 
 Evidência:
 - TheoUI README: *"Built for AI agents. Primitives for skills, cron jobs, permission matrices, MCP servers, memory editing, hook config, audit logs, model cards, token usage charts, sub-agent dispatch."*
 - TheoKit PITCH/CLAUDE.md: *"Build the app your agent lives in."*
-- Monorepo CLAUDE.md cross-rule 4: *"PaaS is the product. OSS is the funnel."* — funil completo precisa fluir do `create` ao deploy sem decisões de UI.
+- Monorepo CLAUDE.md cross-rule 4: *"TheoCloud is the product. OSS is the funnel."* — funil completo precisa fluir do `create` ao deploy sem decisões de UI.
 
 ## Objective
 

@@ -19,7 +19,7 @@ TheoKit is the **app the agent lives in**. Technically, it is a Next.js-based fr
 **Positioning, public:**
 
 - Use the Voice and Tone section below. Aspirational HERO, benefit-first BODY, technical DEEP DIVE.
-- Mention sibling products (TheoCode, TheoCreate, Theo PaaS) only as context for the workflow — never as the lede. The TheoKit reader landed here because they want to build something. Give them that first.
+- Mention sibling products (TheoCode, TheoCreate, TheoCloud) only as context for the workflow — never as the lede. The TheoKit reader landed here because they want to build something. Give them that first.
 
 ---
 

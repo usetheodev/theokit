@@ -12,7 +12,7 @@ Every named feature is verified against README.md, packages/theo/src, and packag
 
 ### Real auth, real domain, real WebSockets — the app your agent ships in.
 
-*The Build (framework) layer of the [Theo ecosystem](https://usetheo.dev). Open-source. TypeScript end to end. Deploys to Theo PaaS, Vercel, Cloudflare Workers, or any Docker host.*
+*The Build (framework) layer of the [Theo ecosystem](https://usetheo.dev). Open-source. TypeScript end to end. Deploys to TheoCloud, Vercel, Cloudflare Workers, or any Docker host.*
 
 **4 templates · 4 deploy targets · file-based routing · typed RPC client · AES-256-GCM sessions · Apache-2.0**
 
@@ -33,7 +33,7 @@ The agent your customers will pay for needs something different — a real domai
 - **Encrypted sessions, one helper** — AES-256-GCM cookies, `requireAuth` narrows the type.
 - **Per-request context, no globals** — plug your DB and user once, reach them anywhere.
 - **WebSocket as a file** — drop a file in `server/ws/`, it's a real-time endpoint.
-- **Three native build targets** — Node, Vercel, Cloudflare Workers. Or `theokit docker` + `theo deploy` to ship via Theo PaaS.
+- **Three native build targets** — Node, Vercel, Cloudflare Workers. Or `theokit docker` + `theo deploy` to ship via TheoCloud.
 - **Four templates that already deploy** — default, dashboard, API-only, Postgres.
 
 ## Feel it
@@ -92,7 +92,7 @@ The agent ecosystem has two halves. Frameworks for **orchestrating** agents. Fra
 | Server actions with CSRF + Zod | ✓ | DIY | Partial (Next.js Actions) | DIY |
 | Encrypted sessions, one helper | ✓ (AES-256-GCM, `requireAuth`) | DIY | DIY | DIY |
 | WebSocket as a file | ✓ | DIY | DIY (needs separate WS server) | DIY |
-| Deploy targets out of the box | Docker · Vercel · Cloudflare Workers · Theo PaaS | DIY | Vercel | DIY |
+| Deploy targets out of the box | Docker · Vercel · Cloudflare Workers · TheoCloud | DIY | Vercel | DIY |
 | Templates with DB wired | ✓ (postgres, dashboard, api-only) | Limited | DIY | DIY |
 | CLI scaffolding (`theokit generate`) | ✓ | Limited | Next.js (partial) | DIY |
 | License | Apache-2.0 | Open | Open (MIT SDK) | N/A |
@@ -203,7 +203,7 @@ TheoKit is part of the [usetheo](https://usetheo.dev) workflow.
 | 1 | **TheoCode** | Autonomous coding agent. Writes the code in Plan / Code / Infra modes. CLI + Desktop. |
 | 2 | **TheoCreate** | Scaffolds the project — pick TheoKit for Full-Stack AI Agents, or a multi-language stack (Go, Python, Rust, Java, Ruby, PHP, Node). |
 | 3 | **TheoKit** *(this)* | The framework where the app lives. Routing, auth, real-time, deploy. |
-| 4 | **Theo PaaS** | Managed deploy target. `theo deploy` → live URL in ~4 minutes. Production. |
+| 4 | **TheoCloud** | Managed deploy target. `theo deploy` → live URL in ~4 minutes. Production. |
 
 TheoKit runs standalone. The other pillars compose with it when you want the full cycle.
 
@@ -219,7 +219,7 @@ TheoKit runs standalone. The other pillars compose with it when you want the ful
 
 ## Status
 
-- **Production.** Framework, CLI, four templates (default, dashboard, api-only, postgres), and four deploy targets (Docker, Vercel, Cloudflare Workers, Theo PaaS) all shipped. Public API surface stable.
+- **Production.** Framework, CLI, four templates (default, dashboard, api-only, postgres), and four deploy targets (Docker, Vercel, Cloudflare Workers, TheoCloud) all shipped. Public API surface stable.
 - **Agent layer (`agents/` directory).** On the roadmap. The framework already ships the primitives (sessions, WebSockets, server actions, typed RPC) an agent surface needs; the dedicated `agents/` convention formalizes the wiring.
 - **Documentation site.** On the roadmap. Today the README is the canonical reference; deep docs land with the dedicated site.
 - **OpenAPI generation from Zod schemas.** On the roadmap.
@@ -236,7 +236,7 @@ Apache-2.0 — see [LICENSE](./LICENSE).
 npx create-theokit my-app
 ```
 
-**Next in the funnel:** Ship it. `theo login` + `theokit build` puts your app on a live URL via Theo PaaS in ~4 minutes.
+**Next in the funnel:** Ship it. `theo login` + `theokit build` puts your app on a live URL via TheoCloud in ~4 minutes.
 
 **Tertiary:** [Docs](https://docs.usetheo.dev/theokit) · [GitHub — templates and examples](https://github.com/usetheodev/theokit)
 
