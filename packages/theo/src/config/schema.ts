@@ -47,9 +47,28 @@ export const securityHeadersSchema = z.object({
   referrerPolicy: z.string().default('strict-origin-when-cross-origin'),
 })
 
+/**
+ * T5.1 — Disallowed-routes escalation pattern (Rails-inspired).
+ *
+ * `routes` accepts string (exact match — trailing slash matters) or
+ * RegExp entries. Matched routes that would otherwise emit `csrf.warn`
+ * dispatch through `disallowedBehavior` instead:
+ *   - `'warn'`  : no-op vs the default warn-mode behavior
+ *   - `'raise'` : escalate to 403, even when global `csrf` mode is 'warn'
+ *
+ * Use to roll out strict mode per-route (e.g., flip /api/auth/* first)
+ * without committing the entire surface to strict at once.
+ */
+export const disallowedConfigSchema = z.object({
+  routes: z.array(z.union([z.string(), z.instanceof(RegExp)])),
+  behavior: z.enum(['warn', 'raise']).default('raise'),
+})
+
 export const securitySchema = z.object({
   csrf: z.enum(['off', 'warn', 'strict']).default('warn'),
   headers: securityHeadersSchema.optional(),
+  /** T5.1 — per-route escalation (Rails disallowed_warnings pattern). */
+  disallowed: disallowedConfigSchema.optional(),
 })
 
 export const theoConfigSchema = z.object({

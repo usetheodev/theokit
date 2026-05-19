@@ -74,6 +74,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let theoUi: TheoUiDetectResult | undefined
   let csrfMode: 'off' | 'warn' | 'strict' = 'warn'
   let securityHeaders: import('../server/security-headers.js').SecurityHeadersConfig | undefined
+  let disallowed: import('../server/csrf.js').DisallowedConfig | undefined
   let configLoadedOnce = false
 
   return {
@@ -102,6 +103,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         csrfMode = (userConfig.security?.csrf ?? 'warn') as 'off' | 'warn' | 'strict'
         // Phase 6 — Default security headers (D4 / EC-2)
         securityHeaders = userConfig.security?.headers as never
+        // T5.1 — disallowedRoutes per-route escalation
+        disallowed = userConfig.security?.disallowed as never
       } catch (err) {
         // Config load errors are surfaced elsewhere (validate-structure).
         // Plugin runner remains undefined; middlewares run without hooks.
@@ -200,6 +203,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
           transformer,
           csrfMode,
           securityHeaders,
+          disallowed,
         }),
       )
 

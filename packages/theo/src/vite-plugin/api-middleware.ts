@@ -27,6 +27,8 @@ export interface ApiMiddlewareOptions {
   csrfMode?: 'off' | 'warn' | 'strict'
   /** Phase 6 — Default security headers config. */
   securityHeaders?: import('../server/security-headers.js').SecurityHeadersConfig
+  /** T5.1 — per-route disallowed escalation pattern. */
+  disallowed?: import('../server/csrf.js').DisallowedConfig
 }
 
 export function createApiMiddleware(
@@ -47,6 +49,7 @@ export function createApiMiddleware(
   const transformer = opts.transformer
   const batching = opts.batching
   const csrfMode = opts.csrfMode ?? 'warn'
+  const disallowed = opts.disallowed
   const securityHeadersConfig = opts.securityHeaders ?? {}
   const securityEnv = { production: process.env.NODE_ENV === 'production' }
 
@@ -125,7 +128,7 @@ export function createApiMiddleware(
     }
 
     const method = (req.method ?? 'GET').toUpperCase()
-    await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer, csrfMode)
+    await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer, csrfMode, disallowed)
     logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
   }
 }

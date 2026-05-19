@@ -7,7 +7,7 @@ import { parseRequestBody, type BodyParserOptions } from './body-parser.js'
 import type { PluginRunner } from './plugin-runner.js'
 import type { PluginContext } from './plugin-types.js'
 import type { TheoTransformer } from './transformer.js'
-import { enforceCsrf, type CsrfMode } from './csrf.js'
+import { enforceCsrf, type CsrfMode, type DisallowedConfig } from './csrf.js'
 import { warnOnce } from './logger.js'
 
 const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
@@ -128,6 +128,7 @@ export async function executeRoute(
   pluginRunner?: PluginRunner,
   transformer?: TheoTransformer,
   csrfMode: CsrfMode = 'warn',
+  disallowed?: DisallowedConfig,
 ): Promise<void> {
   const buildPluginCtx = (ctxObj: Record<string, unknown>): PluginContext => ({
     request: req,
@@ -183,16 +184,21 @@ export async function executeRoute(
       routeConfig !== null &&
       (routeConfig as { csrf?: unknown }).csrf === false
     if (CSRF_PROTECTED_METHODS.has(method) && !routeOptOut) {
-      const decision = enforceCsrf(req, csrfMode, {
-        warn: (payload) => {
-          // T2.1 — warnOnce dedupes by event+method+path so a request
-          // loop with 1000 POSTs doesn't flood logs with 1000 identical
-          // warnings. Apps grep for `event":"csrf.warn"`.
-          const key = `${payload.event}:${payload.method}:${payload.path ?? ''}`
-          warnOnce(key, payload as unknown as Record<string, unknown>)
+      const decision = enforceCsrf(
+        req,
+        csrfMode,
+        {
+          warn: (payload) => {
+            // T2.1 — warnOnce dedupes by event+method+path so a request
+            // loop with 1000 POSTs doesn't flood logs with 1000 identical
+            // warnings. Apps grep for `event":"csrf.warn"`.
+            const key = `${payload.event}:${payload.method}:${payload.path ?? ''}`
+            warnOnce(key, payload as unknown as Record<string, unknown>)
+          },
+          path: req.url,
         },
-        path: req.url,
-      })
+        disallowed,
+      )
       if (!decision.allow) {
         sendError(
           res,

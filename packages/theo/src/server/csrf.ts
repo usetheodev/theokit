@@ -24,6 +24,50 @@ export interface CsrfLogger {
 }
 
 /**
+ * T5.1 — Rails-inspired per-route escalation.
+ *
+ * `routes` accepts string (exact match) or RegExp entries. When a request
+ * path matches AND the request would otherwise emit a warning, the
+ * `behavior` field decides what happens:
+ *
+ *   - `'warn'`  → normal warn dispatch (no-op vs default)
+ *   - `'raise'` → escalate to 403 regardless of global `csrf` mode
+ *
+ * `'raise'` never downgrades: when global mode is `'off'`, validation is
+ * skipped entirely and disallowed dispatch never runs.
+ */
+export interface DisallowedConfig {
+  routes: Array<string | RegExp>
+  behavior: 'warn' | 'raise'
+}
+
+/**
+ * Test whether `path` matches any of the supplied patterns. String
+ * patterns are EXACT (trailing slash matters — use RegExp for tolerance).
+ *
+ * EC-5: when a RegExp carries the `/g` flag, `.test()` mutates
+ * `lastIndex` and the next invocation may miss. We reset `lastIndex`
+ * before each test so the matcher is a pure function.
+ */
+export function matchDisallowed(
+  path: string,
+  patterns: ReadonlyArray<string | RegExp>,
+): boolean {
+  for (const p of patterns) {
+    if (typeof p === 'string') {
+      if (path === p) return true
+      continue
+    }
+    if (p instanceof RegExp) {
+      p.lastIndex = 0
+      if (p.test(path)) return true
+      continue
+    }
+  }
+  return false
+}
+
+/**
  * T2.2 — Stable cutover identifier shipped with every csrf.warn payload.
  *
  * Convention borrowed from Vite's `deprecations.ts:74` — a `code` plus a
@@ -99,14 +143,30 @@ export function enforceCsrf(
   req: IncomingMessage,
   mode: CsrfMode,
   logger?: CsrfLogger,
+  disallowed?: DisallowedConfig,
 ): { allow: boolean; reason?: string } {
   if (mode === 'off') {
+    // `off` short-circuits before disallowed dispatch — users who set
+    // csrf: 'off' globally have explicitly turned validation off, and
+    // disallowed must never re-introduce it. The escape hatch is to
+    // set csrf: 'warn' and use disallowed for surgical strict pockets.
     return { allow: true }
   }
 
   const check = validateCsrf(req)
   if (check.valid) {
     return { allow: true }
+  }
+
+  // T5.1 — disallowed dispatch: when the failing request matches a
+  // disallowed pattern AND behavior is 'raise', escalate to 403 even if
+  // global mode is 'warn'. Strict mode would 403 anyway, so the branch
+  // is a no-op there.
+  if (disallowed && disallowed.behavior === 'raise') {
+    const path = logger?.path ?? req.url ?? ''
+    if (matchDisallowed(path, disallowed.routes)) {
+      return { allow: false, reason: check.reason }
+    }
   }
 
   if (mode === 'warn') {
