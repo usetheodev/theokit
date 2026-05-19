@@ -66,7 +66,31 @@ cli
 
 cli
   .command('check', 'Run typecheck + scan + (optional) eslint')
-  .action(async () => {
+  .option(
+    '--upgrade-readiness <version>',
+    'Scan source for anticipated breakage under a future TheoKit version (currently supports 0.3)',
+  )
+  .option('--json', 'Emit machine-readable JSON (only with --upgrade-readiness)')
+  .option(
+    '--allow-warnings',
+    'Do not fail the build when violations are present (only with --upgrade-readiness)',
+  )
+  .action(async (options) => {
+    // cac may coerce `0.3` to a JS number — normalize before comparing.
+    const targetRaw = options.upgradeReadiness as string | number | undefined
+    if (targetRaw !== undefined) {
+      const target = String(targetRaw)
+      if (target !== '0.3') {
+        console.error(`\n  ✗ --upgrade-readiness: only '0.3' is supported (got '${target}')\n`)
+        process.exit(1)
+      }
+      const { upgradeReadinessCommand } = await import('./commands/upgrade-readiness.js')
+      await upgradeReadinessCommand({
+        json: Boolean(options.json),
+        allowWarnings: Boolean(options.allowWarnings),
+      })
+      return
+    }
     const { checkCommand } = await import('./commands/check.js')
     await checkCommand()
   })

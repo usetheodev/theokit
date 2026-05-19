@@ -59,6 +59,8 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | template-default | Playwright fixture mirroring the default scaffold (Phase 10 — T10.1) | nextjs-maturity |
 | theoui-autoinject | TheoUI auto-injection without user-code imports | full-cov |
 | typed-client | end-to-end `theoFetch<typeof GET>` inference | full-cov |
+| upgrade-readiness-clean | clean app surface — `theokit check --upgrade-readiness 0.3` reports zero violations | 0.3-cutover |
+| upgrade-readiness-dirty | deliberate 0.3 violations (raw fetch POST, inline `<script>`, `dangerouslySetInnerHTML`) for the scanner | 0.3-cutover |
 | use-agent-stream-react | `useAgentStream` in plain React (no `@usetheo/ui`) | full-cov |
 | websocket-basic | `defineWebSocket` request handler | base |
 
