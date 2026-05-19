@@ -110,6 +110,78 @@ The **vocabulary table** and **before/after examples** are living — add new en
 
 ---
 
+## Roadmap
+
+Honest north star, version by version. **What is on this list is committed; what is missing is not on the runway yet.** Move items between sections via PR with a one-line rationale. Do not delete a section without explicit strategic review.
+
+The roadmap reflects the honest maturity assessment from 2026-05-19 after the nextjs-maturity plan closed (12/16 tasks, 47/47 dogfood, 21/21 Playwright). It is shaped by what we know works in real production today, what we have visibility into but have not enforced yet, and what we have not validated.
+
+### 0.2.0 — Release prep (current branch, ready)
+
+What ships in this version is everything the `nextjs-maturity` plan closed. The release engineer takes it from here.
+
+- [x] Default scaffold redesigned with 20 TheoUI components (chat agent surface out of the box)
+- [x] Code-splitting with `matchRoutes` preload + 1500ms timeout safeguard (EC-3)
+- [x] CSRF default-on in **warn-first** mode (`X-Theo-Action: 1` + Origin match, opt-out via `csrf: false`) (EC-1)
+- [x] Default security headers — CSP report-only / X-Frame-Options DENY / X-Content-Type-Options nosniff / Referrer-Policy / HSTS prod-only (EC-2)
+- [x] W3C Trace Context propagation — `traceparent` → `x-trace-id` response header + log correlation
+- [x] Argon2id password hashing in `examples/agent-saas` via `hash-wasm` (Alpine + Vercel Edge safe), legacy PBKDF2 verify + transparent rehash on login (EC-4)
+- [x] Six hydration regression tests pinning the 2026-05-17 bug class
+- [x] Playwright spec for the default template (8 scenarios in real Chromium)
+- [x] Production build bundle: **193.90 KB gzipped** (45% under the 350 KB budget)
+- [ ] **Open: publish `theokit@0.2.0` to npm under `latest` tag** (release engineer)
+- [ ] **Open: migration guide** for the two opt-in cutovers (CSRF warn→strict, CSP report-only→enforce)
+- [ ] **Open: README banner** announcing 0.2.0 with the bundle / security baseline / agent-surface story
+
+### 0.3.0 — Enforcement cutover (next minor)
+
+After a release of warn-mode telemetry, the framework flips from "loud about gaps" to "blocks the gaps."
+
+- [ ] Flip default `config.security.csrf` from `'warn'` to `'strict'` — POST without `X-Theo-Action: 1` returns 403 `CSRF_INVALID`
+- [ ] Flip default `config.security.headers.cspMode` from `'report-only'` to `'enforce'`
+- [ ] Tighten default CSP — drop `'unsafe-inline'` for scripts, add per-request nonce for the SSR hydration data script
+- [ ] Migration guide expanded with grep-able stderr signal (`csrf.warn` lines) so users can audit before bumping
+- [ ] CHANGELOG `[Unreleased]` includes a **BREAKING** banner — every dependency consumer needs to know
+
+### 0.4.0 — Coverage gaps before "production-ready" without ressalvas
+
+The honest gaps after 0.2.0. Closing these moves us from "ready for indie devs and small teams" to "ready for startups scaling to 10k MAU."
+
+- [ ] **Playwright for the other four templates** (`dashboard`, `api-only`, `postgres`, `saas`) — same fixture pattern as `template-default`. T10.2 (agent-saas full flow) needs a Postgres instance in CI.
+- [ ] **Validate at least one deploy adapter end-to-end in real production** — Vercel is the lowest-friction path. Goal: deploy `create-theokit my-app` output to vercel.app, hit the live URL, walk through chat flow, verify SSE roundtrip and security headers in real prod.
+- [ ] **Minimum devtools overlay** — request log + error panel + matched-route info in dev. Closing the biggest perceived gap vs Next.js.
+- [ ] **Load test the SSR streaming path** — 1000 concurrent connections, leaky generators, slow LLM streams. Measure shell-flush TTFB, abort-on-disconnect behavior, memory pressure.
+- [ ] **WebSocket Playwright spec** — `defineWebSocket` has unit tests but no real-browser test exercises the full upgrade + bidi + reconnect flow.
+- [ ] **Bundle budget asserted in CI** — fail the build if `index-*.js` gzipped exceeds 350 KB for the default template.
+
+### 0.5.0+ — Beyond defaults (no commitment, just on the runway)
+
+These items widen the framework's reach but require strategic decisions before scoping. Listed so the team has a shared view of where 1.0 could go.
+
+- [ ] **`next/image`-equivalent** for image optimization (or explicit decision to stay out of that lane)
+- [ ] **`next/font`-equivalent** for self-hosted fonts (TheoUI ships bundled Geist today; this is the generic surface)
+- [ ] **Edge runtime adapter parity** — current adapters declare Vercel Edge / Cloudflare Workers / Deno Deploy, but the Web Standards shim has rough edges (no `Buffer` in Deno, native bindings in argon2 — already mitigated, but other surfaces TBD)
+- [ ] **Server Components (RSC) compatibility track** — open question whether TheoKit follows React core into RSC or stays on the client-component model. Either is defensible; need a decision before 1.0.
+- [ ] **Plugin ecosystem incubation** — `definePlugin` exists; we have 3 plugins. Real ecosystem growth needs a registry, docs site, and at least one community-authored plugin we proudly link.
+- [ ] **Production debugging story** — source maps in adapters, traceId correlation with downstream services (OpenTelemetry exporter? Sentry integration?), structured error pages with actionable hints.
+
+### Out of scope — intentionally
+
+Items considered and rejected. **Do not move these into a milestone without a strategic review.**
+
+- **Replacing Next.js for everyone.** TheoKit is a vertical framework for agent-shaped apps. The framing in the monorepo Locked Narrative ("the app the agent lives in") is the wedge. Trying to be a horizontal Next replacement dilutes the wedge.
+- **A11y / i18n primitives baked into the framework.** Both are real, both are hard, both are well-served by external libraries. TheoUI handles a11y for its components; i18n is the consumer's choice.
+- **CSS-in-JS runtime.** TheoUI uses Tailwind; the consumer can adopt any CSS strategy on top. No runtime CSS in the framework core.
+- **Built-in agent orchestration.** TheoKit ships the *home* for an agent, not the agent itself. `examples/agent-saas` and the default template show how to wire an agent — they're patterns, not framework primitives. Agent orchestration belongs upstream in TheoKit-SDK / Mastra / Vercel AI SDK.
+
+### How this roadmap stays honest
+
+- **Every item references a verifiable artifact** — a plan file, a fixture, a CHANGELOG entry, an issue, or a number. Aspirational items without an artifact go in 0.5.0+ "no commitment" tier.
+- **Moving an item upward requires evidence.** "Validate Vercel adapter" stays in 0.4.0 until somebody runs `theokit deploy --target vercel` against a real Vercel project and the result is committed (smoke log or e2e spec). Until then it's a promise, not a feature.
+- **Marketing copy must trail the roadmap, not lead it.** The Voice and Tone section forbids "production-ready" without a Status section to back it. The Status section in the README points at this roadmap.
+
+---
+
 ## When this file is wrong
 
 The TheoKit code and README are authoritative. If this file says one thing and the code/README say another, the code/README win. Update this file via PR with a one-line rationale. The voice and tone rules require an explicit strategic review before being weakened or repealed.
