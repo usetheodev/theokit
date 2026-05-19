@@ -83,27 +83,65 @@ Antes de tocar `referencias/`:
 
 Salve esses 4 itens em um buffer mental — viram a primeira seção do doc.
 
-### Passo 2 — Identificar entrypoints em cada framework
+### Passo 2 — Inventário COMPLETO de arquivos relevantes (mandatório)
 
-Para cada framework em `referencias/`, ache os arquivos-chave:
+**Regra inviolável:** o output cita TODOS os arquivos que tocam o tópico — não uma amostra, não os "principais". Se um arquivo aparece num grep do keyword e não é descartado por motivo explícito (test fixture trivial, generated code), ele entra no inventário.
+
+Para cada framework em `referencias/`, gere o inventário com 3 passadas complementares:
 
 ```bash
 KEYWORD="<termo principal>"   # ex: server-component, rsc, route, hmr
+ALT_KEYWORDS="<sinônimos>"    # ex: "rsc|use-client|use-server|react-server"
+
 for fw in $(ls -d referencias/*/); do
   name=$(basename "$fw")
   echo "=== $name ==="
-  # Entrypoints: arquivos com o keyword no nome
-  find "$fw" -type f \( -name "*${KEYWORD}*" \) ! -path "*/node_modules/*" ! -path "*/dist/*" 2>/dev/null | head -10
-  # Exports públicos
-  grep -rln "export.*\b${KEYWORD}\b" "$fw"/src "$fw"/packages 2>/dev/null | head -5
+
+  # Passada 1 — Nome do arquivo contém o keyword
+  find "$fw" -type f \
+    \( -name "*${KEYWORD}*" -o -iregex ".*\(${ALT_KEYWORDS}\).*" \) \
+    ! -path "*/node_modules/*" ! -path "*/dist/*" ! -path "*/build/*" \
+    ! -path "*/.git/*" 2>/dev/null
+
+  # Passada 2 — Conteúdo do arquivo menciona o keyword (qualquer linguagem)
+  grep -rln -E "\b(${KEYWORD}|${ALT_KEYWORDS})\b" "$fw" \
+    --include="*.ts" --include="*.tsx" --include="*.js" --include="*.mjs" \
+    --include="*.rs" --include="*.rb" --include="*.go" --include="*.py" \
+    --include="*.md" --include="*.json" --include="*.toml" --include="*.yml" \
+    --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=build \
+    --exclude-dir=.git 2>/dev/null
+
+  # Passada 3 — Documentação, RFCs, design docs no tree
+  find "$fw" -type f \
+    \( -iname "RFC*" -o -iname "DESIGN*" -o -iname "ARCHITECTURE*" \
+       -o -iname "INTERNALS*" -o -iname "CONTRIBUTING*" -o -iname "CHANGELOG*" \) \
+    ! -path "*/node_modules/*" 2>/dev/null \
+    | xargs grep -l -E "${KEYWORD}|${ALT_KEYWORDS}" 2>/dev/null
 done
 ```
 
-Liste TODOS os arquivos relevantes. Não pule — é nesta lista que o resto da skill se ancora.
+Junte os 3 conjuntos, deduplica, **ordene por caminho**. Esse é o inventário final.
+
+#### Triagem do inventário
+
+Para cada arquivo do inventário, classifique em uma das 4 categorias:
+
+| Tag | Significado | Tratamento |
+|---|---|---|
+| `core` | implementação principal | Read inteiro, anota no output |
+| `support` | helper / type / util usado pelo core | Read inteiro, anota |
+| `test` | spec / fixture / golden | Read **seletivo** — extrai expectativas + casos |
+| `doc` | RFC / CHANGELOG / README | Read inteiro — vira fonte de edge cases |
+
+Arquivos `core` + `support` + `doc` vão para deep read (Passo 3). Arquivos `test` viram fonte de edge case enumeration (Passo 6).
+
+**Nenhum arquivo é descartado sem justificativa explícita escrita no output.** Se você considera um arquivo irrelevante, ele entra na seção "Arquivos avaliados e descartados" com 1 frase explicando por quê. Isso evita o cherry-picking que distorce análise.
 
 ### Passo 3 — Deep read (NÃO grep apenas)
 
-Para os 5–10 arquivos mais centrais de cada framework, **leia o arquivo inteiro** (Read tool, sem offset). Anote em cada um:
+Para **todos** os arquivos do inventário (Passo 2) classificados como `core`, `support` ou `doc`, **leia o arquivo inteiro** (Read tool, sem offset). Arquivos `test` recebem read seletivo focado em `describe`/`it` headers + assertion shape.
+
+Para cada arquivo lido, anote:
 
 1. **API pública** — exports nomeados, tipos, defaults
 2. **Algoritmo interno** — passo a passo do que o módulo FAZ, em prosa
@@ -197,7 +235,34 @@ Cada item da lista DEVE ser concretamente acionável — alguém abre o editor e
 - **Current state:** {o que já existe, parcialmente ou não}
 - **Why now:** {gatilho — issue, plano, gap competitivo}
 
-## 2. Prior art — deep dive por framework
+## 2. Inventário completo de arquivos (mandatório)
+
+Lista exaustiva — todo arquivo que o grep capturou nas 3 passadas (nome / conteúdo / docs). Ordenado por framework e por caminho. **Sem cherry-picking.**
+
+### {Framework} — inventário
+
+| File | Category | LOC | Read in full? | Anchored in |
+|---|---|---|---|---|
+| `packages/next/src/.../rsc-loader.ts` | core | 412 | ✅ | §3.1 |
+| `packages/next/src/.../use-client-boundary.ts` | core | 187 | ✅ | §3.1 |
+| `packages/next/src/.../register-client-reference.ts` | support | 98 | ✅ | §3.2 |
+| `packages/next/test/rsc/use-client.test.ts` | test | 245 | seletivo | §7 |
+| `docs/architecture/rsc.md` | doc | 320 | ✅ | §4 |
+| ... | ... | ... | ... | ... |
+
+(uma tabela como esta para CADA framework do `referencias/`)
+
+### Arquivos avaliados e descartados (com motivo)
+
+| File | Why discarded |
+|---|---|
+| `packages/next/test/rsc/__fixtures__/01-trivial.js` | Fixture trivial sem invariante — coberto pelo arquivo 02 |
+| `packages/next/.bin/build-rsc-types` | Generated code (saída de codegen) |
+| ... | ... |
+
+Nenhum arquivo "some omitted for brevity". Se foi removido da consideração, está nesta tabela.
+
+## 3. Prior art — deep dive por framework
 
 ### {Framework} — version {x}.{y}.{z}
 
@@ -241,12 +306,12 @@ export type Baz = …
 
 (Repetir essa subsection para CADA framework analisado — Next.js / Remix / Hono / Astro / etc.)
 
-## 3. Convergent patterns (todos concordam)
+## 4. Convergent patterns (todos concordam)
 
 1. **{Pattern X}** — adotado por: Next.js ({file:line}), Remix ({file:line}), Astro ({file:line}). Funciona porque {razão concreta}. **TheoKit deve adotar.**
 2. ...
 
-## 4. Divergent patterns (trade-off real)
+## 5. Divergent patterns (trade-off real)
 
 1. **{Decision Y}**
    - Next.js: faz `A` (file:line) — trade-off: {custos}
@@ -254,7 +319,7 @@ export type Baz = …
    - **TheoKit choice:** `C porque {razão}`
 2. ...
 
-## 5. Dependency inventory — bibliotecas comuns
+## 6. Dependency inventory — bibliotecas comuns
 
 Convergent libs (aparecem em 2+ frameworks):
 
@@ -264,21 +329,21 @@ Convergent libs (aparecem em 2+ frameworks):
 | `magic-string` | Vite, Astro | Source-map-safe string edits | **Adotar** se precisarmos editar source |
 | `es-module-lexer` | Vite, Next.js | Detectar imports rapidamente | **Avaliar** |
 
-## 6. Algorithms / data structures não-óbvios
+## 7. Algorithms / data structures não-óbvios
 
 - **{Algorithm name}** ({framework} {file:line}) — {descrição em 1 parágrafo + complexidade}
 - **{Data structure name}** ({framework} {file:line}) — {por que essa estrutura, não a óbvia}
 
-## 7. Edge cases conhecidos (com fonte)
+## 8. Edge cases conhecidos (com fonte)
 
 | Edge case | Como manifesta | Onde foi corrigido | Como devemos prevenir |
 |---|---|---|---|
 | `'use client'` boundary corruption when re-exporting | Component renderiza no server por engano | Next.js 14.0.4 (commit abc123) | Validar no parse-time + warn |
 | ... | ... | ... | ... |
 
-## 8. Implementation Guide
+## 9. Implementation Guide
 
-### 8.1 Arquitetura proposta
+### 9.1 Arquitetura proposta
 
 ```
 ┌─────────────────────┐
@@ -296,7 +361,7 @@ Convergent libs (aparecem em 2+ frameworks):
 └─────────────────────┘
 ```
 
-### 8.2 Files to create
+### 9.2 Files to create
 
 ```
 packages/theo/src/{package}/{module}.ts         — entrypoint público
@@ -307,7 +372,7 @@ tests/integration/{module}-pipeline.test.ts      — pipeline real
 fixtures/{module}-basic/                          — Playwright fixture
 ```
 
-### 8.3 Public API surface (TypeScript)
+### 9.3 Public API surface (TypeScript)
 
 ```ts
 export function defineXxx<...>(...): XxxConfig<...> { … }
@@ -319,7 +384,7 @@ export interface XxxOptions {
 export type XxxHandler = (ctx: XxxContext) => ...
 ```
 
-### 8.4 Dependências a adotar
+### 9.4 Dependências a adotar
 
 | Package | Version | Justification |
 |---|---|---|
@@ -328,7 +393,7 @@ export type XxxHandler = (ctx: XxxContext) => ...
 
 (ou "nenhuma — implementação fica em pure TS")
 
-### 8.5 Test strategy
+### 9.5 Test strategy
 
 - **Unit:** `tests/unit/{module}.test.ts` — N cenários BDD
   - Happy path
@@ -339,14 +404,14 @@ export type XxxHandler = (ctx: XxxContext) => ...
 - **Fixture:** `fixtures/{module}-basic/` — projeto reproduzível
 - **Playwright (se UI):** `tests/e2e/{module}.spec.ts`
 
-### 8.6 Phases of rollout
+### 9.6 Phases of rollout
 
 1. **Phase 1 — Core API + unit tests** (target: green TDD)
 2. **Phase 2 — Vite plugin wiring** (target: dev server end-to-end)
 3. **Phase 3 — Production build** (target: prod build + Playwright spec)
 4. **Phase 4 — Migration / opt-out** (se quebrar API existente)
 
-### 8.7 Acceptance criteria
+### 9.7 Acceptance criteria
 
 - [ ] {Critério 1 verificável}
 - [ ] {Critério 2}
@@ -355,25 +420,52 @@ export type XxxHandler = (ctx: XxxContext) => ...
 - [ ] Playwright spec passes
 - [ ] Dogfood check added
 
-### 8.8 Risks + mitigations
+### 9.8 Risks + mitigations
 
 | Risk | Likelihood | Mitigation |
 |---|---|---|
 | {risco concreto} | high/med/low | {fix preventivo} |
 
-## 9. Open questions
+## 10. Open questions
 
 Itens onde a pesquisa NÃO chegou em resposta. Cada um vira um TODO antes de começar a implementação.
 
 1. {Pergunta} — possíveis caminhos: A / B
 2. ...
 
-## 10. Referências citadas
+## 11. Referências citadas (todos os arquivos do inventário)
 
-- {framework} — {file:line ou commit hash} — {o que mostra}
-- {framework} — {file:line} — {…}
-- {URL externa, se houver} — {…}
+Toda âncora `file:line` usada no documento aparece aqui, agrupada por framework. Esta seção é o índice reverso do inventário — permite navegar do conceito de volta ao código fonte.
+
+### {Framework}
+
+#### Core
+- `packages/next/src/.../rsc-loader.ts:1-412` — implementação principal do RSC loader; referenciada em §3.1 (algoritmo), §4 (pattern X), §7 (data structure Y)
+- `packages/next/src/.../use-client-boundary.ts:1-187` — parse e marcação de `'use client'`; §3.1, §8 (edge case Z)
+
+#### Support
+- `packages/next/src/.../register-client-reference.ts:1-98` — registro global de referências; §3.2
+
+#### Test (read seletivo)
+- `packages/next/test/rsc/use-client.test.ts:42-78` — cobre boundary corruption (cenário em §8)
+- `packages/next/test/rsc/use-client.test.ts:120-145` — cobre re-export through barrel files (cenário em §8)
+
+#### Doc / RFC / CHANGELOG
+- `docs/architecture/rsc.md:1-320` — RFC interno; §4 (decisão de payload binário)
+- `CHANGELOG.md` v14.0.4 — fix do `'use client'` boundary corruption; §8
+
+#### Commits relevantes (git arqueologia)
+- `abc123def` (2024-01-15) — "fix: 'use client' boundary corruption when re-exporting" — §8
+- `7890abcd1` (2024-02-03) — "perf: skip RSC payload generation when no client component matches" — §7
+
+(repetir essa estrutura para CADA framework do inventário)
+
+### URLs externas
+
+- {URL} — {o que mostra, por que importa}
 ```
+
+Toda asserção no documento DEVE estar ancorada num item desta seção 11. Sem fonte, sem afirmação.
 
 ---
 
@@ -382,15 +474,35 @@ Itens onde a pesquisa NÃO chegou em resposta. Cada um vira um TODO antes de com
 Toda execução em modo `standard` ou `exhaustive` DEVE produzir:
 
 - [ ] Discovery dinâmica de `referencias/*/` (não hardcoded)
-- [ ] Mínimo **3 frameworks** com deep-read (≥ 3 arquivos lidos inteiros por framework)
+- [ ] **Inventário completo de arquivos por framework** — todos os hits das 3 passadas (nome + conteúdo + docs), triados em `core` / `support` / `test` / `doc`, sem cherry-picking
+- [ ] **Seção "Arquivos avaliados e descartados"** com 1 frase de justificativa por arquivo removido — se a seção está vazia OU se tem "..." no final, o inventário está incompleto
+- [ ] Mínimo **3 frameworks** com deep-read (TODOS os arquivos `core` + `support` + `doc` lidos inteiros por framework)
 - [ ] Tabela de dependências externas com versão pinada
 - [ ] Mínimo **5 padrões** identificados (convergent + divergent)
-- [ ] Mínimo **5 edge cases** com fonte (commit hash ou CHANGELOG)
+- [ ] Mínimo **5 edge cases** com fonte (commit hash ou CHANGELOG) — fontes vêm dos arquivos `test` + `doc` do inventário
 - [ ] Implementation Guide com **todas as 8 subsections** preenchidas
 - [ ] Lista de open questions (mínimo 2 — se zero, a pesquisa foi rasa demais)
+- [ ] **Seção 11 (Referências citadas) contém TODOS os arquivos do inventário** (não apenas os "principais"), agrupados por framework, com line range e cross-reference para as seções que os citam
+- [ ] Toda asserção no documento ancorada num `file:line` da seção 11 — nenhuma afirmação solta
 - [ ] Output em `.claude/knowledge-base/reference/{slug}.md`
 
 Se qualquer item falhar, a skill **NÃO termina** — volta ao passo correspondente.
+
+### Verificação automática antes de finalizar
+
+```bash
+SLUG="<topic-kebab>"
+DOC=".claude/knowledge-base/reference/$SLUG.md"
+
+# 1. Inventário completo — toda linha "core|support|test|doc" no inventário aparece na seção 11
+INV_FILES=$(awk '/^## 2\. Inventário/,/^## 3\./' "$DOC" | grep -oE '`[^`]+\.[a-z]+`' | sort -u)
+REF_FILES=$(awk '/^## 11\. Referências/,/^$/' "$DOC" | grep -oE '`[^`]+\.[a-z]+' | sort -u)
+diff <(echo "$INV_FILES") <(echo "$REF_FILES") || echo "FAIL: arquivos do inventário não citados na §11"
+
+# 2. Sem "..." na seção de descartados (placeholder de preguiça)
+grep -A 999 "## 2\." "$DOC" | grep -B 1 "^## 3\." | grep -q "\.\.\." && \
+  echo "FAIL: inventário tem reticências — completar antes de finalizar"
+```
 
 ---
 
@@ -399,9 +511,11 @@ Se qualquer item falhar, a skill **NÃO termina** — volta ao passo corresponde
 - **Grep-and-dump.** Pegar `grep` results e colar no doc sem ler o código não conta como deep dive.
 - **API surface sem prosa.** Listar `export function foo()` sem explicar O QUE foo faz é inútil para quem vai implementar.
 - **"TODO: investigate"** no Implementation Guide. Se está como TODO, ainda é Passo 3, não Passo 7.
-- **Ignorar dependências externas.** A seção 5 é onde mora o tempo poupado — bibliotecas que outros já vetaram resolvem 60% do trabalho.
+- **Ignorar dependências externas.** A seção 6 é onde mora o tempo poupado — bibliotecas que outros já vetaram resolvem 60% do trabalho.
 - **Implementation Guide vago.** "Implementar módulo X" não é guide. "Criar `packages/theo/src/router/rsc.ts` com `export function defineRsc(opts: RscOptions)` usando `react-server-dom-webpack@^18.3.0`" é guide.
 - **Pular open questions.** Pesquisa sem dúvidas é pesquisa rasa. Se não restou pergunta, leu superficialmente.
+- **Inventário com `...` / "principais arquivos" / "alguns omitidos".** Cherry-picking distorce a análise — quem lê o doc depois não sabe se um arquivo foi ignorado por irrelevância ou por preguiça. Ou cita todos, ou justifica o descarte na seção dedicada. Não há terceira via.
+- **Referência sem âncora `file:line`.** "Next.js faz X" sem `packages/next/src/.../foo.ts:42` é folclore. Toda asserção do documento aponta para a seção 11.
 
 ---
 
