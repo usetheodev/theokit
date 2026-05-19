@@ -69,7 +69,43 @@ export interface SecurityEnv {
   production: boolean
 }
 
+/**
+ * T4.1 — Per-request options passed by the SSR pipeline.
+ *
+ * - `nonce`: when set, the framework substitutes the `'unsafe-inline'`
+ *   token in `script-src` with `'nonce-<nonce>'`. EC-3 forces
+ *   `Cache-Control: private, no-store` so a CDN cannot cache the HTML
+ *   (carrying one nonce) and re-serve it with a freshly-generated CSP
+ *   header (carrying a different nonce).
+ * - `prerender`: when true, the nonce is IGNORED. Prerendered HTML is
+ *   generated at build time with no nonce in the script tags; mixing a
+ *   runtime nonce in the header would block every script. EC-4.
+ */
+export interface SecurityHeadersOptions {
+  nonce?: string
+  prerender?: boolean
+}
+
 const DEFAULT_HSTS = 'max-age=31536000; includeSubDomains'
+
+/**
+ * Apply a nonce to the script-src directive of an existing CSP policy
+ * string. Replaces `'unsafe-inline'` (if present) with `'nonce-<value>'`;
+ * otherwise appends the nonce directive to the script-src line.
+ */
+function applyNonceToCsp(policy: string, nonce: string): string {
+  return policy
+    .split(';')
+    .map((directive) => {
+      const trimmed = directive.trim()
+      if (!trimmed.startsWith('script-src')) return directive
+      if (trimmed.includes("'unsafe-inline'")) {
+        return directive.replace("'unsafe-inline'", `'nonce-${nonce}'`)
+      }
+      return `${directive} 'nonce-${nonce}'`
+    })
+    .join(';')
+}
 
 /**
  * Build the security headers map for a given config + env. Pure function —
@@ -78,8 +114,13 @@ const DEFAULT_HSTS = 'max-age=31536000; includeSubDomains'
 export function buildSecurityHeaders(
   config: SecurityHeadersConfig,
   env: SecurityEnv,
+  options: SecurityHeadersOptions = {},
 ): Record<string, string> {
   const out: Record<string, string> = {}
+
+  // EC-4: prerendered routes must NOT receive a nonce — the build-time
+  // HTML carries no nonce, so a runtime nonce would mismatch.
+  const effectiveNonce = options.prerender ? undefined : options.nonce
 
   // CSP — handle the four shapes:
   //   csp: false             → opt out
@@ -88,7 +129,10 @@ export function buildSecurityHeaders(
   //   cspMode: 'report-only' (default) → Content-Security-Policy-Report-Only
   const cspDisabled = config.csp === false || config.cspMode === 'off'
   if (!cspDisabled) {
-    const policy = typeof config.csp === 'string' ? config.csp : DEFAULT_CSP
+    let policy = typeof config.csp === 'string' ? config.csp : DEFAULT_CSP
+    if (effectiveNonce) {
+      policy = applyNonceToCsp(policy, effectiveNonce)
+    }
     const mode: CspMode = config.cspMode ?? 'report-only'
     if (mode === 'enforce') {
       out['Content-Security-Policy'] = policy
@@ -111,6 +155,16 @@ export function buildSecurityHeaders(
     out['Strict-Transport-Security'] = typeof config.hsts === 'string' ? config.hsts : DEFAULT_HSTS
   }
 
+  // EC-3: when a nonce is in play, the response carries a one-shot CSP
+  // header AND inline scripts in the HTML body. A CDN that caches the
+  // HTML and proxies a fresh CSP per request would block every script
+  // (nonces wouldn't match). Force no-store to prevent that class of
+  // silent prod-only failure. Prerendered routes (which carry no nonce
+  // by design — EC-4) are exempt; their HTML is meant to be cacheable.
+  if (effectiveNonce) {
+    out['Cache-Control'] = 'private, no-store'
+  }
+
   return out
 }
 
@@ -123,8 +177,9 @@ export function applySecurityHeaders(
   res: ServerResponse,
   config: SecurityHeadersConfig,
   env: SecurityEnv,
+  options: SecurityHeadersOptions = {},
 ): void {
-  const headers = buildSecurityHeaders(config, env)
+  const headers = buildSecurityHeaders(config, env, options)
   for (const [key, value] of Object.entries(headers)) {
     res.setHeader(key, value)
   }
