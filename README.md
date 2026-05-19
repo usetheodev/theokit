@@ -2,7 +2,7 @@
 
 **Build the app your agent lives in.** Routing, auth, real-time, deploy — wired.
 
-Part of the [usetheo](https://usetheo.dev) workflow — TheoCode codes the agent, TheoKit shapes the app, `theo deploy` ships it to production.
+The **Build** (framework) layer of the [Theo ecosystem](https://usetheo.dev) — chat with TheoCode, build the app here, deploy on Theo PaaS. **Chat. Build. Deploy.**
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-production-success?style=flat-square)](#status)

@@ -6,11 +6,13 @@ Hermes, Cursor, and TheoCode appear as category framing (agents that live in ter
 Every named feature is verified against README.md, packages/theo/src, and packages/create-theo/src.
 -->
 
+**Build** — the framework verb of the **Chat. Build. Deploy.** ecosystem.
+
 # Build the app your agent lives in.
 
 ### Real auth, real domain, real WebSockets — the app your agent ships in.
 
-*Open-source. TypeScript end to end. Deploys to Theo PaaS, Vercel, Cloudflare Workers, or any Docker host.*
+*The Build (framework) layer of the [Theo ecosystem](https://usetheo.dev). Open-source. TypeScript end to end. Deploys to Theo PaaS, Vercel, Cloudflare Workers, or any Docker host.*
 
 **4 templates · 4 deploy targets · file-based routing · typed RPC client · AES-256-GCM sessions · Apache-2.0**
 
