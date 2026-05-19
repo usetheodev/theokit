@@ -30,6 +30,11 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | adapter-targets | parent dir for the 6 compile-only deploy adapter fixtures | full-cov |
 | agent-endpoint-mock | `defineAgentEndpoint` wire-format reference (4 AgentEvent variants + abort) | full-cov |
 | agents-dir-ignored | negative test: agents/ directory is intentionally not scanned | base |
+| auth-providers-diy-github | DIY GitHub OAuth using PKCE + state + rotateSession (security-hardening) | security |
+| auth-providers-with-authjs | Auth.js bridge: mirror Auth.js user into TheoKit session (security-hardening) | security |
+| cors-enabled | `config.security.cors` end-to-end (preflight + Access-Control-* echo) | security |
+| csp-reports | `/__theo/csp-report` built-in endpoint + audit logger fan-out | security |
+| rate-limit-per-route | per-route + per-user rate limit (`keyBy: 'session'`) | security |
 | app-router-basic | minimal `app/` routing | base |
 | app-router-errors | per-segment `error.tsx` boundaries | base |
 | app-router-nested-layouts | nested `layout.tsx` composition | base |

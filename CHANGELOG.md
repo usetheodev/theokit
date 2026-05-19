@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Security hardening — close 9 enterprise gaps, 2026-05-19)
+
+This release closes the nine identified gaps that separated TheoKit from "production-OK for indie/startup" to "enterprise-ready / SOC2-pending". All ten of the original-audit gaps (9 explicit + 1 adjacent OWASP A07 session fixation) are now covered. Zero new npm dependencies — everything composes from Web Crypto + native fetch + the existing hash-wasm path.
+
+- **T1.1 — `Permissions-Policy` header default-deny**: `geolocation=(), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=()`. EC-3 mitigation — Zod schema rejects CR/LF in every header-bound string (CWE-113 HTTP Response Splitting). 6 unit tests including the injection regression.
+- **T1.2 — CORS middleware** (`packages/theo/src/server/cors.ts`). `corsSchema` accepts `origins` as `'*' | string | RegExp | array | callback`; `credentials`, `maxAge`, `allowedHeaders`, `exposedHeaders` all configurable. Runs FIRST in the request pipeline (D10): preflight → rate limit → CSRF → security headers → handler. EC-8: callback variants that throw fail-closed (deny). 18 unit tests covering exact, regex, callback, wildcard, and `'*'+credentials` rejection at parse.
+- **T2.1 — `RateLimitStore` interface + `InMemoryStore` adapter** (`packages/theo/src/server/rate-limit-store.ts`). Pluggable backend per ADR D1 — single-instance apps see zero behavior change; multi-instance deployments install a Redis adapter without bloating the core. 8 contract tests; 9 existing rate-limit integration tests still green.
+- **T2.2 — Per-route + per-user rate limit** (`packages/theo/src/server/rate-limit-per-route.ts`). `createRouteRateLimiter({ default, routes, keyBy })`: path map with longest-prefix matching, `keyBy: 'ip' | 'session' | 'user' | callback`. EC-5 trailing-slash normalization. EC-6 session-cookie name reads from config (not hardcoded). Session cookies are SHA-256 hashed before keying — raw token never leaks. 15 unit tests + legacy flat config backwards-compat preserved.
+- **T3.1 — Session secret rotation** — `createSessionManager({ secret: string | string[] })`. Index 0 = newest. Decrypt walks the array. EC-1: array length capped at 5 — **enforced via throw at construction** (no silent truncation). 7 unit tests including the cap. `assertProductionSecret` accepts arrays too.
+- **T3.2 — Transparent re-encrypt + `rotateIfNeeded` helper** — when decrypt succeeds at index > 0, the session is re-issued with `secrets[0]`. EC-4 timing safety: re-encrypt must fire BEFORE `renderToPipeableStream`/`res.writeHead` (Set-Cookie locks once headers commit) — the `rotateIfNeeded` helper lives in `createContext`, satisfying that constraint for the framework's streaming SSR default. 5 unit tests + 5 integration tests including the EC-4 streaming-headers regression.
+- **T3.3 — `SessionManager.rotateSession(req, res)`** — OWASP A07:2021 session-fixation mitigation. Call after successful login / OAuth callback / 2FA upgrade. Preserves session data, fresh IV + refreshed expiry. 4 unit tests.
+- **T4.1 — `AuditLogger` interface + `JsonStdoutSink` default** (`packages/theo/src/server/audit-log.ts`). Per ADR D4: zero new framework deps. Default writes JSON-line audit events to stdout (captured by every deploy target). User adapters plug in via `config.audit.logger`. EC: circular-ref + BigInt safe via fallback line. `safeAudit(logger, event)` wrapper isolates logger throws from the request lifecycle. 7 unit tests.
+- **T4.2 — Wire framework events to audit logger**. `csrf.warn`, `rate-limit.exceeded`, `session.rotated`, `csp.violation` all flow through `safeAudit`. Logger throws NEVER propagate. 5 integration tests including sync + async throw isolation.
+- **T5.1 — `/__theo/csp-report` endpoint built-in** (`packages/theo/src/server/csp-report.ts`). Auto-registered before user routes. Accepts both `application/csp-report` (legacy) and `application/reports+json` (Reporting API). Default CSP now includes `report-uri /__theo/csp-report`. EC-2 null guards: browser POSTs of `{"csp-report": null}`, `{}`, or reports+json entries lacking `body` short-circuit to 204 (no null deref). Forwards to audit + devtools dispatcher + optional user hook. 13 unit + 3 integration tests.
+- **T6.1 — `throttleLoginAttempts`** (`packages/theo/src/server/auth-throttle.ts`). `checkThrottle` / `recordAttempt` over any `RateLimitStore`. Successful login resets the counter; max failures locks for `lockoutMs`. 8 unit tests including concurrent-overshoot safety.
+- **T6.2 — TOTP RFC 6238 primitive** (`packages/theo/src/server/auth-totp.ts`). `generateTotp` / `verifyTotp` / `generateTotpSecret` / `totpUri`. RFC 6238 Appendix B vectors pass: T=59 → 94287082, T=1111111109 → 07081804, T=1111111111 → 14050471, T=1234567890 → 89005924. Constant-time comparison. 12 unit tests.
+- **T6.3 — Backup codes primitive** (`packages/theo/src/server/auth-backup-codes.ts`). `generateBackupCodes({ count, length, separator, alphabet })` returns plaintext (display once) + SHA-256 hashes (store). Default alphabet excludes ambiguous chars (I/L/O/0/1). Constant-time `verifyBackupCode` returns `matchedHash` so caller deletes the used code (replay protection). 9 unit tests.
+- **T7.1 — ADR-AUTH-DELEGATION** locked in `CLAUDE.md`. Cites the 793-line prior-art audit at `.claude/knowledge-base/reference/oauth-oidc-delegation.md`. Three re-evaluation triggers required to reopen.
+- **T7.2 — `docs/concepts/auth-providers.md`** — recommendation page with Auth.js / Better Auth / DIY GitHub worked examples + a list of every TheoKit primitive shipped for auth. README links to it. 4 unit tests.
+- **T7.3 — `oauth-pkce.ts` (RFC 7636)**. `generatePkceChallenge()` returns `{codeVerifier, codeChallenge, codeChallengeMethod: 'S256'}`. RFC 7636 Appendix B vector passes. 6 unit tests.
+- **T7.4 — `oauth-state.ts` + `oidc-discovery.ts`**. `generateOAuthState` / `verifyOAuthState` (constant-time, empty inputs always false). `discoverOidcProvider` caches in module scope; failures NOT cached (subsequent calls retry). EC-7: HTTPS enforced for non-loopback issuers (RFC 8414 §3). 11 unit tests including the HTTPS guard.
+- **T7.5 — Auth-provider fixtures**: `fixtures/auth-providers-diy-github/` (PKCE + state + rotateSession round-trip in ~50 LOC of route handlers); `fixtures/auth-providers-with-authjs/` (Auth.js bridge pattern + `syncAuthjsUser` action). 5 integration tests asserting fixture shape + PKCE/state round-trip without GitHub secrets.
+
+#### Public exports added to `theokit/server`
+
+`createCorsHandler`, `matchesOrigin`, `InMemoryStore`, `createRouteRateLimiter`, `matchRoutePattern`, `deriveKey`, `JsonStdoutSink`, `createNoOpLogger`, `safeAudit`, `handleCspReport`, `normalizeLegacy`, `normalizeNew`, `CSP_REPORT_PATH`, `checkThrottle`, `recordAttempt`, `generateTotp`, `verifyTotp`, `generateTotpSecret`, `totpUri`, `generateBackupCodes`, `verifyBackupCode`, `generatePkceChallenge`, `pkceChallengeFromVerifier`, `generateOAuthState`, `verifyOAuthState`, `discoverOidcProvider`, `clearOidcCache`, `rotateIfNeeded`. Plus types: `CorsConfig`, `CorsOrigin`, `CorsHandler`, `RateLimitStore`, `RateLimitState`, `RouteRateLimitConfig`, `KeyByMode`, `AuditLogger`, `AuditEvent`, `CspViolation`, `CspReportHandlerOptions`, `ThrottleOptions`, `ThrottleState`, `TotpOptions`, `VerifyTotpOptions`, `TotpAlgorithm`, `TotpUriOptions`, `BackupCode`, `BackupCodeOptions`, `PkceChallenge`, `OidcMetadata`, `SessionMeta`.
+
+#### Schema additions
+
+`config.security.cors` (CORS), `config.security.headers.permissionsPolicy` (Permissions-Policy), `config.audit.logger` (audit sink). New `corsSchema` exported.
+
+#### Default CSP
+
+Now includes `report-uri /__theo/csp-report` so `cspMode: 'report-only'` is useful out of the box.
+
+#### Test surface
+
++106 new tests across unit + integration. Full sweep: **197 test files / 1601 tests pass / zero TypeScript errors / zero unhandled errors.**
+
 ### ⚠️ BREAKING — 0.3.0 cutover (T6.1, 2026-05-19)
 Two framework defaults flip in 0.3.0. Both were emitting warnings since 0.2.0; if your app has been ignoring those warnings, it will start failing in production after this release.
 

@@ -1,4 +1,6 @@
 import type { IncomingMessage } from 'node:http'
+import type { AuditLogger } from './audit-log.js'
+import { safeAudit } from './audit-log.js'
 
 /**
  * CSRF enforcement mode.
@@ -144,6 +146,7 @@ export function enforceCsrf(
   mode: CsrfMode,
   logger?: CsrfLogger,
   disallowed?: DisallowedConfig,
+  auditLogger?: AuditLogger,
 ): { allow: boolean; reason?: string } {
   if (mode === 'off') {
     // `off` short-circuits before disallowed dispatch — users who set
@@ -174,13 +177,20 @@ export function enforceCsrf(
     // injected logger.warn (tests, custom log routers).
     // T2.2: include the stable cutover code + docsUrl so logs are
     // grep-able and click-through-able.
-    logger?.warn({
-      event: 'csrf.warn',
+    const payload = {
+      event: 'csrf.warn' as const,
       method: req.method ?? 'UNKNOWN',
-      path: logger.path,
+      path: logger?.path,
       reason: check.reason,
       code: CSRF_WARN_CODE,
       docsUrl: CSRF_WARN_DOCS_URL,
+    }
+    logger?.warn(payload)
+    // T4.2 — also forward to audit logger when configured.
+    safeAudit(auditLogger, {
+      action: 'csrf.warn',
+      actor: { type: 'anonymous' },
+      metadata: payload as unknown as Record<string, unknown>,
     })
     return { allow: true, reason: check.reason }
   }
@@ -188,13 +198,20 @@ export function enforceCsrf(
   // strict — 403 the request, AND emit a warn payload so the dev (and
   // devtools UI) sees WHY it was blocked + the docsUrl to fix it.
   // Without this, strict-mode users get a silent 403 with no context.
-  logger?.warn({
-    event: 'csrf.warn',
+  const strictPayload = {
+    event: 'csrf.warn' as const,
     method: req.method ?? 'UNKNOWN',
     path: logger?.path ?? '',
     reason: check.reason,
     code: CSRF_WARN_CODE,
     docsUrl: CSRF_WARN_DOCS_URL,
+  }
+  logger?.warn(strictPayload)
+  // T4.2 — also forward to audit logger when configured.
+  safeAudit(auditLogger, {
+    action: 'csrf.warn',
+    actor: { type: 'anonymous' },
+    metadata: strictPayload as unknown as Record<string, unknown>,
   })
   return { allow: false, reason: check.reason }
 }

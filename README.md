@@ -2,7 +2,7 @@
 
 **Build the app your agent lives in.** Routing, auth, real-time, deploy — wired.
 
-The **Build** (framework) layer of the [Theo ecosystem](https://usetheo.dev) — chat with TheoCode, build the app here, deploy on TheoCloud. **Chat. Build. Deploy.**
+Part of the [usetheo](https://usetheo.dev) workflow — TheoCode codes the agent, TheoKit shapes the app, `theo deploy` ships it to production.
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-production-success?style=flat-square)](#status)
@@ -27,13 +27,13 @@ npm create theo@latest
 - **APIs that validate themselves** — schemas in, types out, end-to-end on server and client.
 - **Server actions without plumbing** — CSRF, validation, serialization handled.
 - **Backend calls that compile** — import the route type, get request and response inferred.
-- **Sessions that just work** — encrypted cookies, one helper to require a logged-in user.
+- **Sessions that just work** — encrypted cookies, one helper to require a logged-in user. For OAuth and 2FA, see [`docs/concepts/auth-providers.md`](docs/concepts/auth-providers.md).
 - **Per-request context, no globals** — plug your DB and user once, reach them anywhere.
 - **WebSocket as a file** — drop a file in `server/ws/`, it's a real-time endpoint.
 - **Server rendering on demand** — opt in with one flag.
 - **Rate limiting built in** — off by default, one config away.
 - **Generators that scaffold** — `theokit generate route users`, done.
-- **Deploys anywhere** — Docker, Vercel, Cloudflare Workers, TheoCloud.
+- **Deploys anywhere** — Docker, Vercel, Cloudflare Workers, Theo PaaS.
 - **Real starting templates** — default, dashboard, API-only, Postgres.
 
 ## What you'd ship
@@ -57,7 +57,7 @@ npm create theo@latest
 | Server actions with CSRF + Zod | ✓ | DIY | Partial (Next.js Actions) | DIY |
 | Encrypted sessions, one helper | ✓ (AES-256-GCM, `requireAuth`) | DIY | DIY | DIY |
 | WebSocket as a file | ✓ | DIY | DIY (needs separate WS server) | DIY |
-| Deploy targets out of the box | Docker · Vercel · Cloudflare Workers · TheoCloud | DIY | Vercel | DIY |
+| Deploy targets out of the box | Docker · Vercel · Cloudflare Workers · Theo PaaS | DIY | Vercel | DIY |
 | Templates with DB wired | ✓ (postgres, dashboard, api-only) | Limited | DIY | DIY |
 | CLI scaffolding (`theokit generate`) | ✓ | Limited | Next.js (partial) | DIY |
 | License | Apache-2.0 | Open | Open (MIT SDK) | N/A |
@@ -327,7 +327,7 @@ import { theoFetch, TheoFetchError } from 'theokit/client'
 
 Honest claims only.
 
-- **Production.** Framework, CLI, four templates (default, dashboard, api-only, postgres), and four deploy targets (Docker, Vercel, Cloudflare Workers, TheoCloud) all shipped. Public API surface stable.
+- **Production.** Framework, CLI, four templates (default, dashboard, api-only, postgres), and four deploy targets (Docker, Vercel, Cloudflare Workers, Theo PaaS) all shipped. Public API surface stable.
 - **Agent layer (`agents/` directory).** On the roadmap. The framework already ships the primitives (sessions, WebSockets, server actions, typed RPC) an agent surface needs; the dedicated `agents/` convention formalizes the wiring.
 - **Documentation site.** On the roadmap. Today the README is the canonical reference; deep docs land with the dedicated site.
 - **OpenAPI generation from Zod schemas.** On the roadmap.

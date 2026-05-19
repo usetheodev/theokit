@@ -16,6 +16,9 @@ import {
 } from '../server/batch-handler.js'
 import { applySecurityHeaders } from '../server/security-headers.js'
 import { extractTraceId, TRACE_HEADER } from '../server/trace-context.js'
+import { createCorsHandler, type CorsConfig } from '../server/cors.js'
+import { CSP_REPORT_PATH, handleCspReport, type CspReportHandlerOptions } from '../server/csp-report.js'
+import type { AuditLogger } from '../server/audit-log.js'
 
 export interface ApiMiddlewareOptions {
   rateLimitConfig?: RateLimitConfig
@@ -29,6 +32,12 @@ export interface ApiMiddlewareOptions {
   securityHeaders?: import('../server/security-headers.js').SecurityHeadersConfig
   /** T5.1 — per-route disallowed escalation pattern. */
   disallowed?: import('../server/csrf.js').DisallowedConfig
+  /** T1.2 — CORS configuration. When undefined, no CORS handling (same-origin only). */
+  cors?: CorsConfig
+  /** T4.1 — Audit logger. Receives csrf.warn, rate-limit.exceeded, csp.violation events. */
+  auditLogger?: AuditLogger
+  /** T5.1 — Optional CSP violation hook (forwarded to Sentry / custom sink). */
+  onCspViolation?: CspReportHandlerOptions['onViolation']
 }
 
 export function createApiMiddleware(
@@ -53,11 +62,31 @@ export function createApiMiddleware(
   const disallowed = opts.disallowed
   const securityHeadersConfig = opts.securityHeaders ?? {}
   const securityEnv = { production: process.env.NODE_ENV === 'production' }
+  // T1.2 — CORS handler runs FIRST in the pipeline (D10).
+  const corsHandler = opts.cors ? createCorsHandler(opts.cors) : null
+  const auditLogger = opts.auditLogger
+  const onCspViolation = opts.onCspViolation
 
   return async (req, res, next) => {
     const url = req.url ?? ''
+
+    // T5.1 — built-in CSP report endpoint. Matched BEFORE the /api/* gate
+    // so the path lives outside the user's route namespace. Endpoint is
+    // CSRF-exempt (browsers don't send X-Theo-Action on report POSTs).
+    const pathOnly = url.split('?')[0]
+    if (pathOnly === CSP_REPORT_PATH && req.method === 'POST') {
+      await handleCspReport(req, res, { auditLogger, onViolation: onCspViolation })
+      return
+    }
+
     if (!url.startsWith('/api/')) {
       return next()
+    }
+
+    // T1.2 + D10 — CORS preflight runs BEFORE rate limit, BEFORE CSRF.
+    // Preflight short-circuits the response (204 + Access-Control-* headers).
+    if (corsHandler && corsHandler.handlePreflight(req, res)) {
+      return
     }
 
     // Phase 7 — traceId resolution. Reads traceparent / x-request-id /
@@ -71,6 +100,9 @@ export function createApiMiddleware(
     // Phase 6 — Apply security headers BEFORE the handler runs so route
     // handlers can still override via res.setHeader (last write wins).
     applySecurityHeaders(res, securityHeadersConfig, securityEnv)
+    // T1.2 — Add CORS headers to non-preflight responses (Allow-Origin echo,
+    // Expose-Headers, Allow-Credentials when configured).
+    if (corsHandler) corsHandler.applyHeaders(req, res)
 
     // Rate limit check
     if (rateLimiter) {

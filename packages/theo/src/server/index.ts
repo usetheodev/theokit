@@ -19,8 +19,48 @@ export type { CookieOptions } from './cookies.js'
 export { createRateLimiter } from './rate-limit.js'
 export type { RateLimitConfig, RateLimitResult } from './rate-limit.js'
 
-export { createSessionManager, assertProductionSecret } from './session.js'
-export type { SessionManager, SessionConfig } from './session.js'
+export { createSessionManager, assertProductionSecret, rotateIfNeeded } from './session.js'
+export type { SessionManager, SessionConfig, SessionMeta } from './session.js'
+
+export { JsonStdoutSink, createNoOpLogger, safeAudit } from './audit-log.js'
+export type { AuditLogger, AuditEvent } from './audit-log.js'
+
+// T2.1 — pluggable rate-limit store
+export { InMemoryStore } from './rate-limit-store.js'
+export type { RateLimitStore, RateLimitState } from './rate-limit-store.js'
+
+// T2.2 — per-route + per-user rate limit
+export { createRouteRateLimiter, matchRoutePattern, deriveKey } from './rate-limit-per-route.js'
+export type { RouteRateLimitConfig, KeyByMode } from './rate-limit-per-route.js'
+
+// T5.1 — CSP report endpoint helpers
+export { handleCspReport, normalizeLegacy, normalizeNew, CSP_REPORT_PATH } from './csp-report.js'
+export type { CspViolation, CspReportHandlerOptions } from './csp-report.js'
+
+// T6.1 — login throttle primitive
+export { checkThrottle, recordAttempt } from './auth-throttle.js'
+export type { ThrottleOptions, ThrottleState } from './auth-throttle.js'
+
+// T6.2 — TOTP RFC 6238
+export { generateTotp, verifyTotp, generateTotpSecret, totpUri } from './auth-totp.js'
+export type { TotpOptions, VerifyTotpOptions, TotpAlgorithm, TotpUriOptions } from './auth-totp.js'
+
+// T6.3 — Backup codes
+export { generateBackupCodes, verifyBackupCode } from './auth-backup-codes.js'
+export type { BackupCode, BackupCodeOptions } from './auth-backup-codes.js'
+
+// T7.3 — RFC 7636 PKCE
+export { generatePkceChallenge, pkceChallengeFromVerifier } from './oauth-pkce.js'
+export type { PkceChallenge } from './oauth-pkce.js'
+
+// T7.4 — OAuth state + OIDC discovery
+export { generateOAuthState, verifyOAuthState } from './oauth-state.js'
+export { discoverOidcProvider, clearOidcCache } from './oidc-discovery.js'
+export type { OidcMetadata } from './oidc-discovery.js'
+
+// T1.2 — CORS handler
+export { createCorsHandler, matchesOrigin } from './cors.js'
+export type { CorsConfig, CorsOrigin, CorsHandler } from './cors.js'
 
 export { requireAuth, AuthRequiredError } from './auth.js'
 

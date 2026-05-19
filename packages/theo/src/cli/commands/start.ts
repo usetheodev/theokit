@@ -67,10 +67,14 @@ export async function startCommand(options: StartOptions): Promise<void> {
     cachedWsRoutes = scanWebSocketRoutes(serverDir)
   }
 
-  // Rate limiter (opt-in)
-  const rateLimiter = config.rateLimit
-    ? createRateLimiter(config.rateLimit)
-    : null
+  // Rate limiter (opt-in). Narrow the union shape — the legacy flat
+  // (windowMs+max) form maps to createRateLimiter; the per-route variant
+  // is consumed via the api-middleware integration path (not this fallback).
+  const flatRateLimit =
+    config.rateLimit && 'windowMs' in config.rateLimit && 'max' in config.rateLimit
+      ? config.rateLimit
+      : undefined
+  const rateLimiter = flatRateLimit ? createRateLimiter(flatRateLimit) : null
 
   // SSR setup (opt-in)
   const ssrServerPath = resolve(distDir, 'server/entry-server.js')

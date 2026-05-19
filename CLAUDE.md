@@ -222,6 +222,16 @@ Decisions that are not "out of scope" (we might still adopt) but are **explicitl
   - **If we do adopt later:** via `@vitejs/plugin-rsc` as an opt-in flag (TanStack pattern), NOT by re-implementing webpack-style flight plugins.
   - **Artifact:** [`.claude/knowledge-base/reference/server-components-rsc.md`](.claude/knowledge-base/reference/server-components-rsc.md) — 704-line deep dive, 12 sections, file:line citations for every assertion. Anyone wanting to re-open this decision reads that doc first.
 
+- **AUTH-DELEGATION — LOCKED 2026-05-19 (security-hardening release).** After a prior-art audit of 8 frameworks (Next.js, SvelteKit, Remix, Astro, TanStack Start, Nuxt, Nitro, Hono).
+  - **Decision:** TheoKit ships **5 RFC-stable protocol primitives** (`generatePkceChallenge` / `generateOAuthState` + `verifyOAuthState` / `discoverOidcProvider` / `generateTotp` + `verifyTotp` / `generateBackupCodes` + `verifyBackupCode`) PLUS session primitives (`createSessionManager`, `requireAuth`, `rotateSession`) PLUS a recommendation page (`docs/concepts/auth-providers.md`). TheoKit does **NOT** ship concrete provider implementations (Google, GitHub, Facebook, etc.) — those are delegated to specialist libraries (Auth.js, Better Auth, Lucia, Iron Session, hosted IdPs like Clerk/Auth0/WorkOS).
+  - **Why:** OAuth providers have constant deltas (scope changes, endpoint moves, breaking flow updates). Specialist libs maintain them; TheoKit's single-maintainer constraint cannot keep up. Standards-level primitives (RFC 6749 / 7636 / 6238 / OIDC Discovery 1.0) don't churn. 6 of 8 surveyed frameworks delegate; only Remix 3 outliers by bundling 9 providers — explicitly contraindicated for single-maintainer scope (§4.1 / §4.4 / §5.1 of the reference doc).
+  - **Re-evaluation triggers (all three required to reopen):**
+    1. TheoKit reaches a team of 3+ engineers committed to long-term framework maintenance
+    2. Concrete user demand from shipped TheoKit apps with measured pain — "I tried Auth.js and couldn't make it work" reports >5 per month
+    3. A specialist auth lib (Auth.js / Better Auth) breaks compatibility with TheoKit's session primitives without an actively maintained fix
+  - **If we do adopt later:** ship providers as separate optional packages under `@theokit/auth-*`, NEVER in the framework core. Each package owns its provider's deltas and ships independently.
+  - **Artifact:** [`.claude/knowledge-base/reference/oauth-oidc-delegation.md`](.claude/knowledge-base/reference/oauth-oidc-delegation.md) — 793-line deep dive, 8-framework audit, 5 protocol primitives with sample code, delegation strategy. Anyone wanting to re-open this decision reads that doc first. Recommended libs (in priority order): **Auth.js** (NextAuth, multi-provider workhorse), **Better Auth** (modern TypeScript-first DX), Lucia, Iron Session.
+
 ### Out of scope — intentionally
 
 Items considered and rejected. **Do not move these into a milestone without a strategic review.**

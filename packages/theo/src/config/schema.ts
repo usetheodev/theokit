@@ -1,9 +1,32 @@
 import { z } from 'zod'
 
-export const rateLimitSchema = z.object({
+/**
+ * Base bucket config — legacy shape preserved for backwards compatibility.
+ */
+const baseRateLimitSchema = z.object({
   windowMs: z.number().min(1),
   max: z.number().int().min(1),
 })
+
+/**
+ * T2.2 — Per-route + per-user rate limit. The new shape adds `routes`
+ * (path map), `keyBy`, and `cookieName`. The legacy flat shape is still
+ * accepted via the union — see `createRouteRateLimiter` for normalization.
+ */
+export const rateLimitSchema = z.union([
+  baseRateLimitSchema,
+  z.object({
+    default: baseRateLimitSchema.optional(),
+    routes: z.record(z.string(), baseRateLimitSchema).optional(),
+    keyBy: z
+      .union([
+        z.enum(['ip', 'session', 'user']),
+        z.function().args(z.unknown()).returns(z.string()),
+      ])
+      .optional(),
+    cookieName: z.string().min(1).optional(),
+  }),
+])
 
 export const uploadSchema = z.object({
   maxFileSize: z.number().min(1).default(10 * 1024 * 1024), // 10MB
@@ -38,16 +61,34 @@ export const loggingSchema = z.object({
  * Users override individual headers, swap CSP to `enforce`, or disable
  * CSP entirely (`csp: false` / `cspMode: 'off'`).
  */
+/**
+ * EC-3 — CWE-113 HTTP Response Splitting mitigation.
+ *
+ * Every string that becomes a header value must reject CR/LF. Apps that
+ * derive header values from untrusted input (feature flags, tenant config,
+ * URL params) would otherwise let attackers inject Set-Cookie / Location
+ * headers via `\r\n`. Apply this refinement to every header-bound string
+ * field: permissionsPolicy, csp, hsts, referrerPolicy.
+ */
+const headerSafeString = z
+  .string()
+  .refine((s) => !/[\r\n]/.test(s), { message: 'Header value must not contain CR/LF' })
+
 export const securityHeadersSchema = z.object({
-  csp: z.union([z.string(), z.literal(false)]).optional(),
+  csp: z.union([headerSafeString, z.literal(false)]).optional(),
   // T6.1 — default flipped from 'report-only' to 'enforce' for 0.3.0.
   // Users who want the old behaviour set `cspMode: 'report-only'`
   // explicitly. See docs/migrating/0.2-to-0.3.md.
   cspMode: z.enum(['enforce', 'report-only', 'off']).default('enforce'),
-  hsts: z.union([z.string(), z.literal(false)]).optional(),
+  hsts: z.union([headerSafeString, z.literal(false)]).optional(),
   frameOptions: z.enum(['DENY', 'SAMEORIGIN']).default('DENY'),
   contentTypeOptions: z.literal('nosniff').default('nosniff'),
-  referrerPolicy: z.string().default('strict-origin-when-cross-origin'),
+  referrerPolicy: headerSafeString.default('strict-origin-when-cross-origin'),
+  /**
+   * T1.1 — Permissions-Policy directive string. EC-3-refined: rejects CR/LF.
+   * Pass `false` to suppress the header.
+   */
+  permissionsPolicy: z.union([headerSafeString, z.literal(false)]).optional(),
 })
 
 /**
@@ -67,6 +108,38 @@ export const disallowedConfigSchema = z.object({
   behavior: z.enum(['warn', 'raise']).default('raise'),
 })
 
+/**
+ * T1.2 — CORS configuration.
+ *
+ * `origins` accepts a single value (`'*'`, string, RegExp, callback) OR an
+ * array of (string | RegExp). The spec-violating `origins: '*'` +
+ * `credentials: true` combination is rejected at parse time (browsers
+ * ignore wildcards when credentials are sent).
+ *
+ * EC-3 — `allowedHeaders` and `exposedHeaders` entries go through the
+ * header-safe refinement (CR/LF rejected — CWE-113 mitigation).
+ */
+export const corsSchema = z
+  .object({
+    origins: z.union([
+      z.literal('*'),
+      headerSafeString,
+      z.instanceof(RegExp),
+      z.array(z.union([headerSafeString, z.instanceof(RegExp)])),
+      z.function().args(z.string()).returns(z.boolean()),
+    ]),
+    methods: z
+      .array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD']))
+      .optional(),
+    allowedHeaders: z.array(headerSafeString).optional(),
+    exposedHeaders: z.array(headerSafeString).optional(),
+    credentials: z.boolean().default(false),
+    maxAge: z.number().int().min(0).max(86400).default(600),
+  })
+  .refine((c) => !(c.origins === '*' && c.credentials === true), {
+    message: 'CORS spec forbids origins:"*" with credentials:true — browsers ignore the wildcard',
+  })
+
 export const securitySchema = z.object({
   // T6.1 — default flipped from 'warn' to 'strict' for 0.3.0. Apps that
   // grep their warn-mode logs from 0.2.x already know which endpoints
@@ -76,6 +149,8 @@ export const securitySchema = z.object({
   headers: securityHeadersSchema.optional(),
   /** T5.1 — per-route escalation (Rails disallowed_warnings pattern). */
   disallowed: disallowedConfigSchema.optional(),
+  /** T1.2 — Cross-Origin Resource Sharing. Single global config; runs first in pipeline. */
+  cors: corsSchema.optional(),
 })
 
 export const theoConfigSchema = z.object({
@@ -103,6 +178,14 @@ export const theoConfigSchema = z.object({
       z.boolean(),
       z.object({ max: z.number().int().positive().optional() }),
     ])
+    .optional(),
+  /** T4.1 — Audit log. When `logger` is provided, framework events
+   * (csrf.warn, rate-limit.exceeded, session.rotated, csp.violation) are
+   * emitted to it. Default: noop. */
+  audit: z
+    .object({
+      logger: z.unknown().optional(),
+    })
     .optional(),
   /** TheoUI auto-wire (T2.1). `false` = opt-out; object = explicit theme/fonts;
    * undefined = enabled when @usetheo/ui is detected in node_modules. */

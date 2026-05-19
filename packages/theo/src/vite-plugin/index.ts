@@ -81,6 +81,10 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let csrfMode: 'off' | 'warn' | 'strict' = 'strict'
   let securityHeaders: import('../server/security-headers.js').SecurityHeadersConfig | undefined
   let disallowed: import('../server/csrf.js').DisallowedConfig | undefined
+  // T1.2 — CORS config resolved from theo.config.ts; passed to api-middleware.
+  let cors: import('../server/cors.js').CorsConfig | undefined
+  // T4.1 — Audit logger from theo.config.ts.audit.logger
+  let auditLogger: import('../server/audit-log.js').AuditLogger | undefined
   // T1.2 — devtools opt-out. `false` skips injection; anything else enables (dev only).
   let devtoolsEnabled = true
   // Dev mode flag set in configureServer. transformIndexHtml runs in both
@@ -117,6 +121,13 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         securityHeaders = userConfig.security?.headers as never
         // T5.1 — disallowedRoutes per-route escalation
         disallowed = userConfig.security?.disallowed as never
+        // T1.2 — CORS config
+        cors = userConfig.security?.cors as never
+        // T4.1 — Audit logger (when user provides one). Validate duck shape lazily.
+        const maybeLogger = (userConfig as { audit?: { logger?: unknown } }).audit?.logger
+        if (maybeLogger && typeof (maybeLogger as { log?: unknown }).log === 'function') {
+          auditLogger = maybeLogger as import('../server/audit-log.js').AuditLogger
+        }
         // T1.2 — devtools opt-out
         devtoolsEnabled = userConfig.devtools !== false
       } catch (err) {
@@ -273,6 +284,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
           csrfMode,
           securityHeaders,
           disallowed,
+          cors,
+          auditLogger,
         }),
       )
 

@@ -36,6 +36,11 @@ import type { ServerResponse } from 'node:http'
  *   - connect-src 'self' ws: wss:     — WebSocket dev HMR + agent streams
  *   - frame-ancestors 'none'          — clickjacking defense
  */
+/**
+ * T5.1 — default CSP includes the built-in report endpoint so violations
+ * are visible without extra config. Apps that ship a custom `csp` string
+ * override the report-uri.
+ */
 export const DEFAULT_CSP =
   "default-src 'self'; " +
   "script-src 'self'; " +
@@ -43,7 +48,24 @@ export const DEFAULT_CSP =
   "img-src 'self' data: blob:; " +
   "font-src 'self' data:; " +
   "connect-src 'self' ws: wss:; " +
-  "frame-ancestors 'none'"
+  "frame-ancestors 'none'; " +
+  "report-uri /__theo/csp-report"
+
+/**
+ * T1.1 — Default Permissions-Policy header (default-deny stance).
+ *
+ * Disables sensitive Web APIs that the vast majority of apps don't use.
+ * Apps that DO need any of these opt in by overriding `permissionsPolicy`
+ * in `config.security.headers`.
+ *
+ * The seven features listed are the most-abused for: tracking
+ * (geolocation, accelerometer, gyroscope), spyware (camera, microphone),
+ * fraud (payment), and hardware exfiltration (usb).
+ *
+ * Aligns with Mozilla baseline + OWASP Secure Headers + Lighthouse PWA.
+ */
+export const DEFAULT_PERMISSIONS_POLICY =
+  'geolocation=(), camera=(), microphone=(), payment=(), usb=(), accelerometer=(), gyroscope=()'
 
 export type CspMode = 'enforce' | 'report-only' | 'off'
 
@@ -70,6 +92,13 @@ export interface SecurityHeadersConfig {
   contentTypeOptions?: 'nosniff'
   /** Referrer-Policy. Default `strict-origin-when-cross-origin`. */
   referrerPolicy?: string
+  /**
+   * T1.1 — Permissions-Policy directive string. When set, replaces the
+   * default verbatim (no merge — see ADR-EC-12). Pass `false` to disable
+   * the header entirely. Schema-level refinement rejects any string
+   * containing CR/LF (EC-3 — CWE-113 HTTP Response Splitting mitigation).
+   */
+  permissionsPolicy?: string | false
 }
 
 export interface SecurityEnv {
@@ -157,6 +186,15 @@ export function buildSecurityHeaders(
 
   // Referrer-Policy
   out['Referrer-Policy'] = config.referrerPolicy ?? 'strict-origin-when-cross-origin'
+
+  // T1.1 — Permissions-Policy. Default-deny on geo/camera/mic/payment/usb;
+  // configurable via `permissionsPolicy`; suppressed via `permissionsPolicy: false`.
+  if (config.permissionsPolicy !== false) {
+    out['Permissions-Policy'] =
+      typeof config.permissionsPolicy === 'string'
+        ? config.permissionsPolicy
+        : DEFAULT_PERMISSIONS_POLICY
+  }
 
   // HSTS — production only, suppressible via hsts: false
   if (env.production && config.hsts !== false) {

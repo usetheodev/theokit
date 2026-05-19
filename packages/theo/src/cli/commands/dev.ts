@@ -16,9 +16,17 @@ export async function startDevServer(
   validateProjectStructure(cwd)
 
   const port = options?.port ?? config.port
+  // Narrow the rateLimit union: only the legacy flat shape (windowMs+max)
+  // flows into the theoPlugin's RateLimitConfig parameter. The per-route
+  // variant is consumed inside the api-middleware via the loaded user
+  // config separately.
+  const flatRateLimit =
+    config.rateLimit && 'windowMs' in config.rateLimit && 'max' in config.rateLimit
+      ? config.rateLimit
+      : undefined
   const server = await createServer({
     root: cwd,
-    plugins: [react(), theoPlugin({ root: cwd, rateLimit: config.rateLimit, ssr: config.ssr })],
+    plugins: [react(), theoPlugin({ root: cwd, rateLimit: flatRateLimit, ssr: config.ssr })],
     server: { port },
     logLevel: options?.port === 0 ? 'silent' : undefined,
   })

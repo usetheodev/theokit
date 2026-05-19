@@ -3,8 +3,10 @@ import {
   buildSecurityHeaders,
   applySecurityHeaders,
   DEFAULT_CSP,
+  DEFAULT_PERMISSIONS_POLICY,
   type SecurityHeadersConfig,
 } from '../../packages/theo/src/server/security-headers.js'
+import { securityHeadersSchema } from '../../packages/theo/src/config/schema.js'
 
 /**
  * Phase 6 — Default Security Headers (D4 / EC-2).
@@ -143,5 +145,62 @@ describe('applySecurityHeaders — integration with ServerResponse', () => {
     // Handler "overrides" later:
     res.setHeader('X-Frame-Options', 'SAMEORIGIN')
     expect(res.headers['X-Frame-Options']).toBe('SAMEORIGIN')
+  })
+})
+
+/**
+ * T1.1 — Permissions-Policy default-deny header.
+ *
+ * Defense-in-depth: declare which Web APIs the page is allowed to use.
+ * Default-deny stance: geolocation, camera, microphone, payment, usb,
+ * accelerometer, gyroscope all set to `()` (no allowlist).
+ *
+ * EC-3 — CWE-113 HTTP Response Splitting mitigation: the Zod schema
+ * refuses CR/LF in the header value.
+ */
+describe('T1.1 — Permissions-Policy header', () => {
+  function mockRes() {
+    const headers: Record<string, string> = {}
+    return {
+      headers,
+      setHeader(k: string, v: string) { headers[k] = v },
+    }
+  }
+
+  it('Given default SecurityHeadersConfig, Then response has Permissions-Policy header matching DEFAULT_PERMISSIONS_POLICY', () => {
+    const headers = buildSecurityHeaders({}, { production: false })
+    expect(headers['Permissions-Policy']).toBe(DEFAULT_PERMISSIONS_POLICY)
+  })
+
+  it('Given config.permissionsPolicy = "geolocation=(self)", Then response has that exact header value (override)', () => {
+    const headers = buildSecurityHeaders({ permissionsPolicy: 'geolocation=(self)' }, { production: false })
+    expect(headers['Permissions-Policy']).toBe('geolocation=(self)')
+  })
+
+  it('Given config.permissionsPolicy = false, Then NO Permissions-Policy header set', () => {
+    const headers = buildSecurityHeaders({ permissionsPolicy: false }, { production: false })
+    expect(headers['Permissions-Policy']).toBeUndefined()
+  })
+
+  it('Given securityHeadersSchema.parse({permissionsPolicy: "x=()"}), Then success; given .parse({permissionsPolicy: 123}), Then fail', () => {
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()' })).not.toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 123 })).toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: false })).not.toThrow()
+  })
+
+  it('EC-3: Given config.permissionsPolicy with CR or LF, Then schema.parse throws (CWE-113 HTTP Response Splitting mitigation)', () => {
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=(); \r\nX-Injected: yes' })).toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()\nY: bad' })).toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()\rZ: bad' })).toThrow()
+  })
+
+  it('applySecurityHeaders emits Permissions-Policy on the response', () => {
+    const res = mockRes()
+    applySecurityHeaders(res as never, {}, { production: false })
+    expect(res.headers['Permissions-Policy']).toBe(DEFAULT_PERMISSIONS_POLICY)
+  })
+
+  it('T5.1: default CSP contains report-uri /__theo/csp-report', () => {
+    expect(DEFAULT_CSP).toContain('report-uri /__theo/csp-report')
   })
 })
