@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/usetheodev/theokit/security/advisories/new
+    about: Report a security issue privately via GitHub Security Advisory. Do NOT open a public issue for security bugs.
+  - name: Discussion / question
+    url: https://github.com/usetheodev/theokit/discussions
+    about: Have a question, want feedback on an idea, or want to discuss design choices? Open a discussion instead of an issue.
