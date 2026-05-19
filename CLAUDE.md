@@ -161,9 +161,22 @@ These items widen the framework's reach but require strategic decisions before s
 - [ ] **`next/image`-equivalent** for image optimization (or explicit decision to stay out of that lane)
 - [ ] **`next/font`-equivalent** for self-hosted fonts (TheoUI ships bundled Geist today; this is the generic surface)
 - [ ] **Edge runtime adapter parity** — current adapters declare Vercel Edge / Cloudflare Workers / Deno Deploy, but the Web Standards shim has rough edges (no `Buffer` in Deno, native bindings in argon2 — already mitigated, but other surfaces TBD)
-- [ ] **Server Components (RSC) compatibility track** — open question whether TheoKit follows React core into RSC or stays on the client-component model. Either is defensible; need a decision before 1.0.
 - [ ] **Plugin ecosystem incubation** — `definePlugin` exists; we have 3 plugins. Real ecosystem growth needs a registry, docs site, and at least one community-authored plugin we proudly link.
 - [ ] **Production debugging story** — source maps in adapters, traceId correlation with downstream services (OpenTelemetry exporter? Sentry integration?), structured error pages with actionable hints.
+
+### Architectural decisions on record
+
+Decisions that are not "out of scope" (we might still adopt) but are **explicitly DEFERRED with named re-evaluation triggers**. Every entry links to the artifact that supports the decision so a future PR doesn't accidentally re-litigate without reading the prior research.
+
+- **Server Components (RSC) — DEFERRED past 1.0.** Decision recorded 2026-05-19 after a full prior-art audit of Next.js (canonical), Astro (server islands), TanStack Start (RSC opt-in via `@vitejs/plugin-rsc`), and SvelteKit (no equivalent).
+  - **Decision:** TheoKit stays **client-by-default**, aligned with TanStack Start's posture. Not Next.js's server-by-default posture.
+  - **Why now:** TheoKit's current bundle (193.90 KB gzipped, 45% under the 350 KB target) does not benefit from RSC's primary value proposition. Streaming SSR (Phase 3, `renderToPipeableStream` + `onShellReady`) already covers the Suspense-streaming use case. `defineRoute` + `theoFetch` already cover server-only data fetching with type safety. The RSC cost (1263 LOC just for the boundary plugin in Next.js, tight coupling to a moving `react-server-dom-webpack` target, TS can't structurally check directives so falls back to name heuristics) does not pay back for an agent-shaped app.
+  - **Re-evaluation triggers (all three required to revisit):**
+    1. `@vitejs/plugin-rsc` reaches v1 with public maintenance plan
+    2. Remix / React Router 7's RSC integration ships and is observable in production
+    3. Concrete user demand from shipped TheoKit apps with measured pain — bundle size or server-only data fetching as a binding constraint
+  - **If we do adopt later:** via `@vitejs/plugin-rsc` as an opt-in flag (TanStack pattern), NOT by re-implementing webpack-style flight plugins.
+  - **Artifact:** [`.claude/knowledge-base/reference/server-components-rsc.md`](.claude/knowledge-base/reference/server-components-rsc.md) — 704-line deep dive, 12 sections, file:line citations for every assertion. Anyone wanting to re-open this decision reads that doc first.
 
 ### Out of scope — intentionally
 
@@ -173,6 +186,7 @@ Items considered and rejected. **Do not move these into a milestone without a st
 - **A11y / i18n primitives baked into the framework.** Both are real, both are hard, both are well-served by external libraries. TheoUI handles a11y for its components; i18n is the consumer's choice.
 - **CSS-in-JS runtime.** TheoUI uses Tailwind; the consumer can adopt any CSS strategy on top. No runtime CSS in the framework core.
 - **Built-in agent orchestration.** TheoKit ships the *home* for an agent, not the agent itself. `examples/agent-saas` and the default template show how to wire an agent — they're patterns, not framework primitives. Agent orchestration belongs upstream in TheoKit-SDK / Mastra / Vercel AI SDK.
+- **Re-implementing RSC in-house.** Even if we adopt RSC eventually (see "Architectural decisions on record" above), we will integrate `@vitejs/plugin-rsc` rather than maintain a webpack-style flight plugin. The Next.js implementation is 1263 LOC for boundary detection alone — that's framework lock-in to Vercel's bundler choices, not an asset.
 
 ### How this roadmap stays honest
 
