@@ -140,15 +140,19 @@ Downstream impact:
 - Dogfood check #19 already validates `useAgentStream` is exported. No change needed.
 
 #### Deep Dives
-**Header attachment logic (algorithm):**
+**Header attachment logic (algorithm — EC-1 fix incorporated):**
 ```ts
 const method = (init.method ?? 'GET').toUpperCase()
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 if (!SAFE_METHODS.has(method)) {
-  init.headers = {
-    ...(init.headers as Record<string, string> | undefined),
-    'X-Theo-Action': '1',
-  }
+  // EC-1: Handle Headers instance (NOT plain object) — spread on Headers
+  // returns {} because pairs live in methods, not enumerable props. Without
+  // this, user's Authorization/X-Request-Id headers would be erased.
+  const userHeaders =
+    init.headers instanceof Headers
+      ? Object.fromEntries(init.headers)
+      : (init.headers as Record<string, string> | undefined) ?? {}
+  init.headers = { ...userHeaders, 'X-Theo-Action': '1' }
 }
 ```
 
@@ -156,10 +160,11 @@ if (!SAFE_METHODS.has(method)) {
 - GET/HEAD/OPTIONS requests MUST NOT carry the header (they're safe methods; CSRF policy skips them).
 - Non-safe methods MUST always carry the header.
 - User-provided `init.headers['X-Theo-Action']` (if explicitly set) MUST be preserved over the default `'1'`. Spread order matters: user's value goes last.
+- `Headers` instance MUST be normalized to plain object via `Object.fromEntries` BEFORE spread — otherwise user's headers vanish silently (EC-1).
 
 **Edge cases:**
 - User passes `init.method` in lowercase (`'post'`) — `.toUpperCase()` normalizes.
-- User uses Headers object instead of plain object — spread + assign supports both.
+- User uses `Headers` instance instead of plain object — `Object.fromEntries` normalizes (EC-1).
 - User sets `'X-Theo-Action': null` to explicitly suppress — spread preserves their `null`; framework `1` doesn't overwrite.
 
 #### Tasks
@@ -178,6 +183,8 @@ RED:     test_consumeAgentStream_attaches_X_Theo_Action_on_post() — Given a PO
 RED:     test_consumeAgentStream_skips_X_Theo_Action_on_get() — Given a GET call, When consumeAgentStream invokes fetch, Then headers DO NOT include 'X-Theo-Action'
 RED:     test_consumeAgentStream_preserves_user_X_Theo_Action() — Given init.headers carries 'X-Theo-Action': 'custom', Then it survives the merge (no overwrite by framework default '1')
 RED:     test_consumeAgentStream_attaches_on_lowercase_method() — Given init.method = 'post', Then header attached (method normalization works)
+RED:     test_consumeAgentStream_preserves_Headers_instance_pairs() — EC-1: Given init.headers = new Headers({ Authorization: 'Bearer x' }), When consumeAgentStream invokes fetch, Then BOTH 'X-Theo-Action': '1' AND 'Authorization': 'Bearer x' present in headers
+RED:     test_consumeAgentStream_lowercase_method_AND_Headers_instance() — EC-6: combine lowercase 'post' with Headers instance; both behaviors compose correctly
 RED:     playwright e2e: chat POST request carries X-Theo-Action header (assert via page.on('request'))
 RED:     playwright e2e: dev-server stdout has ZERO 'csrf.warn' lines during full chat session
 GREEN:   Implement header attachment in agent-stream-core.ts (≤ 10 LOC change)
@@ -248,12 +255,13 @@ packages/theo/src/server/csrf.ts — enforceCsrf uses warnOnce when in warn mode
 **Edge cases:**
 - Empty string key → still deduped (1 emit). Document as "anonymous warnings dedupe globally."
 - Process restart resets the Set. Each cold boot emits each warn once. Acceptable.
+- **EC-2:** Payload contains circular references (e.g., `{ err }` where `err.cause === err`) → `JSON.stringify` throws `TypeError`. Helper MUST try/catch with `String(...)` fallback so a single warn-emit doesn't crash the request handler.
 
 #### Tasks
-1. Add `warnOnce(key: string, payload: Record<string, unknown>): void` to `logger.ts`.
+1. Add `warnOnce(key: string, payload: Record<string, unknown>): void` to `logger.ts` with try/catch around `JSON.stringify` (EC-2).
 2. Wire `enforceCsrf` to use `warnOnce` (via the existing `CsrfLogger.warn` callback — provided by `executeRoute`).
 3. Update `executeRoute` in `execute.ts` to build the warn key.
-4. New test file `tests/unit/logger-warn-once.test.ts` (5 tests).
+4. New test file `tests/unit/logger-warn-once.test.ts` (6 tests including circular-ref guard).
 5. Existing `tests/integration/csrf-protection.test.ts` should still pass — the `warnSpy` mock receives `console.warn` calls; with `warnOnce` deduping, a single test (repeated POSTs) should only emit once. Update assertions accordingly.
 
 #### TDD + BDD (⛔ OBRIGATÓRIO — BLOQUEANTE)
@@ -264,6 +272,8 @@ RED:     test_warnOnce_dedupes_repeat_key() — Given same key called 5x, Then c
 RED:     test_warnOnce_distinct_keys_emit_separately() — Given keys 'a' and 'b', Then console.warn invoked twice
 RED:     test_warnOnce_payload_is_serialized_json() — Given payload {x:1}, Then console.warn receives JSON.stringify({x:1, warnOnce: true})
 RED:     test_warnOnce_empty_key_dedupes() — Given empty string key called 3x, Then console.warn once
+RED:     test_warnOnce_does_not_crash_on_circular_payload() — EC-2: Given payload with circular ref, When warnOnce called, Then console.warn invoked with fallback string (no throw, no crash)
+RED:     test_warnOnce_set_size_bounded_test() — EC-9: Given 10k unique keys, When all called, Then _warnOnceSeen.size === 10000 AND no memory error (sanity bound)
 RED:     csrf-protection integration: 3 sequential POSTs without header to same path produce ONE warn line (not 3)
 GREEN:   Implement warnOnce in logger.ts + wire into csrf.ts enforceCsrf
 REFACTOR: Extract structured key builder if pattern repeats
@@ -437,6 +447,9 @@ RED:     test_exit_code_1_on_high_violations() — Given dirty fixture, When run
 RED:     test_allow_warnings_flag_overrides_exit() — Given --allow-warnings, Then exit === 0 even with violations
 RED:     test_json_output_shape() — Given --json, Then stdout is parseable JSON with violations array
 RED:     test_skip_node_modules() — Given node_modules with fetch POST, Then NOT included in violations
+RED:     test_skip_fetch_calls_in_comments() — EC-7: Given source contains `// const x = fetch('/api/x', { method: 'POST' })`, When scan, Then NO violation reported (basic comment-line filter)
+RED:     test_skip_fetch_calls_in_string_literals() — EC-7: Given source has fetch as a string `const example = "fetch(\\"/api/x\\", { method: \\"POST\\" })"`, Then NO violation (best-effort skip)
+RED:     test_empty_project_dir_exits_zero() — EC-8: Given directory with only package.json (no app/, no server/), When run, Then exit 0 + status='no-project-detected' (no crash)
 GREEN:   Implement upgrade-readiness.ts + CLI wiring + fixtures
 REFACTOR: Extract rule definitions to a registry for future-additions
 VERIFY:  npx vitest run tests/unit/cli-upgrade-readiness.test.ts
@@ -509,6 +522,10 @@ tests/unit/migration-guide-shape.test.ts — (NEW) Markdown linter test assertin
 6. **Gotchas** — list of 9 edge cases from `enforcement-cutover.md` §8
 7. **FAQ** — 5-8 common questions
 8. **Rollback** — how to revert if the upgrade goes wrong
+9. **Known limitations** — explicit list of documented edge cases:
+   - **EC-13:** `docsUrl` field in `csrf.warn` payload points to `https://theokit.dev/upgrade/csrf-strict-cutover` which 404s until docs site ships in 0.4.0 — fallback is reading this file directly at `docs/migrating/0.2-to-0.3.md`.
+   - **EC-14:** `disallowedRoutes` exact-string match treats `/api/login` and `/api/login/` as DIFFERENT paths. Use RegExp for trailing-slash tolerance: `/^\/api\/login\/?$/`.
+   - **EC-17:** This document carries `version: 0.3.0-beta.0` in its frontmatter; if you're reading a cached version, check the GitHub source for the latest.
 
 **Code-snippet conventions:**
 - All diff blocks use `diff` fenced code with `-`/`+` prefixes
@@ -623,16 +640,21 @@ const scriptDirective = nonce
 **Edge cases:**
 - Adapter context (Bun, Deno, Vercel Edge) without Node `crypto` — use Web Crypto API: `globalThis.crypto.getRandomValues(new Uint8Array(16))` + base64 encode.
 - Request with no SSR (API-only route) — no nonce needed. Don't generate (waste).
-- Streaming SSR with `renderToPipeableStream` — nonce generated ONCE per request, before stream open.
+- Streaming SSR with `renderToPipeableStream` — nonce generated ONCE per request, before stream open. **Must pass nonce via `renderToPipeableStream({ nonce })` so React's own emitted script tags carry it (EC-12).**
+- **EC-3 (CRITICAL): CDN caching collision.** Any deploy with CDN cache (Vercel, Cloudflare, CloudFront) will cache the HTML with one nonce embedded, but generate a fresh CSP header per request. Hit #2 = cached HTML with stale nonce + new CSP header → browser blocks every script on the page. Silent prod-only failure. **Mitigation:** when `nonce` is generated, framework MUST force `Cache-Control: private, no-store` on the response. Users who want CDN caching must opt out of nonce (e.g., env var or config flag for static-nonce mode).
+- **EC-4 (CRITICAL): Prerendered routes have build-time nonce baked in.** `theokit build` with prerender generates static HTML with a nonce embedded at build time. Runtime CSP header generates a fresh nonce per request → mismatch → scripts blocked. **Mitigation:** prerendered routes MUST use `'unsafe-inline'` fallback (no nonce), not the strict nonce path. Detect via `ctx.isPrerender` flag set by the build pipeline; skip nonce generation for those routes.
 
 #### Tasks
 1. Implement `nonce.ts` with both Node and Web Crypto paths.
 2. Add `scriptDirective` + `styleDirective` to schema.
 3. Update `applySecurityHeaders` to accept a `nonce` param.
 4. Generate nonce in `execute.ts` (or earlier in the pipeline).
-5. Thread to `entry-server.ts` (only for SSR routes).
-6. Update Playwright spec to assert nonce match.
-7. Write unit tests.
+5. **EC-3:** When nonce is set on response, ALSO set `Cache-Control: private, no-store`. Add explicit assertion in security-headers helper.
+6. **EC-4:** Detect `ctx.isPrerender` and skip nonce generation; emit `'unsafe-inline'` fallback for prerendered routes. Document the trade-off in migration guide.
+7. Thread nonce to `entry-server.ts` (only for SSR routes, NOT prerendered).
+8. Pass `nonce` to `renderToPipeableStream({ nonce })` so React's own emitted scripts (Suspense boundaries, etc.) carry it (EC-12).
+9. Update Playwright spec to assert nonce match AND `Cache-Control: private, no-store` present.
+10. Write unit tests including circular ref guard for prerender path.
 
 #### TDD + BDD (⛔ OBRIGATÓRIO — BLOQUEANTE)
 
@@ -644,8 +666,13 @@ RED:     test_csp_omits_nonce_when_no_ssr() — Given no nonce param, Then CSP u
 RED:     test_entry_server_emits_script_with_nonce() — Given ctx.nonce='abc', When entry-server emits hydration data, Then HTML contains <script nonce="abc">
 RED:     test_per_request_nonce_changes() — Given 2 requests, Then nonces differ (sample 10 requests)
 RED:     test_edge_runtime_uses_webcrypto() — Given globalThis.crypto only (no node:crypto), Then nonce generated correctly
+RED:     test_nonce_forces_no_store_cache_control() — EC-3: Given nonce generated for request, Then response has Cache-Control: private, no-store
+RED:     test_prerender_skips_nonce_generation() — EC-4: Given ctx.isPrerender === true, Then no nonce in HTML AND CSP uses 'unsafe-inline' fallback
+RED:     test_renderToPipeableStream_receives_nonce() — EC-12: Given SSR request, When entry-server calls renderToPipeableStream, Then nonce option is passed (React emits its own scripts with the nonce attribute)
 RED:     playwright e2e: assert response Content-Security-Policy contains the same nonce as <script nonce="..."> in HTML body
-GREEN:   Implement nonce generation + thread through SSR + CSP wiring
+RED:     playwright e2e: assert response has Cache-Control: private, no-store when nonce is used
+RED:     playwright e2e: count <script> tags AND assert ALL have nonce attribute (no naked script tags from React internals)
+GREEN:   Implement nonce generation + thread through SSR + CSP wiring + Cache-Control gate + prerender detection
 REFACTOR: Extract nonce-context plumbing to a small helper if it sprawls
 VERIFY:  npx vitest run tests/unit/nonce.test.ts tests/unit/security-headers-nonce.test.ts && npx playwright test --project=template-default
 ```
@@ -662,6 +689,9 @@ BDD scenarios:
 - [ ] CSP `script-src` includes the nonce when SSR is active
 - [ ] `<script>` tags emitted by framework carry the same nonce
 - [ ] Playwright spec asserts nonce match between header and HTML
+- [ ] **EC-3:** When nonce is generated, response has `Cache-Control: private, no-store`
+- [ ] **EC-4:** Prerendered routes skip nonce path (verified via build-mode fixture)
+- [ ] **EC-12:** React-emitted scripts (Suspense boundaries) also carry the nonce (via `renderToPipeableStream({ nonce })`)
 - [ ] Edge runtime path uses Web Crypto fallback
 - [ ] `scriptDirective` + `styleDirective` fields in schema
 - [ ] Pass: `npx tsc --noEmit`
@@ -706,12 +736,18 @@ tests/integration/csrf-protection.test.ts — Add tests for the new dispatch pat
 - `executeRoute` already passes `csrfMode` as the 11th arg — add a 12th arg `disallowedConfig`.
 
 #### Deep Dives
-**Matcher algorithm:**
+**Matcher algorithm (EC-5 fix incorporated):**
 ```ts
 function matchDisallowed(path: string, patterns: Array<string | RegExp>): boolean {
   return patterns.some(p => {
     if (typeof p === 'string') return path === p
-    if (p instanceof RegExp) return p.test(path)
+    if (p instanceof RegExp) {
+      // EC-5: Reset lastIndex BEFORE .test() — RegExp with /g flag is stateful;
+      // .test() mutates lastIndex, causing intermittent miss on the next call
+      // with the same path. Resetting makes the matcher pure-function.
+      p.lastIndex = 0
+      return p.test(path)
+    }
     return false
   })
 }
@@ -759,6 +795,7 @@ RED:     test_disallowed_warn_behavior_does_not_escalate() — Given mode='warn'
 RED:     test_undefined_disallowed_passes_through() — Given no disallowed config, Then enforceCsrf behaves identically to current
 RED:     test_disallowed_with_trailing_slash_mismatch() — Given route='/api/login', path='/api/login/', Then no match (exact string semantics documented)
 RED:     test_disallowed_RegExp_handles_trailing_slash_tolerance() — Given route=/^\/api\/login\/?$/, path='/api/login/', Then match
+RED:     test_disallowed_RegExp_with_global_flag_is_stateless() — EC-5: Given route=/^\/api\/admin\/.*/g (global flag), When matched against same path 3x in a row, Then all 3 match (lastIndex reset behavior)
 RED:     integration test: POST to disallowed route returns 403 even in warn mode
 GREEN:   Implement matchDisallowed + dispatch + wire through middleware
 REFACTOR: Extract matcher to its own module if it grows past 1 function
@@ -939,6 +976,7 @@ pnpm-workspace.yaml — Add the 4 fixtures to workspace
 **Edge cases:**
 - Postgres test on CI without PG → skip cleanly (not fail).
 - Auth flow in saas: use the demo creds from `examples/agent-saas`.
+- **EC-11:** Port collision (3461-3464). If dev machine has another service on those ports, all 4 Playwright specs fail simultaneously. Document in `CONTRIBUTING.md` (T7.3) — override via env var `PLAYWRIGHT_TEMPLATE_BASE_PORT=4000` or kill the conflicting process.
 
 #### Tasks
 1. Create 4 fixture directories (copy from templates, adjust deps).
@@ -1026,6 +1064,8 @@ RED:     test_script_under_budget_exits_zero() — Given mocked file size 200KB 
 RED:     test_script_over_budget_exits_one() — Given mocked file size 400KB, Then exit 1
 RED:     test_script_no_build_output_exits_two() — Given no build artifacts, Then exit 2 with error message
 RED:     test_dogfood_check_49_present() — Given scripts/dogfood-smoke.sh, Then contains 'bundle budget'
+RED:     test_picks_largest_when_multiple_index_files() — EC-10: Given .theo/client/assets/index-A.js (300KB) AND index-B.js (100KB), Then reports 300KB (largest), NOT the sum
+RED:     test_uses_zlib_not_gzip_command() — EC-10b: Implementation MUST use Node zlib (cross-platform), NOT shell `gzip` command (not on all CI runners)
 GREEN:   Write script + dogfood wiring + CI workflow update
 REFACTOR: None expected
 VERIFY:  bash scripts/check-bundle-budget.sh && bash scripts/dogfood-smoke.sh
@@ -1077,7 +1117,7 @@ CODE_OF_CONDUCT.md — (NEW) Standard Contributor Covenant
 
 **Bug report template fields:** TheoKit version, repro repo, expected vs actual, logs, output of `theokit info`.
 
-**Security advisory process:** Email `security@usetheo.dev` (or GitHub Private Advisory) before public disclosure. 90-day embargo.
+**Security advisory process:** **Primary channel: GitHub Private Security Advisory** (works without DNS setup). Secondary: email `security@usetheo.dev` IF MX records are configured. EC-15: `SECURITY.md` MUST list GitHub Advisory first; email second with a "may not be monitored if MX not yet configured" note.
 
 #### Tasks
 1. Write each file using standard open-source patterns.
@@ -1187,6 +1227,7 @@ BDD scenarios:
 - [ ] `npm install theokit` still gets 0.2.x
 - [ ] Pinned issue exists
 - [ ] One announcement made
+- [ ] **EC-16 human gate:** Release engineer verifies the 7-day window includes ≥ 3 working days (not all weekend/holiday). If holiday-impacted, extend window by the impacted days; don't shorten.
 
 #### DoD
 - [ ] Packages live on npm
@@ -1291,6 +1332,22 @@ Manual additional steps:
 4. Pre-existing issues are logged but do NOT block plan completion.
 
 ---
+
+## Edge Case Review Incorporated
+
+This plan was passed through `/edge-case-plan` review (2026-05-19) — full report at [`docs/reviews/edge-cases/theokit-0.3.0-cutover-execution-edge-cases.md`](../reviews/edge-cases/theokit-0.3.0-cutover-execution-edge-cases.md).
+
+17 edge cases identified (5 MUST FIX, 7 SHOULD TEST, 5 DOCUMENT) — **all 5 MUST FIX items incorporated into the plan above**:
+
+| EC | Severity | Task | Fix incorporated |
+|---|---|---|---|
+| EC-1 | MUST FIX | T1.1 | `Headers` instance normalized via `Object.fromEntries` before spread (algorithm block + invariants + new RED test) |
+| EC-2 | MUST FIX | T2.1 | `JSON.stringify` wrapped in try/catch with `String(...)` fallback (algorithm + tasks + new RED test) |
+| EC-3 | MUST FIX | T4.1 | When nonce generated, response MUST carry `Cache-Control: private, no-store` (new task + invariant + RED test + AC + Playwright) |
+| EC-4 | MUST FIX | T4.1 | Prerendered routes skip nonce path, use `'unsafe-inline'` fallback (new task + invariant + RED test + AC) |
+| EC-5 | MUST FIX | T5.1 | `RegExp.lastIndex = 0` before `.test()` to make matcher stateless for `/g`-flag regexes (algorithm block + new RED test) |
+
+7 SHOULD TEST items added as additional RED tests in the relevant tasks (EC-6 through EC-12). 5 DOCUMENT items added to migration guide (T3.1) + SECURITY.md (T7.3) + T8.1 DoD.
 
 ## Coverage Matrix
 
