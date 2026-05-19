@@ -133,15 +133,54 @@ What ships in this version is everything the `nextjs-maturity` plan closed. The 
 - [ ] **Open: migration guide** for the two opt-in cutovers (CSRF warn→strict, CSP report-only→enforce)
 - [ ] **Open: README banner** announcing 0.2.0 with the bundle / security baseline / agent-surface story
 
-### 0.3.0 — Enforcement cutover (next minor)
+### 0.3.0 — Enforcement cutover (HIGH RISK — most dangerous release on the roadmap)
 
-After a release of warn-mode telemetry, the framework flips from "loud about gaps" to "blocks the gaps."
+**Criticality: ALTA.** This is not a flag flip. It is the most dangerous release on the roadmap because it (a) fails silently — no compile error, no test fail, only runtime breakage in production, (b) hits sensitive flows (login, auth, forms) users may not re-test on every bump, (c) breaks every app with inline scripts (gtag, intercom, sentry, Plausible), and (d) **breaks our own default scaffold's chat demo** if shipped as-is (`useAgentStream` uses native fetch and does not yet send `X-Theo-Action: 1`).
 
-- [ ] Flip default `config.security.csrf` from `'warn'` to `'strict'` — POST without `X-Theo-Action: 1` returns 403 `CSRF_INVALID`
+**Do not ship this minor without all the pre-requisites below cleared.** Estimated wall-clock: **2–3 sprints of prep work + 4–6 weeks of warn-mode telemetry in production from 0.2.0** before the flip ships.
+
+#### Sub-criticality by component
+
+| Change | Criticality | Why it hurts |
+|---|---|---|
+| Flip `config.security.csrf` from `'warn'` to `'strict'` | **High** | Every POST/PUT/PATCH/DELETE without `X-Theo-Action: 1` returns 403 `CSRF_INVALID`. `theoFetch` auto-attaches, but custom fetchers, raw `<form>` posts, third-party clients, and curl-based integrations all break. |
+| Flip `config.security.headers.cspMode` from `'report-only'` to `'enforce'` | **Critical** | Every inline script without a nonce is blocked. Apps with analytics (gtag, Plausible), widgets (intercom, sentry), or any `<script>` block in user-authored HTML stops working. CSP violation reports are silent in many browsers — users discover the breakage hours/days later. |
+| Drop `'unsafe-inline'` from default CSP | **Critical** | This is the change that actually breaks third-party inline scripts. Without it, "enforce" is cosmetic. With it, **the SSR hydration data script the framework itself emits is blocked** unless the per-request nonce mechanism is wired correctly. |
+| Add per-request nonce for the SSR hydration data script | **High implementation risk** | Framework-internal change touching every SSR `<script>` emission site. If the wiring has any bug, **every SSR app breaks**, not just apps with custom inline scripts. This is the change that re-introduces Phase 1's hydration-bug surface area. |
+
+#### Pre-requisites — ALL must clear before flipping
+
+1. **One full release of warn-mode telemetry in production** (4–6 weeks minimum after `0.2.0` publishes). Users need time to grep `csrf.warn` lines in their logs and refactor before the flip removes the safety net.
+2. **`useAgentStream` updated to send `X-Theo-Action: 1`** on every non-GET request. **This blocks 0.3.0 unconditionally** — the default scaffold's chat demo emits a `csrf.warn` on every send today (visible in the Playwright spec output). If we flip without fixing this, `npm create theokit my-app && pnpm dev && send a message` returns 403. Embarrassing on day one.
+3. **Migration guide written** with grep-able audit commands (`grep '"event":"csrf.warn"' logs.json | jq '.path' | sort -u` to enumerate every endpoint that will start failing). Currently the roadmap lists this as "open: migration guide for 0.2.0" — must ship as part of 0.2.x patches, not bundled into 0.3.0.
+4. **Per-request nonce machinery implemented and validated** — without it, dropping `'unsafe-inline'` breaks the framework's own SSR. Two options: (a) implement nonce wiring end-to-end (SSR HTML emission threads a nonce through every `<script>` site, request-scoped), or (b) keep `'unsafe-inline'` for scripts and call the flip "cosmetic enforce" with the gap documented. Option (a) is the right call; option (b) is the punt.
+5. **`theokit check --upgrade-readiness 0.3` command** that scans the user's app and reports anticipated breakage before they bump. Static analysis of route handlers, inline-script detection in `app/**`, lint-style report. ~ 2–3 days to implement.
+6. **Beta gate.** Ship `0.3.0-beta.0` to `next` tag first; gather feedback for at least one week; only then promote to `latest`.
+
+#### Tasks in execution order
+
+- [ ] Fix `useAgentStream` to attach `X-Theo-Action: 1` on every non-GET — **blocks everything else** (30 min of work)
+- [ ] Write the 0.2.x migration guide (audit commands + checklist) — ship as part of the next 0.2.x patch
+- [ ] Implement per-request nonce mechanism — SSR HTML emitter threads `ctx.nonce` through every `<script>` site, the `__staticRouterHydrationData` script carries it, Phase 6 CSP builder accepts the nonce per request — 1–2 days, high risk
+- [ ] Add Playwright regression that asserts `<script>` nonce equals the CSP `nonce-...` value on every SSR page — pins the wiring
+- [ ] Add `theokit check --upgrade-readiness 0.3` static analysis command — 2–3 days
+- [ ] Wait 4–6 weeks of warn-mode telemetry in production after 0.2.0 publishes
+- [ ] Flip default `config.security.csrf` from `'warn'` to `'strict'`
 - [ ] Flip default `config.security.headers.cspMode` from `'report-only'` to `'enforce'`
-- [ ] Tighten default CSP — drop `'unsafe-inline'` for scripts, add per-request nonce for the SSR hydration data script
-- [ ] Migration guide expanded with grep-able stderr signal (`csrf.warn` lines) so users can audit before bumping
-- [ ] CHANGELOG `[Unreleased]` includes a **BREAKING** banner — every dependency consumer needs to know
+- [ ] Drop `'unsafe-inline'` from default CSP for scripts (only safe after nonce machinery is solid)
+- [ ] Ship `theokit@0.3.0-beta.0` under `next` npm tag for one-week feedback window
+- [ ] Promote to `latest` only if zero CRITICAL bug reports from beta
+- [ ] CHANGELOG `[Unreleased]` carries a **BREAKING** banner — header style, not buried in a bullet
+
+#### Risks if shipped prematurely
+
+| Scenario | Likelihood | Impact |
+|---|---|---|
+| User with custom auth flow (no `theoFetch`) — login starts returning 403 | High | Total signup/login blockage until config rollback |
+| App with gtag / intercom / Plausible breaks silently | Critical | Analytics die; user discovers days later when checking dashboards |
+| SSR hydration nonce wiring has an edge case bug | Medium | Hydration mismatch returns — the exact bug class Phase 1 fixed |
+| User doesn't read `csrf.warn` logs, upgrades, prod breaks | High | Trust in the framework is shaken — first-impression failure |
+| Our own scaffold default's chat demo returns 403 on first send | Critical | Day-one embarrassment, propagates as "TheoKit doesn't work" social proof |
 
 ### 0.4.0 — Coverage gaps before "production-ready" without ressalvas
 
