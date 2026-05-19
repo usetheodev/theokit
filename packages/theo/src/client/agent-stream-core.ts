@@ -43,6 +43,10 @@ export function parseSSEChunk(line: string): AgentEvent | null {
  * POSTs to `path` with `body`, reads the SSE response, and invokes
  * `onEvent` for each parsed AgentEvent. Resolves when the server
  * closes the stream or the signal aborts.
+ *
+ * T1.1 — Attaches `X-Theo-Action: '1'` so 0.3.0 strict CSRF mode accepts
+ * the request. The user can override (or suppress) by passing the header
+ * in `options.headers` — spread order ensures their value wins.
  */
 export async function consumeAgentStream<TBody = unknown>(
   path: string,
@@ -54,6 +58,7 @@ export async function consumeAgentStream<TBody = unknown>(
     headers: {
       'content-type': 'application/json',
       accept: 'text/event-stream',
+      'X-Theo-Action': '1',
       ...options.headers,
     },
     body: JSON.stringify(options.body),

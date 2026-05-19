@@ -190,6 +190,77 @@ describe('consumeAgentStream (T5.2 primitive)', () => {
     })
     expect(captured).toHaveLength(0)
   })
+
+  // ===== T1.1 — Phase 1 BLOCKING fix: attach X-Theo-Action: 1 =====
+  // The default scaffold's chat demo emits csrf.warn on every send because
+  // consumeAgentStream doesn't attach the framework's CSRF-defense header.
+  // Without this, 0.3.0 strict-mode would return 403 on every chat send.
+
+  it('attaches X-Theo-Action: 1 on the POST fetch (T1.1)', async () => {
+    let capturedHeaders: HeadersInit | undefined
+    const fetchSpy: typeof fetch = async (_input, init) => {
+      capturedHeaders = init?.headers
+      return new Response(streamFrom([encodeSSE([])]), {
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }
+    await consumeAgentStream('/api/chat', {
+      body: { message: 'x' },
+      fetch: fetchSpy,
+      onEvent: () => {},
+    })
+    expect(capturedHeaders).toBeDefined()
+    // Accept either lowercase or pascal-case — fetch normalizes
+    const h = capturedHeaders as Record<string, string>
+    const hasHeader = h['x-theo-action'] === '1' || h['X-Theo-Action'] === '1'
+    expect(hasHeader).toBe(true)
+  })
+
+  it('preserves user-supplied X-Theo-Action value (no overwrite by framework default)', async () => {
+    let capturedHeaders: Record<string, string> | undefined
+    const fetchSpy: typeof fetch = async (_input, init) => {
+      capturedHeaders = init?.headers as Record<string, string>
+      return new Response(streamFrom([encodeSSE([])]), {
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }
+    await consumeAgentStream('/api/chat', {
+      body: {},
+      fetch: fetchSpy,
+      onEvent: () => {},
+      headers: { 'X-Theo-Action': 'custom' },
+    })
+    // User override survives — spread order puts user.headers last
+    const value = capturedHeaders?.['X-Theo-Action'] ?? capturedHeaders?.['x-theo-action']
+    expect(value).toBe('custom')
+  })
+
+  it('preserves user-supplied Authorization/Content-Type when framework adds X-Theo-Action', async () => {
+    let capturedHeaders: Record<string, string> | undefined
+    const fetchSpy: typeof fetch = async (_input, init) => {
+      capturedHeaders = init?.headers as Record<string, string>
+      return new Response(streamFrom([encodeSSE([])]), {
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    }
+    await consumeAgentStream('/api/chat', {
+      body: {},
+      fetch: fetchSpy,
+      onEvent: () => {},
+      headers: {
+        Authorization: 'Bearer abc',
+        'X-Request-Id': 'req-123',
+      },
+    })
+    // EC-1: framework default MUST NOT erase user headers
+    expect(capturedHeaders?.['Authorization']).toBe('Bearer abc')
+    expect(capturedHeaders?.['X-Request-Id']).toBe('req-123')
+    // AND the framework header is still present
+    const hasCsrf =
+      capturedHeaders?.['x-theo-action'] === '1' ||
+      capturedHeaders?.['X-Theo-Action'] === '1'
+    expect(hasCsrf).toBe(true)
+  })
 })
 
 describe('useAgentStream source — architectural checks (EC-3)', () => {
