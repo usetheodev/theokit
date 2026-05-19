@@ -18,6 +18,8 @@ import { resolveTransformer, type TheoTransformer } from '../server/transformer.
 import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
 import { resolveTheoRootDir } from './resolve-theo-root.js'
 import { injectEntryClient } from './inject-entry-client.js'
+import { generateNonce } from '../server/nonce.js'
+import { applySecurityHeaders } from '../server/security-headers.js'
 
 export {
   defineTheoIntegration,
@@ -226,8 +228,23 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
             let template = readFileSync(indexPath, 'utf-8')
             template = await server.transformIndexHtml(url, template)
 
+            // T4.1 — Generate a per-request nonce and apply security
+            // headers BEFORE we render. The same nonce flows into React's
+            // `renderToPipeableStream({ nonce })` so every emitted
+            // <script> carries it AND into the CSP script-src directive.
+            // EC-3: applySecurityHeaders also forces Cache-Control:
+            // private, no-store so CDNs don't reserve the HTML with a
+            // stale nonce.
+            const nonce = generateNonce()
+            applySecurityHeaders(
+              res,
+              securityHeaders ?? {},
+              { production: process.env.NODE_ENV === 'production' },
+              { nonce },
+            )
+
             const mod = await server.ssrLoadModule(VIRTUAL_ENTRY_SERVER_ID)
-            const result = await mod.render(url)
+            const result = await mod.render(url, { nonce })
 
             if (result && typeof result === 'object' && 'redirect' in result) {
               res.writeHead(302, { Location: (result.redirect as Response).headers.get('location') ?? '/' })
