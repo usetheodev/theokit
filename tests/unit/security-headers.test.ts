@@ -16,10 +16,11 @@ import {
  *   - X-Content-Type-Options: nosniff
  *   - Referrer-Policy: strict-origin-when-cross-origin
  *
- * EC-2 amendment: default `cspMode = 'report-only'` for 0.2.0 so existing
- * apps with inline `<script>` tags or third-party CDN scripts keep
- * working. 0.3.0 will flip to `'enforce'` after a release of visibility
- * via report-only violations.
+ * EC-2 amendment: default `cspMode` was `'report-only'` in 0.2.0 so
+ * existing apps with inline `<script>` tags or third-party CDN scripts
+ * keep working. T6.1 (0.3.0) flips the default to `'enforce'` after a
+ * release of visibility via report-only violations. Apps that need the
+ * legacy posture opt in explicitly with `cspMode: 'report-only'`.
  *
  * `security.headers.csp = false` opts out entirely.
  * `security.headers.csp = <string>` overrides the policy verbatim.
@@ -27,10 +28,12 @@ import {
  */
 
 describe('buildSecurityHeaders — defaults', () => {
-  it('Given no config + dev env, When building, Then returns CSP-Report-Only + X-Frame + nosniff + Referrer-Policy', () => {
+  // T6.1 — 0.3.0 default is `cspMode: 'enforce'`. Apps wanting the
+  // legacy 'report-only' posture set `cspMode: 'report-only'` explicitly.
+  it('Given no config + dev env (0.3.0 default), When building, Then returns enforce-mode CSP + X-Frame + nosniff + Referrer-Policy', () => {
     const headers = buildSecurityHeaders({}, { production: false })
-    expect(headers['Content-Security-Policy-Report-Only']).toBeDefined()
-    expect(headers['Content-Security-Policy']).toBeUndefined()
+    expect(headers['Content-Security-Policy']).toBeDefined()
+    expect(headers['Content-Security-Policy-Report-Only']).toBeUndefined()
     expect(headers['X-Frame-Options']).toBe('DENY')
     expect(headers['X-Content-Type-Options']).toBe('nosniff')
     expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin')
@@ -77,10 +80,10 @@ describe('buildSecurityHeaders — cspMode', () => {
     expect(headers['Content-Security-Policy-Report-Only']).toBeUndefined()
   })
 
-  it('Given a custom csp string, When building, Then uses it verbatim', () => {
+  it('Given a custom csp string (0.3.0 default enforce mode), When building, Then uses it verbatim in enforce header', () => {
     const custom = "default-src 'self'; script-src 'self' https://cdn.example.com"
     const headers = buildSecurityHeaders({ csp: custom }, { production: false })
-    expect(headers['Content-Security-Policy-Report-Only']).toBe(custom)
+    expect(headers['Content-Security-Policy']).toBe(custom)
   })
 })
 
@@ -115,11 +118,11 @@ describe('applySecurityHeaders — integration with ServerResponse', () => {
     }
   }
 
-  it('Given a response, When applied, Then setHeader is called for each header value', () => {
+  it('Given a response (0.3.0 default enforce mode), When applied, Then setHeader is called for each header value', () => {
     const res = mockRes()
     applySecurityHeaders(res as never, {}, { production: false })
     expect(res.headers['X-Frame-Options']).toBe('DENY')
-    expect(res.headers['Content-Security-Policy-Report-Only']).toBeDefined()
+    expect(res.headers['Content-Security-Policy']).toBeDefined()
   })
 
   it('Given cspMode = "off", When applied, Then no CSP header is set', () => {

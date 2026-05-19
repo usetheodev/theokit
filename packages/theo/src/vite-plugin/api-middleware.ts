@@ -48,7 +48,8 @@ export function createApiMiddleware(
   const pluginRunner = opts.pluginRunner
   const transformer = opts.transformer
   const batching = opts.batching
-  const csrfMode = opts.csrfMode ?? 'warn'
+  // T6.1 — default flipped from 'warn' to 'strict' for 0.3.0.
+  const csrfMode = opts.csrfMode ?? 'strict'
   const disallowed = opts.disallowed
   const securityHeadersConfig = opts.securityHeaders ?? {}
   const securityEnv = { production: process.env.NODE_ENV === 'production' }

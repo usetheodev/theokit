@@ -72,7 +72,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let transformer: TheoTransformer | undefined
   let resolvedBatching: { max?: number } | undefined
   let theoUi: TheoUiDetectResult | undefined
-  let csrfMode: 'off' | 'warn' | 'strict' = 'warn'
+  let csrfMode: 'off' | 'warn' | 'strict' = 'strict'
   let securityHeaders: import('../server/security-headers.js').SecurityHeadersConfig | undefined
   let disallowed: import('../server/csrf.js').DisallowedConfig | undefined
   let configLoadedOnce = false
@@ -100,7 +100,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         // T2.1 — detect TheoUI presence + resolve config
         theoUi = detectTheoUi(projectRoot, userConfig.ui as never)
         // Phase 5 — CSRF warn-first (EC-1)
-        csrfMode = (userConfig.security?.csrf ?? 'warn') as 'off' | 'warn' | 'strict'
+        // T6.1 — default flipped from 'warn' to 'strict' for 0.3.0.
+        csrfMode = (userConfig.security?.csrf ?? 'strict') as 'off' | 'warn' | 'strict'
         // Phase 6 — Default security headers (D4 / EC-2)
         securityHeaders = userConfig.security?.headers as never
         // T5.1 — disallowedRoutes per-route escalation

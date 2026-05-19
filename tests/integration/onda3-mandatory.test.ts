@@ -34,7 +34,8 @@ describe('Onda 3 — Backend Routes', () => {
   it('POST /api/users with valid body returns 201', async () => {
     const res = await fetch(`http://localhost:${port}/api/users`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // T6.1 — 0.3.0 default csrf is 'strict'; X-Theo-Action required.
+      headers: { 'Content-Type': 'application/json', 'X-Theo-Action': '1' },
       body: JSON.stringify({ name: 'Paulo', email: 'paulo@example.com' }),
     })
     expect(res.status).toBe(201)
@@ -47,7 +48,7 @@ describe('Onda 3 — Backend Routes', () => {
   it('POST /api/users with invalid body returns 400 structured error', async () => {
     const res = await fetch(`http://localhost:${port}/api/users`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Theo-Action': '1' },
       body: JSON.stringify({ name: 'Paulo', email: 'not-an-email' }),
     })
     expect(res.status).toBe(400)

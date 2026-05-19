@@ -17,10 +17,17 @@ import type { ServerResponse } from 'node:http'
  * Default Content-Security-Policy. Conservative-but-not-paralyzing:
  *
  *   - default-src 'self'              — every fetch falls back to same-origin
- *   - script-src 'self' 'unsafe-inline' — allows the inline hydration data
- *                                         script the framework emits during
- *                                         SSR. 0.3.0 will tighten this with
- *                                         a per-request nonce.
+ *   - script-src 'self'               — T6.1 (0.3.0): `'unsafe-inline'`
+ *                                         dropped. The SSR pipeline issues a
+ *                                         per-request nonce that REPLACES
+ *                                         this directive at runtime
+ *                                         (`'nonce-<token>'`). For static /
+ *                                         non-SSR contexts where no nonce is
+ *                                         available, the policy is strict-
+ *                                         no-inline — user inline scripts
+ *                                         must be migrated to external
+ *                                         `<script src="...">` or threaded
+ *                                         through `ctx.nonce`.
  *   - style-src 'self' 'unsafe-inline' — Tailwind + TheoUI use style attrs
  *                                         in animation directives
  *   - img-src 'self' data: blob:      — supports inline data URIs, blobs
@@ -31,7 +38,7 @@ import type { ServerResponse } from 'node:http'
  */
 export const DEFAULT_CSP =
   "default-src 'self'; " +
-  "script-src 'self' 'unsafe-inline'; " +
+  "script-src 'self'; " +
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob:; " +
   "font-src 'self' data:; " +
@@ -125,15 +132,16 @@ export function buildSecurityHeaders(
   // CSP — handle the four shapes:
   //   csp: false             → opt out
   //   cspMode: 'off'         → opt out
-  //   cspMode: 'enforce'     → Content-Security-Policy
-  //   cspMode: 'report-only' (default) → Content-Security-Policy-Report-Only
+  //   cspMode: 'enforce' (T6.1 default for 0.3.0) → Content-Security-Policy
+  //   cspMode: 'report-only' (legacy 0.2.x) → Content-Security-Policy-Report-Only
   const cspDisabled = config.csp === false || config.cspMode === 'off'
   if (!cspDisabled) {
     let policy = typeof config.csp === 'string' ? config.csp : DEFAULT_CSP
     if (effectiveNonce) {
       policy = applyNonceToCsp(policy, effectiveNonce)
     }
-    const mode: CspMode = config.cspMode ?? 'report-only'
+    // T6.1 — default flipped from 'report-only' to 'enforce' for 0.3.0.
+    const mode: CspMode = config.cspMode ?? 'enforce'
     if (mode === 'enforce') {
       out['Content-Security-Policy'] = policy
     } else {

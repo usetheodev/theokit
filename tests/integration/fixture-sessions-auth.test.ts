@@ -68,7 +68,10 @@ describe('T3.1 — sessions-auth integration (HTTP)', () => {
   it('POST /api/login sets a session cookie', async () => {
     const res = await fetch(`http://localhost:${port}/api/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      // T6.1 — 0.3.0 default csrf is 'strict'; POST without X-Theo-Action
+      // returns 403. Real clients use theoFetch which attaches this header
+      // automatically; here we set it explicitly.
+      headers: { 'content-type': 'application/json', 'X-Theo-Action': '1' },
       body: JSON.stringify({ username: 'alice', password: 'demo' }),
     })
     expect(res.status).toBe(200)
@@ -79,7 +82,7 @@ describe('T3.1 — sessions-auth integration (HTTP)', () => {
   it('GET /api/me returns 200 with valid session cookie', async () => {
     const login = await fetch(`http://localhost:${port}/api/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'X-Theo-Action': '1' },
       body: JSON.stringify({ username: 'alice', password: 'demo' }),
     })
     const cookie = login.headers.get('set-cookie')?.split(';')[0] ?? ''

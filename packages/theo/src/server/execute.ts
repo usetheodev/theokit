@@ -127,7 +127,7 @@ export async function executeRoute(
   requestId?: string,
   pluginRunner?: PluginRunner,
   transformer?: TheoTransformer,
-  csrfMode: CsrfMode = 'warn',
+  csrfMode: CsrfMode = 'strict',
   disallowed?: DisallowedConfig,
 ): Promise<void> {
   const buildPluginCtx = (ctxObj: Record<string, unknown>): PluginContext => ({
