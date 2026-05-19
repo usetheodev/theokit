@@ -23,11 +23,33 @@ export interface CsrfLogger {
   path?: string
 }
 
+/**
+ * T2.2 — Stable cutover identifier shipped with every csrf.warn payload.
+ *
+ * Convention borrowed from Vite's `deprecations.ts:74` — a `code` plus a
+ * `docsUrl` lets users (a) grep their logs for a single stable identifier
+ * to find every csrf.warn line, and (b) click through directly to the
+ * migration guide. Strings are exported constants so the analyzer (T2.3)
+ * and migration guide can reference the same source of truth.
+ */
+export const CSRF_WARN_CODE = 'CSRF_STRICT_CUTOVER' as const
+export const CSRF_WARN_DOCS_URL = 'https://theokit.dev/upgrade/csrf-strict-cutover' as const
+
 export interface CsrfWarnPayload {
   event: 'csrf.warn'
   method: string
   path: string | undefined
   reason: string
+  /**
+   * Stable identifier for the 0.2 → 0.3 CSRF strict cutover. Always
+   * `'CSRF_STRICT_CUTOVER'`. Grep-able from prod logs.
+   */
+  code: string
+  /**
+   * Link to the section of the migration guide explaining how to clear
+   * this specific warning class.
+   */
+  docsUrl: string
 }
 
 export function validateCsrf(
@@ -90,11 +112,15 @@ export function enforceCsrf(
   if (mode === 'warn') {
     // T2.1: emit via warnOnce by default — callers can override via the
     // injected logger.warn (tests, custom log routers).
+    // T2.2: include the stable cutover code + docsUrl so logs are
+    // grep-able and click-through-able.
     logger?.warn({
       event: 'csrf.warn',
       method: req.method ?? 'UNKNOWN',
       path: logger.path,
       reason: check.reason,
+      code: CSRF_WARN_CODE,
+      docsUrl: CSRF_WARN_DOCS_URL,
     })
     return { allow: true, reason: check.reason }
   }
