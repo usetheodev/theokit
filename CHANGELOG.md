@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Validated (nextjs-maturity plan — Phase 11 final dogfood QA, 2026-05-19)
+- **`docs/reviews/nextjs-maturity-phase11-final-dogfood-2026-05-19.md`** — full Phase 11 closure report. Verdict: **APPROVED.** Plan ready for the release engineer to bump theokit to `0.2.0`.
+- Validation chain executed: tsc 0 errors · vitest sequential **1333/1333 PASS** · Playwright **21/21 PASS** · dogfood-smoke **47/47 PASS (Health 100%)** · prod build bundle **193.90 KB gzipped** (45% under the 350 KB target) · 10 consecutive prod SSR requests with **0 React pipe-twice errors** · combined Phase 5+6+7 live curl honoring `traceparent` → `x-trace-id: 32-hex` plus security headers plus CSRF warn line, all in one request.
+- 12/16 plan tasks closed (75%). Two follow-ups remain non-blocking: T10.2 agent-saas full-flow Playwright needs a Postgres instance; specs for the four non-default templates share the fixture pattern and can be added at any time.
+- All four edge cases from the review resolved (EC-1 CSRF warn-first, EC-2 CSP report-only, EC-3 matchRoutes safeguard + timeout, EC-4 hash-wasm).
+- All 10 original-audit gaps closed (entry-client auto-inject, pipe-once, code-split, CSRF, security headers, traceId, Argon2id, 6 hydration regressions, real-browser tests on default, bundle budget).
+
 ### Changed (Argon2id password hashing — Phase 8 T8.1 / EC-4, 2026-05-18)
 - **`examples/agent-saas` upgrades password hashing from PBKDF2 to Argon2id** via [hash-wasm](https://github.com/Daninet/hash-wasm). Pure WebAssembly — no native build step, works on Alpine and Vercel Edge (EC-4 amendment: chose hash-wasm over `@node-rs/argon2` precisely to avoid runtime portability issues). OWASP 2023 interactive parameters baked in: memory 19 MiB, iterations 2, parallelism 1.
 - **Transparent migration** — `verifyPassword` routes by hash prefix. Legacy `pbkdf2$...` hashes still verify, and on success the function returns `{ ok: true, rehashAs: '<fresh argon2id$ hash>' }`. The login handler in `routes/login.ts` writes the new hash back to the user row, so each existing user upgrades on their next login without a downtime migration.
