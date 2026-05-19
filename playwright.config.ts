@@ -39,6 +39,11 @@ export default defineConfig({
       use: { baseURL: 'http://localhost:3460' },
       testMatch: 'template-default.spec.ts',
     },
+    {
+      name: 'devtools',
+      use: { baseURL: 'http://localhost:3461' },
+      testMatch: 'devtools.spec.ts',
+    },
   ],
   webServer: [
     {
@@ -73,6 +78,15 @@ export default defineConfig({
       command: `npx tsx ${cliPath} dev --port 3460`,
       cwd: fixture('template-default'),
       port: 3460,
+      reuseExistingServer: false,
+      timeout: 60000,
+    },
+    {
+      // T1.3 — devtools project. Reuses template-default fixture on a
+      // separate port so the existing template-default spec is unaffected.
+      command: `npx tsx ${cliPath} dev --port 3461`,
+      cwd: fixture('template-default'),
+      port: 3461,
       reuseExistingServer: false,
       timeout: 60000,
     },

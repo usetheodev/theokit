@@ -18,8 +18,14 @@ import { resolveTransformer, type TheoTransformer } from '../server/transformer.
 import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
 import { resolveTheoRootDir } from './resolve-theo-root.js'
 import { injectEntryClient } from './inject-entry-client.js'
+import {
+  DEVTOOLS_RESOLVED_ID,
+  DEVTOOLS_VIRTUAL_ID,
+  injectDevtoolsScript,
+} from './inject-devtools.js'
 import { generateNonce } from '../server/nonce.js'
 import { applySecurityHeaders } from '../server/security-headers.js'
+import { broadcastRouteManifest } from '../devtools/server-side/route-manifest.js'
 
 export {
   defineTheoIntegration,
@@ -75,6 +81,11 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let csrfMode: 'off' | 'warn' | 'strict' = 'strict'
   let securityHeaders: import('../server/security-headers.js').SecurityHeadersConfig | undefined
   let disallowed: import('../server/csrf.js').DisallowedConfig | undefined
+  // T1.2 — devtools opt-out. `false` skips injection; anything else enables (dev only).
+  let devtoolsEnabled = true
+  // Dev mode flag set in configureServer. transformIndexHtml runs in both
+  // dev and build; we only want to inject during dev.
+  let isDevMode = false
   let configLoadedOnce = false
 
   return {
@@ -106,6 +117,8 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         securityHeaders = userConfig.security?.headers as never
         // T5.1 — disallowedRoutes per-route escalation
         disallowed = userConfig.security?.disallowed as never
+        // T1.2 — devtools opt-out
+        devtoolsEnabled = userConfig.devtools !== false
       } catch (err) {
         // Config load errors are surfaced elsewhere (validate-structure).
         // Plugin runner remains undefined; middlewares run without hooks.
@@ -128,6 +141,12 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
             { find: 'theokit/vite-plugin', replacement: resolve(theoSrcDir, `vite-plugin/index${ext}`) },
             { find: 'theokit/adapters/web-shim', replacement: resolve(theoSrcDir, `adapters/web-shim${ext}`) },
             { find: 'theokit/adapters/ws-shim', replacement: resolve(theoSrcDir, `adapters/ws-shim${ext}`) },
+            // T1.2 — devtools entry (DEV only; tree-shaken in build because
+            // the script tag is never injected by inject-devtools.ts in build mode)
+            {
+              find: 'theokit/devtools/entry',
+              replacement: resolve(theoSrcDir, `devtools/entry${ext === '.ts' ? '.tsx' : '.js'}`),
+            },
             { find: 'theokit', replacement: resolve(theoSrcDir, `index${ext}`) },
           ],
         },
@@ -142,11 +161,20 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
     transformIndexHtml: {
       order: 'pre' as const,
       handler(html: string): string {
-        const result = injectEntryClient(html)
-        if (result.warning) {
-          console.warn(result.warning)
-        }
-        return result.html
+        // 1. entry-client (always)
+        const entry = injectEntryClient(html)
+        if (entry.warning) console.warn(entry.warning)
+        let next = entry.html
+
+        // 2. devtools (dev only, respecting config.devtools = false)
+        const devtools = injectDevtoolsScript(next, {
+          isDev: isDevMode,
+          enabled: devtoolsEnabled,
+        })
+        if (devtools.warning) console.warn(devtools.warning)
+        next = devtools.html
+
+        return next
       },
     },
 
@@ -155,6 +183,9 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
       if (id === VIRTUAL_MANIFEST_ID) return RESOLVED_MANIFEST_ID
       if (id === VIRTUAL_ENTRY_SERVER_ID) return RESOLVED_ENTRY_SERVER_ID
       if (id === VIRTUAL_RUNTIME_CONFIG_ID) return RESOLVED_RUNTIME_CONFIG_ID
+      // T1.2 — devtools virtual module. Only resolves in dev; build mode
+      // never serves it because transformIndexHtml never injects the tag.
+      if (id === DEVTOOLS_VIRTUAL_ID) return DEVTOOLS_RESOLVED_ID
     },
 
     load(id: string) {
@@ -167,6 +198,9 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
       }
       if (id === RESOLVED_MANIFEST_ID) {
         const tree = scanRoutes(appDir)
+        // T3.1 — also broadcast a devtools-shaped manifest to the overlay
+        // (no-op in prod / when no dev server is attached).
+        broadcastRouteManifest(tree)
         return generateRouteManifest(tree)
       }
       if (id === RESOLVED_ENTRY_SERVER_ID) {
@@ -190,9 +224,43 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
           `export const TRANSFORMER_NAME = ${JSON.stringify(tName)}`,
         ].join('\n')
       }
+      if (id === DEVTOOLS_RESOLVED_ID) {
+        // T1.2 — virtual module re-exports the real entry from theokit's devtools subpath.
+        // The actual mount logic lives in packages/theo/src/devtools/entry.tsx;
+        // we just emit a tiny shim that imports it (Vite's resolver finds the
+        // file via the `theokit` package alias set up in `config()` above).
+        return [
+          `// Theo devtools — virtual entry (DEV only)`,
+          `import('theokit/devtools/entry').catch((e) => console.error('[theo devtools] mount failed', e))`,
+        ].join('\n')
+      }
     },
 
     configureServer(server) {
+      // T1.2 — mark dev mode so transformIndexHtml injects devtools script
+      // and resolveId/load serve the virtual module. Build mode never calls
+      // configureServer, so isDevMode stays false and injection is skipped.
+      isDevMode = true
+
+      // T2.4 — expose dev server WS to server-side broadcast helper
+      // (so server modules can push events to the devtools UI without a
+      // hard dependency on Vite). Cleared on server.close.
+      ;(globalThis as { __theoViteHotServer?: typeof server }).__theoViteHotServer = server
+
+      // T3.1 — re-broadcast the route manifest when the devtools bridge
+      // asks. The initial broadcast happens during `load()` for the
+      // manifest virtual module — that fires BEFORE the bridge subscribes.
+      // The bridge sends 'theo:devtools:request-manifest' right after
+      // subscribing; we reply with a fresh broadcast.
+      server.ws.on('theo:devtools:request-manifest', () => {
+        try {
+          const tree = scanRoutes(appDir)
+          broadcastRouteManifest(tree)
+        } catch {
+          /* fail silently — dev-only convenience */
+        }
+      })
+
       // Server middleware (action before API — more specific prefix first)
       const serverDir = resolve(projectRoot, 'server')
       server.middlewares.use(createActionMiddleware(server, serverDir, { pluginRunner }))
@@ -327,6 +395,11 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
           console.warn('[Theo] WebSocket routes found but "ws" package not installed. Run: npm install ws')
         })
       }
+
+      // T2.4 — clear devtools WS reference on shutdown
+      server.httpServer?.once('close', () => {
+        ;(globalThis as { __theoViteHotServer?: unknown }).__theoViteHotServer = undefined
+      })
     },
   }
 }

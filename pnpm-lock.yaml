@@ -133,6 +133,24 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  examples/devtools-demo:
+    dependencies:
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+      react-router:
+        specifier: ^7.0.0
+        version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      theokit:
+        specifier: workspace:*
+        version: link:../../packages/theo
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+
   fixtures/template-default:
     dependencies:
       '@usetheo/ui':
@@ -233,6 +251,9 @@ importers:
       cac:
         specifier: ^6.7.14
         version: 6.7.14
+      goober:
+        specifier: ^2.1.16
+        version: 2.1.19(csstype@3.2.3)
       react:
         specifier: ^19.0.0
         version: 19.2.6
@@ -2123,6 +2144,11 @@ packages:
   globby@11.1.0:
     resolution: {integrity: sha512-jhIXaOzy1sb8IyocaruWSn1TjmnBVs8Ayhcy83rmxNJ8q2uWKCAj3CnJY+KpGSXCueAPc0i05kVvVKtP1t9S3g==}
     engines: {node: '>=10'}
+
+  goober@2.1.19:
+    resolution: {integrity: sha512-U7veizMqxyKlM58+Z5j2ngJBH/r9siDmxpvNxSw0PylF6WQvrASJEZrxh1hidRBJc2jqoBVSyOban5u8m+6Rxg==}
+    peerDependencies:
+      csstype: ^3.0.10
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
@@ -4742,6 +4768,10 @@ snapshots:
       ignore: 5.3.2
       merge2: 1.4.1
       slash: 3.0.0
+
+  goober@2.1.19(csstype@3.2.3):
+    dependencies:
+      csstype: 3.2.3
 
   graceful-fs@4.2.11: {}
 

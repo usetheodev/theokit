@@ -185,6 +185,16 @@ export function enforceCsrf(
     return { allow: true, reason: check.reason }
   }
 
-  // strict
+  // strict — 403 the request, AND emit a warn payload so the dev (and
+  // devtools UI) sees WHY it was blocked + the docsUrl to fix it.
+  // Without this, strict-mode users get a silent 403 with no context.
+  logger?.warn({
+    event: 'csrf.warn',
+    method: req.method ?? 'UNKNOWN',
+    path: logger?.path ?? '',
+    reason: check.reason,
+    code: CSRF_WARN_CODE,
+    docsUrl: CSRF_WARN_DOCS_URL,
+  })
   return { allow: false, reason: check.reason }
 }

@@ -121,6 +121,49 @@ export function warnOnce(key: string, payload: Record<string, unknown>): void {
     line = `[warnOnce] ${key} — (payload could not be serialized)`
   }
   console.warn(line)
+
+  // T2.1 — also broadcast to devtools (no-op in prod / when no dev server).
+  // Imported lazily to keep logger.ts dependency-free for non-dev contexts;
+  // broadcastToDevtools internally guards on globalThis.__theoViteHotServer.
+  broadcastWarnOnceToDevtools(key, payload)
+}
+
+/**
+ * T2.1 — Forward a warnOnce payload to the devtools UI. Recognizes the
+ * canonical CSRF warn shape and dispatches as 'csrf.warn'; otherwise
+ * falls back to a generic 'error' broadcast.
+ *
+ * No-op when:
+ *  - globalThis.__theoViteHotServer is undefined (prod / no dev server)
+ *  - any error occurs (default-deny via broadcastToDevtools' try/catch)
+ */
+function broadcastWarnOnceToDevtools(key: string, payload: Record<string, unknown>): void {
+  try {
+    // Lazy require to avoid pulling devtools chunks into non-dev builds.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    void key
+    void import('../devtools/server-side/broadcast.js').then(({ broadcastCsrfWarn, broadcastError }) => {
+      if (payload.event === 'csrf.warn' && typeof payload.code === 'string' && typeof payload.docsUrl === 'string') {
+        broadcastCsrfWarn({
+          event: 'csrf.warn',
+          code: payload.code,
+          docsUrl: payload.docsUrl,
+          method: String(payload.method ?? ''),
+          path: String(payload.path ?? ''),
+          reason: String(payload.reason ?? ''),
+        })
+      } else {
+        broadcastError({
+          id: `warn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          type: 'console',
+          message: String(payload.event ?? key),
+          timestamp: Date.now(),
+        })
+      }
+    }).catch(() => {})
+  } catch {
+    /* default-deny */
+  }
 }
 
 // --- Backward compat ---
@@ -152,4 +195,29 @@ export function logRequest(
   }
   const logger = customLogger ?? defaultLoggerFn
   logger(log)
+  // T2.1 — also broadcast to devtools (no-op in prod / when no dev server).
+  broadcastRequestToDevtools(info)
+}
+
+/**
+ * T2.1 — Forward a request record to the devtools UI. Lazy import keeps
+ * logger.ts dep-free for prod; broadcast.ts internally guards on
+ * globalThis.__theoViteHotServer.
+ */
+function broadcastRequestToDevtools(info: Omit<RequestLog, 'level' | 'timestamp'>): void {
+  try {
+    void import('../devtools/server-side/broadcast.js').then(({ broadcastRequest }) => {
+      broadcastRequest({
+        id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        traceId: info.requestId,
+        method: info.method,
+        path: info.url,
+        status: info.status,
+        durationMs: info.duration,
+        startedAt: Date.now() - info.duration,
+      })
+    }).catch(() => {})
+  } catch {
+    /* default-deny */
+  }
 }

@@ -115,6 +115,25 @@ export const theoConfigSchema = z.object({
       }),
     ])
     .optional(),
+  /**
+   * Devtools overlay (Phase 0.4.0+ — see docs/plans/devtools-plan.md).
+   *
+   * - `undefined` (default): devtools auto-injects in `pnpm dev`, NEVER in `vite build`.
+   * - `false`: devtools disabled entirely (Vite plugin skips injection even in dev).
+   * - `{ ... }`: devtools enabled with explicit defaults (position, theme).
+   *
+   * Tree-shaken to noop in prod via the dual-export pattern in
+   * `packages/theo/src/devtools/index.ts` (EC-17 positive prod check).
+   */
+  devtools: z
+    .union([
+      z.literal(false),
+      z.object({
+        position: z.enum(['top-left', 'top-right', 'bottom-left', 'bottom-right']).optional(),
+        theme: z.enum(['light', 'dark', 'system']).optional(),
+      }),
+    ])
+    .optional(),
 })
 
 export type TheoConfig = z.infer<typeof theoConfigSchema>
