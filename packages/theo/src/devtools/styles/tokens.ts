@@ -157,6 +157,7 @@ export function statusColor(s: number): string {
 }
 
 export function methodColor(method: string): string {
-  const key = method.toUpperCase() as keyof typeof tokens.colors.method
-  return tokens.colors.method[key] ?? tokens.colors.status.unknown
+  const key = method.toUpperCase()
+  const palette = tokens.colors.method as Record<string, string | undefined>
+  return palette[key] ?? tokens.colors.status.unknown
 }

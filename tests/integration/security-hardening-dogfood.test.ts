@@ -6,7 +6,6 @@ import { Readable } from 'node:stream'
 import {
   applySecurityHeaders,
   DEFAULT_PERMISSIONS_POLICY,
-  DEFAULT_CSP,
 } from '../../packages/theo/src/server/security-headers.js'
 import { createCorsHandler } from '../../packages/theo/src/server/cors.js'
 import { createRouteRateLimiter } from '../../packages/theo/src/server/rate-limit-per-route.js'
@@ -14,12 +13,23 @@ import { enforceCsrf } from '../../packages/theo/src/server/csrf.js'
 import { createSessionManager, rotateIfNeeded } from '../../packages/theo/src/server/session.js'
 import { handleCspReport, CSP_REPORT_PATH } from '../../packages/theo/src/server/csp-report.js'
 import { checkThrottle, recordAttempt } from '../../packages/theo/src/server/auth-throttle.js'
-import { generateTotp, verifyTotp, generateTotpSecret } from '../../packages/theo/src/server/auth-totp.js'
-import { generateBackupCodes, verifyBackupCode } from '../../packages/theo/src/server/auth-backup-codes.js'
+import {
+  generateTotp,
+  verifyTotp,
+  generateTotpSecret,
+} from '../../packages/theo/src/server/auth-totp.js'
+import {
+  generateBackupCodes,
+  verifyBackupCode,
+} from '../../packages/theo/src/server/auth-backup-codes.js'
 import { generatePkceChallenge } from '../../packages/theo/src/server/oauth-pkce.js'
 import { generateOAuthState, verifyOAuthState } from '../../packages/theo/src/server/oauth-state.js'
 import { InMemoryStore } from '../../packages/theo/src/server/rate-limit-store.js'
-import { safeAudit, type AuditEvent, type AuditLogger } from '../../packages/theo/src/server/audit-log.js'
+import {
+  safeAudit,
+  type AuditEvent,
+  type AuditLogger,
+} from '../../packages/theo/src/server/audit-log.js'
 
 /**
  * Security-hardening DOGFOOD — composed end-to-end exercise of every
@@ -31,9 +41,15 @@ import { safeAudit, type AuditEvent, type AuditLogger } from '../../packages/the
 
 function recordingLogger() {
   const events: AuditEvent[] = []
-  const logger: AuditLogger = { log(e) { events.push(e) } }
+  const logger: AuditLogger = {
+    log(e) {
+      events.push(e)
+    },
+  }
   return { logger, events }
 }
+
+type HeaderValue = string | string[] | undefined
 
 function mockRes() {
   // Headers stored case-preserving (matches Node http.ServerResponse semantics
@@ -43,19 +59,27 @@ function mockRes() {
   let statusCode = 200
   let ended = false
   return {
-    get statusCode() { return statusCode },
-    set statusCode(v: number) { statusCode = v },
-    getHeader: (n: string) => {
-      // Case-insensitive lookup
+    get statusCode() {
+      return statusCode
+    },
+    set statusCode(v: number) {
+      statusCode = v
+    },
+    // eslint-disable-next-line sonarjs/function-return-type -- Node's `res.getHeader` REQUIRES the `string | string[] | undefined` union
+    getHeader: (n: string): HeaderValue => {
       const key = Object.keys(headers).find((k) => k.toLowerCase() === n.toLowerCase())
-      return key ? headers[key] : undefined
+      return key === undefined ? undefined : headers[key]
     },
     setHeader: (n: string, v: string | string[]) => {
       // Honour the caller's casing
       headers[n] = v
     },
-    end: () => { ended = true },
-    get ended() { return ended },
+    end: () => {
+      ended = true
+    },
+    get ended() {
+      return ended
+    },
     headers,
   } as unknown as ServerResponse & { headers: Record<string, string | string[]>; ended: boolean }
 }
@@ -65,7 +89,7 @@ function extractCookieValue(res: ServerResponse, name: string): string | undefin
   // and walk the array variants.
   const raw = res.getHeader('set-cookie') as string | string[] | undefined
   if (!raw) return undefined
-  const list = Array.isArray(raw) ? raw : [String(raw)]
+  const list = Array.isArray(raw) ? raw : [raw]
   for (const cookie of list) {
     if (cookie.startsWith(`${name}=`)) {
       return decodeURIComponent(cookie.split(';')[0].split('=').slice(1).join('='))
@@ -82,7 +106,9 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
     const res = mockRes()
     applySecurityHeaders(res as never, {}, { production: false })
     expect(res.getHeader('Permissions-Policy')).toBe(DEFAULT_PERMISSIONS_POLICY)
-    expect(String(res.getHeader('Content-Security-Policy'))).toContain('report-uri /__theo/csp-report')
+    expect(String(res.getHeader('Content-Security-Policy'))).toContain(
+      'report-uri /__theo/csp-report',
+    )
     expect(res.getHeader('X-Frame-Options')).toBe('DENY')
   })
 
@@ -93,7 +119,8 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
     const { logger, events } = recordingLogger()
     const req = { method: 'POST', headers: { host: 'localhost' } } as IncomingMessage
     const csrfLogger = {
-      warn: (p: unknown) => safeAudit(logger, { action: 'csrf.warn', metadata: p as Record<string, unknown> }),
+      warn: (p: unknown) =>
+        safeAudit(logger, { action: 'csrf.warn', metadata: p as Record<string, unknown> }),
       path: '/api/test',
     }
     const result = enforceCsrf(req, 'strict', csrfLogger)
@@ -112,7 +139,8 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
       routes: { '/api/login': { windowMs: 60_000, max: 3 } },
     })
     const ip = '1.2.3.4'
-    const mkReq = (url: string) => ({ url, headers: {}, socket: { remoteAddress: ip } } as unknown as IncomingMessage)
+    const mkReq = (url: string) =>
+      ({ url, headers: {}, socket: { remoteAddress: ip } }) as unknown as IncomingMessage
 
     for (let i = 0; i < 3; i++) {
       expect(limiter(mkReq('/api/login')).limited).toBe(false)
@@ -120,7 +148,11 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
     const locked = limiter(mkReq('/api/login'))
     expect(locked.limited).toBe(true)
     if (locked.limited) {
-      safeAudit(logger, { action: 'rate-limit.exceeded', actor: { type: 'anonymous', id: ip }, metadata: { path: '/api/login' } })
+      safeAudit(logger, {
+        action: 'rate-limit.exceeded',
+        actor: { type: 'anonymous', id: ip },
+        metadata: { path: '/api/login' },
+      })
     }
     // Other paths still loose
     expect(limiter(mkReq('/api/users')).limited).toBe(false)
@@ -145,7 +177,9 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
     const reqStream = Readable.from([Buffer.from(body)]) as unknown as IncomingMessage
     ;(reqStream as unknown as { method?: string }).method = 'POST'
     ;(reqStream as unknown as { url?: string }).url = CSP_REPORT_PATH
-    ;(reqStream as unknown as { headers?: Record<string, string> }).headers = { 'content-type': 'application/csp-report' }
+    ;(reqStream as unknown as { headers?: Record<string, string> }).headers = {
+      'content-type': 'application/csp-report',
+    }
     const res = mockRes()
     await handleCspReport(reqStream, res as never, {
       auditLogger: { log: audit },
@@ -165,7 +199,9 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
     const NEW = 'new-secret-' + 'x'.repeat(32)
     const OLD = 'old-secret-' + 'y'.repeat(32)
 
-    interface S { userId: string }
+    interface S {
+      userId: string
+    }
     const legacyMgr = createSessionManager<S>({ secret: OLD })
     const legacyRes = mockRes()
     await legacyMgr.createSession(legacyRes as never, { userId: 'u1' })
@@ -174,7 +210,9 @@ describe('Security-hardening dogfood — composed end-to-end', () => {
 
     // Operator rotates: [NEW, OLD]
     const rotated = createSessionManager<S>({ secret: [NEW, OLD] })
-    const req = { headers: { cookie: `theo_session=${encodeURIComponent(legacyCookie)}` } } as IncomingMessage
+    const req = {
+      headers: { cookie: `theo_session=${encodeURIComponent(legacyCookie)}` },
+    } as IncomingMessage
     const res = mockRes()
     const data = await rotateIfNeeded(rotated, req, res as never)
     expect(data).toEqual({ userId: 'u1' })

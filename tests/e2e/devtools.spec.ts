@@ -11,18 +11,16 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 test.describe('T1.3 — Devtools shell (Phase 1)', () => {
   test('chip is visible within 2 seconds of page load', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
 
     // Wait for entry.tsx to finish mounting the portal custom element.
-    await page.waitForFunction(
-      () => !!document.querySelector('theo-devtools-portal'),
-      undefined,
-      { timeout: 2000 },
-    )
+    await page.waitForFunction(() => !!document.querySelector('theo-devtools-portal'), undefined, {
+      timeout: 2000,
+    })
 
     // Pierce shadow root to find the chip button. Playwright supports `>>>` for shadow piercing.
     const chip = page.locator('theo-devtools-portal >>> button[aria-label="Open devtools"]')
@@ -72,7 +70,9 @@ test.describe('T1.3 — Devtools shell (Phase 1)', () => {
     // wait for mount
     await page.waitForFunction(() => !!document.querySelector('theo-devtools-portal'))
     const wrapperPos = await page.evaluate(() => {
-      const wrapper = document.querySelector('script[data-theo-devtools]') as HTMLScriptElement | null
+      const wrapper = document.querySelector(
+        'script[data-theo-devtools]',
+      ) as HTMLScriptElement | null
       return wrapper ? wrapper.style.position : null
     })
     expect(wrapperPos).toBe('absolute')
@@ -83,7 +83,7 @@ test.describe('T1.3 — Devtools shell (Phase 1)', () => {
 // Playwright's `>>>` shadow combinator only pierces ONE shadow root; the
 // follow-up segment can't combine with `:has-text`. Click via evaluate
 // inside the shadow root to keep selectors simple.
-async function openPanelAndTab(page: import('@playwright/test').Page, tab: string) {
+async function openPanelAndTab(page: Page, tab: string) {
   await page.waitForFunction(() => !!document.querySelector('theo-devtools-portal'))
   const chip = page.locator('theo-devtools-portal >>> button[aria-label="Open devtools"]')
   await chip.click()
@@ -103,7 +103,10 @@ test.describe('T4.4 — devtools end-to-end (Phase 2/3/4)', () => {
     await page.evaluate(() => {
       try {
         localStorage.clear()
-      } catch {}
+      } catch {
+        // localStorage may throw in private mode or sandboxed contexts;
+        // a missing clear is fine — the test reload below resets the page.
+      }
     })
     await page.reload({ waitUntil: 'domcontentloaded' })
     await page.waitForFunction(() => !!document.querySelector('theo-devtools-portal'))
@@ -220,9 +223,7 @@ test.describe('T4.4 — devtools end-to-end (Phase 2/3/4)', () => {
     expect(emptyText.toLowerCase()).toContain('no requests yet')
 
     // Trigger a fetch from the page
-    await page.evaluate(() =>
-      fetch('/api/__theo/health').catch(() => null),
-    )
+    await page.evaluate(() => fetch('/api/__theo/health').catch(() => null))
     // Give HMR + dispatcher + reducer time to render
     await page.waitForTimeout(500)
 

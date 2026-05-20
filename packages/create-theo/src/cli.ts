@@ -1,7 +1,9 @@
 import { resolve } from 'node:path'
-import { scaffold } from './index.js'
-import { detectPkgManager } from './pkg-manager.js'
+
 import { runInstall } from './install.js'
+import { detectPkgManager } from './pkg-manager.js'
+
+import { scaffold } from './index.js'
 
 export function main(): void {
   const args = process.argv.slice(2)
@@ -29,7 +31,9 @@ export function main(): void {
 
   try {
     const suffix = bare ? ' [--bare: skipping TheoUI defaults]' : ''
-    console.log(`\nCreating TheoKit project "${projectName}" (template: ${templateName})${suffix}...\n`)
+    console.log(
+      `\nCreating TheoKit project "${projectName}" (template: ${templateName})${suffix}...\n`,
+    )
 
     scaffold(targetDir, projectName, templateName, { bare })
 

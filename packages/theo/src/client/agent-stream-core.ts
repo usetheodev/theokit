@@ -25,6 +25,20 @@ export interface ConsumeOptions<TBody = unknown> {
 }
 
 /**
+ * Dispatch SSE events from a list of `\n\n`-separated chunk parts.
+ * Extracted to keep the streaming loop under the max-depth ceiling.
+ */
+function dispatchSseParts(parts: string[], onEvent: (event: AgentEvent) => void): void {
+  for (const part of parts) {
+    // A chunk may contain multiple lines; keep only the data: line.
+    for (const line of part.split('\n')) {
+      const evt = parseSSEChunk(line)
+      if (evt) onEvent(evt)
+    }
+  }
+}
+
+/**
  * Parse a single SSE line of the form `data: <json>`.
  * Returns null for non-data lines, comments, or malformed JSON.
  */
@@ -72,22 +86,18 @@ export async function consumeAgentStream<TBody = unknown>(
   let buf = ''
 
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
+    let done = false
+    while (!done) {
+      const chunk = await reader.read()
+      done = chunk.done
+      if (done) continue
+      buf += decoder.decode(chunk.value, { stream: true })
 
       // SSE separates events with a blank line: `\n\n`.
       // Split, keep the trailing partial in buf.
       const parts = buf.split('\n\n')
       buf = parts.pop() ?? ''
-      for (const part of parts) {
-        // A chunk may contain multiple lines; keep only the data: line.
-        for (const line of part.split('\n')) {
-          const evt = parseSSEChunk(line)
-          if (evt) options.onEvent(evt)
-        }
-      }
+      dispatchSseParts(parts, options.onEvent)
     }
   } finally {
     try {

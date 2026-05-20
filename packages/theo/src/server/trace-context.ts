@@ -1,5 +1,5 @@
-import type { IncomingMessage } from 'node:http'
 import { randomUUID } from 'node:crypto'
+import type { IncomingMessage } from 'node:http'
 
 /**
  * Phase 7 — Observability: traceId propagation (D7).
@@ -19,7 +19,7 @@ import { randomUUID } from 'node:crypto'
 
 export const TRACE_HEADER = 'x-trace-id'
 export const TRACE_PARENT_HEADER = 'traceparent'
-export const REQUEST_ID_HEADER = 'x-request-id'
+const REQUEST_ID_HEADER = 'x-request-id'
 
 // W3C Trace Context: 00-<trace-id 32 hex>-<span-id 16 hex>-<flags 2 hex>
 const TRACEPARENT_RE = /^00-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}$/

@@ -50,9 +50,29 @@ export interface RateLimitStore {
  */
 export class InMemoryStore implements RateLimitStore {
   private store = new Map<string, RateLimitState>()
-  private checkCount = 0
   /** Bound the map to prevent unbounded growth from pathological inputs. */
   static readonly MAX_ENTRIES = 100_000
+  /** GC sweep interval, milliseconds. */
+  static readonly GC_INTERVAL_MS = 30_000
+
+  private gcTimer: ReturnType<typeof setInterval> | null = null
+
+  constructor() {
+    // CR-007 fix: GC runs on a timer OUTSIDE the request hot path.
+    // Pre-fix, every 1000th `incrSync` triggered a synchronous Map sweep
+    // of up to 100K entries — an attacker with diverse client IPs could
+    // keep the Map full and force a blocking sweep predictably.
+    if (typeof setInterval !== 'undefined') {
+      const timer = setInterval(() => {
+        this.sweepExpired()
+      }, InMemoryStore.GC_INTERVAL_MS)
+      this.gcTimer = timer
+      // Allow the process to exit even with the timer pending. `unref` is
+      // Node-only; not present on browser/Cloudflare `setInterval`.
+      const maybeUnref = (timer as { unref?: () => void }).unref
+      if (typeof maybeUnref === 'function') maybeUnref.call(timer)
+    }
+  }
 
   /**
    * Synchronous fast-path used by the legacy sync `createRateLimiter`
@@ -61,20 +81,15 @@ export class InMemoryStore implements RateLimitStore {
    */
   incrSync(key: string, windowMs: number): RateLimitState {
     if (!Number.isFinite(windowMs) || windowMs <= 0) {
-      throw new Error(`InMemoryStore.incr: windowMs must be a positive finite number (got ${windowMs})`)
+      throw new Error(
+        `InMemoryStore.incr: windowMs must be a positive finite number (got ${windowMs})`,
+      )
     }
     const now = Date.now()
 
-    // Periodic GC of expired entries
-    if (++this.checkCount % 1000 === 0) {
-      for (const [k, v] of this.store) {
-        if (v.resetAt <= now) this.store.delete(k)
-      }
-    }
-
-    // Bounded LRU-ish: when over cap, drop oldest insertion (Map keeps insertion order)
+    // Bounded LRU-ish: when over cap, drop oldest insertion.
     if (this.store.size >= InMemoryStore.MAX_ENTRIES) {
-      const first = this.store.keys().next().value as string | undefined
+      const first = this.store.keys().next().value
       if (first !== undefined) this.store.delete(first)
     }
 
@@ -88,10 +103,34 @@ export class InMemoryStore implements RateLimitStore {
     return { count: entry.count, resetAt: entry.resetAt }
   }
 
+  /** Sweep expired entries. Called by the GC timer; safe to call manually. */
+  sweepExpired(): void {
+    const now = Date.now()
+    for (const [k, v] of this.store) {
+      if (v.resetAt <= now) this.store.delete(k)
+    }
+  }
+
+  /**
+   * Stop the GC timer. Call from tests or when discarding the store. After
+   * `dispose`, the store still works but no longer auto-sweeps.
+   */
+  dispose(): void {
+    if (this.gcTimer) {
+      clearInterval(this.gcTimer)
+      this.gcTimer = null
+    }
+  }
+
+  // The async surface is required by the `RateLimitStore` interface
+  // (Redis/etc. adapters are inherently async). For the in-memory case
+  // we just adapt the sync implementations to Promises.
+  // eslint-disable-next-line @typescript-eslint/require-await -- interface contract: async return
   async incr(key: string, windowMs: number): Promise<RateLimitState> {
     return this.incrSync(key, windowMs)
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- interface contract: async return
   async get(key: string): Promise<RateLimitState | null> {
     const now = Date.now()
     const entry = this.store.get(key)
@@ -100,6 +139,7 @@ export class InMemoryStore implements RateLimitStore {
     return { count: entry.count, resetAt: entry.resetAt }
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- interface contract: async return
   async reset(key: string): Promise<void> {
     this.store.delete(key)
   }

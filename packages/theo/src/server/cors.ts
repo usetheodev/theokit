@@ -19,18 +19,21 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
  * required by the CORS spec).
  */
 
+// `'*'` is conceptually distinct from a regular host string (it means
+// "any origin"), but TypeScript-wise it is just `string`, so we collapse
+// the union and document the wildcard via the type's name. Callers should
+// still pass the literal `'*'` to mean "allow anywhere" for readability.
 export type CorsOrigin =
-  | '*'
   | string
   | RegExp
-  | ReadonlyArray<string | RegExp>
+  | readonly (string | RegExp)[]
   | ((origin: string) => boolean)
 
 export interface CorsConfig {
   origins: CorsOrigin
-  methods?: ReadonlyArray<'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD'>
-  allowedHeaders?: ReadonlyArray<string>
-  exposedHeaders?: ReadonlyArray<string>
+  methods?: readonly ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'OPTIONS' | 'HEAD')[]
+  allowedHeaders?: readonly string[]
+  exposedHeaders?: readonly string[]
   credentials?: boolean
   maxAge?: number
 }
@@ -51,9 +54,9 @@ const DEFAULT_MAX_AGE = 600
  */
 function readOrigin(req: IncomingMessage): string | undefined {
   const raw = req.headers.origin
-  if (!raw) return undefined
+  if (raw === undefined) return undefined
   if (Array.isArray(raw)) {
-    return raw.find((v) => typeof v === 'string' && v.length > 0)
+    return raw.find((v): v is string => typeof v === 'string' && v.length > 0)
   }
   return raw
 }
@@ -85,7 +88,7 @@ export function matchesOrigin(origin: string, allowed: CorsOrigin): boolean {
   if (typeof allowed === 'function') {
     // EC-8: fail-closed on any throw
     try {
-      return allowed(origin) === true
+      return allowed(origin)
     } catch {
       return false
     }

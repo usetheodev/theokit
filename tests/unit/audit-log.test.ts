@@ -65,9 +65,9 @@ describe('T4.1 — JsonStdoutSink', () => {
     expect(arg).toMatch(/csrf\.warn/)
   })
 
-  it('createNoOpLogger does NOT call console.log', () => {
+  it('createNoOpLogger does NOT call console.log', async () => {
     const logger = createNoOpLogger()
-    logger.log({ action: 'csrf.warn' })
+    await logger.log({ action: 'csrf.warn' })
     expect(logSpy).not.toHaveBeenCalled()
   })
 
@@ -80,12 +80,14 @@ describe('T4.1 — JsonStdoutSink', () => {
 
 describe('T4.1 — AuditLogger interface (contract)', () => {
   it('async logger return type compatible', async () => {
+    const seen: AuditEvent[] = []
     const logger: AuditLogger = {
       async log(event: AuditEvent) {
         await Promise.resolve()
-        void event
+        seen.push(event)
       },
     }
     await expect(Promise.resolve(logger.log({ action: 'csrf.warn' }))).resolves.toBeUndefined()
+    expect(seen).toHaveLength(1)
   })
 })

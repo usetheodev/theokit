@@ -49,7 +49,7 @@ export const DEFAULT_CSP =
   "font-src 'self' data:; " +
   "connect-src 'self' ws: wss:; " +
   "frame-ancestors 'none'; " +
-  "report-uri /__theo/csp-report"
+  'report-uri /__theo/csp-report'
 
 /**
  * T1.1 — Default Permissions-Policy header (default-deny stance).
@@ -144,6 +144,34 @@ function applyNonceToCsp(policy: string, nonce: string): string {
 }
 
 /**
+ * Apply Content-Security-Policy header(s) to `out`. Extracted from
+ * `buildSecurityHeaders` to keep that function's complexity within ceiling.
+ * Handles the four shapes:
+ *   csp: false             → opt out
+ *   cspMode: 'off'         → opt out
+ *   cspMode: 'enforce'     → Content-Security-Policy (T6.1 default for 0.3.0)
+ *   cspMode: 'report-only' → Content-Security-Policy-Report-Only (legacy 0.2.x)
+ */
+function applyCsp(
+  out: Record<string, string>,
+  config: SecurityHeadersConfig,
+  effectiveNonce: string | undefined,
+): void {
+  if (config.csp === false || config.cspMode === 'off') return
+  let policy = typeof config.csp === 'string' ? config.csp : DEFAULT_CSP
+  if (effectiveNonce) {
+    policy = applyNonceToCsp(policy, effectiveNonce)
+  }
+  // T6.1 — default flipped from 'report-only' to 'enforce' for 0.3.0.
+  const mode: CspMode = config.cspMode ?? 'enforce'
+  if (mode === 'enforce') {
+    out['Content-Security-Policy'] = policy
+  } else {
+    out['Content-Security-Policy-Report-Only'] = policy
+  }
+}
+
+/**
  * Build the security headers map for a given config + env. Pure function —
  * returned object can be inspected, logged, or applied to a response.
  */
@@ -158,25 +186,7 @@ export function buildSecurityHeaders(
   // HTML carries no nonce, so a runtime nonce would mismatch.
   const effectiveNonce = options.prerender ? undefined : options.nonce
 
-  // CSP — handle the four shapes:
-  //   csp: false             → opt out
-  //   cspMode: 'off'         → opt out
-  //   cspMode: 'enforce' (T6.1 default for 0.3.0) → Content-Security-Policy
-  //   cspMode: 'report-only' (legacy 0.2.x) → Content-Security-Policy-Report-Only
-  const cspDisabled = config.csp === false || config.cspMode === 'off'
-  if (!cspDisabled) {
-    let policy = typeof config.csp === 'string' ? config.csp : DEFAULT_CSP
-    if (effectiveNonce) {
-      policy = applyNonceToCsp(policy, effectiveNonce)
-    }
-    // T6.1 — default flipped from 'report-only' to 'enforce' for 0.3.0.
-    const mode: CspMode = config.cspMode ?? 'enforce'
-    if (mode === 'enforce') {
-      out['Content-Security-Policy'] = policy
-    } else {
-      out['Content-Security-Policy-Report-Only'] = policy
-    }
-  }
+  applyCsp(out, config, effectiveNonce)
 
   // X-Frame-Options
   out['X-Frame-Options'] = config.frameOptions ?? 'DENY'

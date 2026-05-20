@@ -10,6 +10,7 @@ describe('Smoke: Package Build Outputs', () => {
   beforeAll(() => {
     // Ensure build has been run
     if (!existsSync(resolve(theoDistDir, 'index.js'))) {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local smoke test
       execSync('pnpm build', { cwd: resolve(__dirname, '../..'), stdio: 'pipe' })
     }
   })
@@ -134,6 +135,7 @@ describe('Smoke: Import Validation from dist/', () => {
   })
 
   it('should run CLI --help without error', () => {
+    // eslint-disable-next-line sonarjs/os-command -- launches local CLI bin; smoke test only
     const output = execSync(`node ${resolve(theoDistDir, 'cli/index.js')} --help`, {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -180,25 +182,29 @@ describe('Smoke: publint Validation', () => {
   beforeAll(() => {
     // Ensure build has been run (publint needs dist/)
     if (!existsSync(resolve(theoDistDir, 'index.js'))) {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local smoke test
       execSync('pnpm build', { cwd: resolve(__dirname, '../..'), stdio: 'pipe' })
     }
   })
 
+  // publint spawns `pnpm pack` under the hood — flakes at the default 5s under parallel load.
   it('theo should pass publint', () => {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local smoke test
     const result = execSync('npx publint packages/theo', {
       cwd: resolve(__dirname, '../..'),
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     expect(result).toContain('All good')
-  })
+  }, 30_000)
 
   it('create-theo should pass publint', () => {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local smoke test
     const result = execSync('npx publint packages/create-theo', {
       cwd: resolve(__dirname, '../..'),
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     expect(result).toContain('All good')
-  })
+  }, 30_000)
 })

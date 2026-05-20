@@ -29,9 +29,15 @@ export const rateLimitSchema = z.union([
 ])
 
 export const uploadSchema = z.object({
-  maxFileSize: z.number().min(1).default(10 * 1024 * 1024), // 10MB
+  maxFileSize: z
+    .number()
+    .min(1)
+    .default(10 * 1024 * 1024), // 10MB
   maxFiles: z.number().int().min(1).default(10),
-  maxFieldSize: z.number().min(1).default(1 * 1024 * 1024), // 1MB
+  maxFieldSize: z
+    .number()
+    .min(1)
+    .default(1 * 1024 * 1024), // 1MB
 })
 
 export const loggingSchema = z.object({
@@ -136,7 +142,7 @@ export const corsSchema = z
     credentials: z.boolean().default(false),
     maxAge: z.number().int().min(0).max(86400).default(600),
   })
-  .refine((c) => !(c.origins === '*' && c.credentials === true), {
+  .refine((c) => !(c.origins === '*' && c.credentials), {
     message: 'CORS spec forbids origins:"*" with credentials:true — browsers ignore the wildcard',
   })
 
@@ -174,10 +180,7 @@ export const theoConfigSchema = z.object({
   /** Enable client-side batching of theoFetch calls and the
    * /api/__theo_batch__ server endpoint. */
   batching: z
-    .union([
-      z.boolean(),
-      z.object({ max: z.number().int().positive().optional() }),
-    ])
+    .union([z.boolean(), z.object({ max: z.number().int().positive().optional() })])
     .optional(),
   /** T4.1 — Audit log. When `logger` is provided, framework events
    * (csrf.warn, rate-limit.exceeded, session.rotated, csp.violation) are

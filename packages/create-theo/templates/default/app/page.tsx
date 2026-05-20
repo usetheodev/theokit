@@ -45,7 +45,15 @@ import { useAgentStream } from 'theokit/client'
 
 type ConversationItem =
   | { kind: 'message'; id: string; role: 'user' | 'assistant'; content: string; timestamp: string }
-  | { kind: 'tool'; id: string; tool: string; target?: string; status: ToolCallStatus; output?: string; timestamp: string }
+  | {
+      kind: 'tool'
+      id: string
+      tool: string
+      target?: string
+      status: ToolCallStatus
+      output?: string
+      timestamp: string
+    }
   | { kind: 'error'; id: string; message: string; timestamp: string }
 
 const QUICK_ACTIONS: QuickAction[] = [
@@ -107,11 +115,12 @@ export default function Page() {
             kind: 'tool',
             id,
             tool: event.name,
-            target: typeof event.args === 'object' && event.args !== null
-              ? Object.entries(event.args as Record<string, unknown>)
-                  .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                  .join(' ')
-              : undefined,
+            target:
+              typeof event.args === 'object' && event.args !== null
+                ? Object.entries(event.args as Record<string, unknown>)
+                    .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                    .join(' ')
+                : undefined,
             status: 'running',
             timestamp: ts,
           }
@@ -121,7 +130,8 @@ export default function Page() {
             id,
             tool: event.name,
             status: 'success',
-            output: typeof event.data === 'string' ? event.data : JSON.stringify(event.data, null, 2),
+            output:
+              typeof event.data === 'string' ? event.data : JSON.stringify(event.data, null, 2),
             timestamp: ts,
           }
         case 'error':
@@ -177,9 +187,7 @@ export default function Page() {
               icon={Sparkles}
               title="What should we build today?"
               description="Ask anything. This scaffold ships with a mock LLM at server/routes/chat.ts so you can see the wiring before plugging in a real model."
-              action={
-                <QuickActionChips actions={QUICK_ACTIONS} onSelect={handleQuickAction} />
-              }
+              action={<QuickActionChips actions={QUICK_ACTIONS} onSelect={handleQuickAction} />}
             />
           ) : (
             <ChatThread>

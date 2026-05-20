@@ -2,12 +2,15 @@ export { theoFetch, TheoFetchError } from './theo-fetch.js'
 export type { InferResponse, InferQuery, InferBody, TheoFetchOptions } from './theo-fetch.js'
 
 export { createBatcher } from './batch.js'
-export type { Batcher, BatchRequest, BatchResponse, BatchTransport, BatcherOptions } from './batch.js'
+export type {
+  Batcher,
+  BatchRequest,
+  BatchResponse,
+  BatchTransport,
+  BatcherOptions,
+} from './batch.js'
 
-export {
-  stableQueryKey,
-  buildUseTheoQueryConfig,
-} from './react-query-adapter.js'
+export { stableQueryKey, buildUseTheoQueryConfig } from './react-query-adapter.js'
 
 // T5.2 — Agent stream hook + pure SSE primitive
 export { useAgentStream } from './use-agent-stream.js'

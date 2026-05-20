@@ -9,6 +9,7 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { useEffect } from 'react'
+
 import { useDevtoolsContext } from './useDevtoolsContext.js'
 
 export interface ShortcutEvent {
@@ -20,10 +21,20 @@ export interface ShortcutEvent {
 
 function isMacPlatform(): boolean {
   if (typeof navigator === 'undefined') return false
-  return /Mac|iPhone|iPad/.test(navigator.platform)
+  // `navigator.platform` is deprecated in favor of `navigator.userAgentData`,
+  // but the modern API is still gated by an origin trial on most browsers
+  // (2026). Falling back to `userAgent` covers Safari and older Firefox,
+  // where the data API is absent. The combined check is intentional.
+  const ua = navigator.userAgent
+  // eslint-disable-next-line @typescript-eslint/no-deprecated, sonarjs/deprecation -- userAgentData not widely available yet
+  const platform = navigator.platform
+  return /Mac|iPhone|iPad/.test(platform) || /Macintosh|iPhone|iPad/.test(ua)
 }
 
-export function isToggleVisibleShortcut(e: ShortcutEvent, isMac: boolean = isMacPlatform()): boolean {
+export function isToggleVisibleShortcut(
+  e: ShortcutEvent,
+  isMac: boolean = isMacPlatform(),
+): boolean {
   if (!e.shiftKey) return false
   if (e.key !== 'd' && e.key !== 'D') return false
   return isMac ? e.metaKey : e.ctrlKey
@@ -45,11 +56,9 @@ export function useShortcuts(): void {
         dispatch({ type: 'TOGGLE_VISIBLE' })
         return
       }
-      if (isCloseShortcut(ev)) {
-        if (state.open) {
-          ev.preventDefault()
-          dispatch({ type: 'TOGGLE_PANEL' })
-        }
+      if (isCloseShortcut(ev) && state.open) {
+        ev.preventDefault()
+        dispatch({ type: 'TOGGLE_PANEL' })
       }
     }
 

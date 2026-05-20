@@ -25,13 +25,15 @@ export const POST = defineRoute<
 >({
   handler: async ({ request }) => {
     // The body parser detects multipart/form-data by Content-Type.
-    const parsed = await parseRequestBody(request as unknown as Parameters<typeof parseRequestBody>[0])
+    const parsed = await parseRequestBody(
+      request as unknown as Parameters<typeof parseRequestBody>[0],
+    )
 
     if (!('files' in parsed) || !Array.isArray(parsed.files) || parsed.files.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Missing file field in multipart body' }),
-        { status: 422, headers: { 'content-type': 'application/json' } },
-      )
+      return new Response(JSON.stringify({ error: 'Missing file field in multipart body' }), {
+        status: 422,
+        headers: { 'content-type': 'application/json' },
+      })
     }
 
     const file = parsed.files[0] as UploadedFile

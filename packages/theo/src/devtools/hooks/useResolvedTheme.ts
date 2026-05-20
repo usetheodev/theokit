@@ -6,10 +6,18 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { useEffect, useState } from 'react'
+
 import type { DevtoolsTheme } from '../shared.js'
 
+/**
+ * Read `prefers-color-scheme`. `matchMedia` exists in every supported
+ * browser, but `window` itself is absent in SSR and Node test runs — we
+ * default to `'dark'` there. The `window`/`matchMedia` access is wrapped
+ * in `typeof` checks rather than property dereferences so SSR never hits
+ * a ReferenceError.
+ */
 function getSystemTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined' || !window.matchMedia) return 'dark'
+  if (typeof window === 'undefined') return 'dark'
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 
@@ -18,12 +26,16 @@ export function useResolvedTheme(theme: DevtoolsTheme): 'light' | 'dark' {
 
   useEffect(() => {
     if (theme !== 'system') return
-    if (typeof window === 'undefined' || !window.matchMedia) return
+    if (typeof window === 'undefined') return
     const mq = window.matchMedia('(prefers-color-scheme: light)')
-    const onChange = () => setSystemTheme(mq.matches ? 'light' : 'dark')
+    const onChange = () => {
+      setSystemTheme(mq.matches ? 'light' : 'dark')
+    }
     onChange() // initial sync
     mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
+    return () => {
+      mq.removeEventListener('change', onChange)
+    }
   }, [theme])
 
   if (theme === 'light') return 'light'

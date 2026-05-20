@@ -16,7 +16,15 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { useCallback, useEffect, useRef } from 'react'
+
 import type { DevtoolsPosition } from '../shared.js'
+
+// Pattern to extract `<x>px <y>px` from `el.style.translate`. The two
+// capture groups carry small numeric literals; the regex has no ambiguous
+// quantifier that could backtrack super-linearly (sonarjs/slow-regex is a
+// false positive here).
+// eslint-disable-next-line security/detect-unsafe-regex, sonarjs/slow-regex -- bounded numeric pattern, no nested quantifiers
+const TRANSLATE_PATTERN = /(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/
 
 type DragState =
   | { kind: 'idle' }
@@ -41,8 +49,8 @@ const SPRING_TRANSITION = 'translate 491ms cubic-bezier(0.485, -0.050, 0.285, 1.
 
 function calcVelocity(history: VelocitySample[]): Point {
   if (history.length < 2) return { x: 0, y: 0 }
-  const first = history[0]!
-  const last = history[history.length - 1]!
+  const first = history[0]
+  const last = history[history.length - 1]
   const dt = last.timestamp - first.timestamp
   if (dt === 0) return { x: 0, y: 0 }
   return {
@@ -67,10 +75,7 @@ export function computeCorners(
 ): Record<DevtoolsPosition, Point> {
   const w = typeof window !== 'undefined' ? window.innerWidth : 1024
   const h = typeof window !== 'undefined' ? window.innerHeight : 768
-  const scrollbarW =
-    typeof document !== 'undefined' && document.documentElement
-      ? w - document.documentElement.clientWidth
-      : 0
+  const scrollbarW = typeof document !== 'undefined' ? w - document.documentElement.clientWidth : 0
 
   return {
     'top-left': { x: padding, y: padding },
@@ -115,6 +120,76 @@ export interface UseDragOptions {
 export interface UseDragApi {
   ref: React.RefObject<HTMLElement | null>
   onPointerDown: (e: React.PointerEvent<HTMLElement>) => void
+}
+
+/**
+ * Build the pointermove handler. Extracted from `useDrag` so the hook
+ * fits within the max-lines-per-function ceiling. Captures the same refs
+ * the hook owns.
+ */
+function handlePointerMove(
+  machine: React.RefObject<DragState>,
+  ref: React.RefObject<HTMLElement | null>,
+  velocityHistory: React.RefObject<VelocitySample[]>,
+  lastSampleTime: React.RefObject<number>,
+): (ev: PointerEvent) => void {
+  return (ev: PointerEvent): void => {
+    const m = machine.current
+    if (m.kind === 'idle') return
+
+    // press → drag transition when threshold exceeded
+    if (m.kind === 'press') {
+      const dx = ev.clientX - m.startX
+      const dy = ev.clientY - m.startY
+      if (Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD_PX) {
+        machine.current = {
+          kind: 'drag',
+          pointerId: ev.pointerId,
+          lastX: ev.clientX,
+          lastY: ev.clientY,
+        }
+        try {
+          ref.current?.setPointerCapture(ev.pointerId)
+        } catch {
+          /* setPointerCapture may throw if pointer already captured elsewhere */
+        }
+      } else {
+        return
+      }
+    }
+
+    const drag = machine.current
+    if (drag.kind !== 'drag') return
+
+    if (ref.current) {
+      const el = ref.current
+      const tx = ev.clientX - drag.lastX
+      const ty = ev.clientY - drag.lastY
+      const currentTranslate = el.style.translate
+      let curX = 0
+      let curY = 0
+      if (currentTranslate) {
+        const parts = TRANSLATE_PATTERN.exec(currentTranslate)
+        if (parts) {
+          curX = Number(parts[1])
+          curY = Number(parts[2])
+        }
+      }
+      el.style.translate = `${curX + tx}px ${curY + ty}px`
+      drag.lastX = ev.clientX
+      drag.lastY = ev.clientY
+    }
+
+    // velocity sampling (10ms apart, last 5 samples)
+    const now = Date.now()
+    if (now - lastSampleTime.current >= VELOCITY_SAMPLE_MIN_MS) {
+      velocityHistory.current.push({ position: { x: ev.clientX, y: ev.clientY }, timestamp: now })
+      if (velocityHistory.current.length > VELOCITY_SAMPLE_LIMIT) {
+        velocityHistory.current.shift()
+      }
+      lastSampleTime.current = now
+    }
+  }
 }
 
 /**
@@ -170,65 +245,7 @@ export function useDrag(options: UseDragOptions): UseDragApi {
       velocityHistory.current = [{ position: { x: startX, y: startY }, timestamp: Date.now() }]
       lastSampleTime.current = Date.now()
 
-      const onMove = (ev: PointerEvent) => {
-        const m = machine.current
-        if (m.kind === 'idle') return
-
-        // press → drag transition when threshold exceeded
-        if (m.kind === 'press') {
-          const dx = ev.clientX - m.startX
-          const dy = ev.clientY - m.startY
-          if (Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD_PX) {
-            machine.current = { kind: 'drag', pointerId: ev.pointerId, lastX: ev.clientX, lastY: ev.clientY }
-            try {
-              ref.current?.setPointerCapture(ev.pointerId)
-            } catch {
-              /* setPointerCapture may throw if pointer already captured elsewhere */
-            }
-          } else {
-            return
-          }
-        }
-
-        const drag = machine.current
-        if (drag.kind !== 'drag') return
-
-        // EC-28: recompute corners every move (window resize safe).
-        // Drag follow uses CSS translate.
-        if (ref.current) {
-          const el = ref.current
-          const corners = computeCorners(el.offsetWidth, el.offsetHeight, options.padding)
-          const base = corners[options.position]
-          const tx = ev.clientX - drag.lastX
-          const ty = ev.clientY - drag.lastY
-          // Cumulative delta from current corner anchor
-          const currentTranslate = el.style.translate
-          let curX = 0
-          let curY = 0
-          if (currentTranslate) {
-            const parts = currentTranslate.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/)
-            if (parts) {
-              curX = Number(parts[1])
-              curY = Number(parts[2])
-            }
-          }
-          el.style.translate = `${curX + tx}px ${curY + ty}px`
-          drag.lastX = ev.clientX
-          drag.lastY = ev.clientY
-          // base unused here — corners computed for snap on release
-          void base
-        }
-
-        // velocity sampling (10ms apart, last 5 samples)
-        const now = Date.now()
-        if (now - lastSampleTime.current >= VELOCITY_SAMPLE_MIN_MS) {
-          velocityHistory.current.push({ position: { x: ev.clientX, y: ev.clientY }, timestamp: now })
-          if (velocityHistory.current.length > VELOCITY_SAMPLE_LIMIT) {
-            velocityHistory.current.shift()
-          }
-          lastSampleTime.current = now
-        }
-      }
+      const onMove = handlePointerMove(machine, ref, velocityHistory, lastSampleTime)
 
       const onUp = (_ev: PointerEvent) => {
         const m = machine.current
@@ -242,7 +259,7 @@ export function useDrag(options: UseDragOptions): UseDragApi {
             let curX = 0
             let curY = 0
             if (currentTranslate) {
-              const parts = currentTranslate.match(/(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px/)
+              const parts = TRANSLATE_PATTERN.exec(currentTranslate)
               if (parts) {
                 curX = Number(parts[1])
                 curY = Number(parts[2])
@@ -280,7 +297,11 @@ export function useDrag(options: UseDragOptions): UseDragApi {
         window.removeEventListener('pointerup', onUp)
       }
     },
-    [options.disabled, options.padding, options.position, options],
+    // `animateToCorner` is intentionally not listed: re-binding listeners
+    // every render would interrupt an in-flight drag. `animateToCorner`
+    // reads only refs (no captured state), so a stale closure is safe.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [options.disabled, options.padding, options.position],
   )
 
   // EC-8: click handler on the element — swallow click that fires right

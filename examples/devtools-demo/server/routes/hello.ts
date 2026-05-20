@@ -10,11 +10,13 @@ import { z } from 'zod'
  * - With Authorization header → devtools Requests tab shows Authorization as [REDACTED].
  */
 export const POST = defineRoute({
-  body: z.object({
-    name: z.string().optional(),
-    secret: z.string().optional(),
-    x: z.number().optional(),
-  }).optional(),
+  body: z
+    .object({
+      name: z.string().optional(),
+      secret: z.string().optional(),
+      x: z.number().optional(),
+    })
+    .optional(),
   handler: async ({ body }) => {
     return {
       ok: true,

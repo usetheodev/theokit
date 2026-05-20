@@ -1,30 +1,33 @@
-import { createServer } from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { resolve, join, extname } from 'node:path'
+
 import { loadConfig } from '../../config/load-config.js'
-import { scanServerRoutes } from '../../server/scan.js'
-import { scanServerActions } from '../../server/action-scan.js'
-import { matchRoute } from '../../server/match.js'
-import { executeRoute, sendError } from '../../server/execute.js'
 import { executeAction } from '../../server/action-execute.js'
-import { createProductionLoader } from '../../server/module-loader.js'
-import { serveStaticFile } from '../../server/static.js'
-import { logRequest } from '../../server/logger.js'
-import { createRateLimiter } from '../../server/rate-limit.js'
-import { findSuggestion } from '../../server/suggest.js'
-import { scanWebSocketRoutes } from '../../server/ws-scan.js'
-import { loadManifest } from '../../server/manifest.js'
-import { createPluginRunnerFromConfig } from '../../server/load-plugins.js'
-import { resolveTransformer } from '../../server/transformer.js'
-import type { ServerRouteNode } from '../../server/match.js'
+import { scanServerActions } from '../../server/action-scan.js'
 import type { ActionNode } from '../../server/action-scan.js'
+import type { WebSocketHandler } from '../../server/define-websocket.js'
+import { executeRoute, sendError } from '../../server/execute.js'
+import { createPluginRunnerFromConfig } from '../../server/load-plugins.js'
+import { logRequest } from '../../server/logger.js'
+import { loadManifest } from '../../server/manifest.js'
+import { matchRoute } from '../../server/match.js'
+import type { ServerRouteNode } from '../../server/match.js'
+import { createProductionLoader } from '../../server/module-loader.js'
+import { createRateLimiter } from '../../server/rate-limit.js'
+import { scanServerRoutes } from '../../server/scan.js'
+import { serveStaticFile } from '../../server/static.js'
+import { findSuggestion } from '../../server/suggest.js'
+import { resolveTransformer } from '../../server/transformer.js'
+import { scanWebSocketRoutes } from '../../server/ws-scan.js'
 import type { WebSocketRouteNode } from '../../server/ws-scan.js'
 
 interface StartOptions {
   port?: number
 }
 
+// eslint-disable-next-line max-lines-per-function, complexity -- top-level CLI bootstrap; setup + request orchestration intentionally co-located so the lifecycle is readable end-to-end
 export async function startCommand(options: StartOptions): Promise<void> {
   const cwd = process.cwd()
   const config = await loadConfig(cwd)
@@ -61,7 +64,9 @@ export async function startCommand(options: StartOptions): Promise<void> {
     cachedActions = manifest.actions
     cachedWsRoutes = manifest.websockets
   } else {
-    console.warn('  ⚠ No manifest found, scanning routes at startup. Run "theo build" to generate manifest.')
+    console.warn(
+      '  ⚠ No manifest found, scanning routes at startup. Run "theo build" to generate manifest.',
+    )
     cachedRoutes = scanServerRoutes(serverDir)
     cachedActions = scanServerActions(serverDir)
     cachedWsRoutes = scanWebSocketRoutes(serverDir)
@@ -79,26 +84,35 @@ export async function startCommand(options: StartOptions): Promise<void> {
   // SSR setup (opt-in)
   const ssrServerPath = resolve(distDir, 'server/entry-server.js')
   const ssrEnabled = config.ssr && existsSync(ssrServerPath)
-  const ssrStreamingEnabled = ssrEnabled && config.ssrStreaming === true
+  const ssrStreamingEnabled = ssrEnabled && config.ssrStreaming
   let ssrRender: ((url: string) => Promise<string | { redirect: Response }>) | null = null
+  type RenderStreamingResult = { redirect: Response } | { streaming: true } | undefined
   let ssrRenderStreaming:
     | ((
         url: string,
-        response: import('node:http').ServerResponse,
+        response: ServerResponse,
         options?: { signal?: AbortSignal },
-      ) => Promise<{ redirect: Response } | { streaming: true } | void>)
+      ) => Promise<RenderStreamingResult>)
     | null = null
   let htmlHead = ''
   let htmlTail = ''
 
   if (ssrEnabled) {
-    const mod = await import(ssrServerPath)
+    interface SsrEntryServer {
+      render: (url: string) => Promise<string | { redirect: Response }>
+      renderStreaming?: (
+        url: string,
+        response: ServerResponse,
+        options?: { signal?: AbortSignal },
+      ) => Promise<RenderStreamingResult>
+    }
+    const mod = (await import(ssrServerPath)) as SsrEntryServer
     ssrRender = mod.render
     // T6.1: renderStreaming is only exported when ssrStreaming was enabled
     // at build time. Capture both so we can switch per request without re-importing.
     ssrRenderStreaming = typeof mod.renderStreaming === 'function' ? mod.renderStreaming : null
     // Split HTML template on root div
-    const rootDivMatch = indexHtml.match(/<div id=["']root["'][^>]*>/)
+    const rootDivMatch = /<div id=["']root["'][^>]*>/.exec(indexHtml)
     if (rootDivMatch) {
       const splitIdx = indexHtml.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
       htmlHead = indexHtml.slice(0, splitIdx)
@@ -106,158 +120,241 @@ export async function startCommand(options: StartOptions): Promise<void> {
     }
   }
 
-  const server = createServer(async (req, res) => {
-    const url = req.url ?? '/'
-    const requestId = randomUUID()
-    const start = Date.now()
+  /* eslint-disable max-lines-per-function, complexity, sonarjs/cognitive-complexity --
+   * Inline request orchestrator. Mirrors the routing decisions a Vite
+   * dev-server middleware does at module top-level; keeping all branches
+   * in one place makes the request lifecycle traceable.
+   */
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    void (async () => {
+      const url = req.url ?? '/'
+      const requestId = randomUUID()
+      const start = Date.now()
 
-    try {
-      // 1. Action routes
-      if (url.startsWith('/api/__actions/')) {
-        res.setHeader('x-request-id', requestId)
+      try {
+        // 1. Action routes
+        if (url.startsWith('/api/__actions/')) {
+          res.setHeader('x-request-id', requestId)
 
-        // Rate limit check
-        if (rateLimiter) {
-          const check = rateLimiter(req)
-          for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
-          if (check.limited) {
-            sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
-            logRequest({ method: req.method ?? 'POST', url, status: 429, duration: Date.now() - start, requestId })
+          // Rate limit check
+          if (rateLimiter) {
+            const check = rateLimiter(req)
+            for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
+            if (check.limited) {
+              sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
+              logRequest({
+                method: req.method ?? 'POST',
+                url,
+                status: 429,
+                duration: Date.now() - start,
+                requestId,
+              })
+              return
+            }
+          }
+
+          const pathAfterPrefix = url.slice('/api/__actions/'.length).split('?')[0]
+          const segments = pathAfterPrefix.split('/').filter(Boolean)
+          if (segments.length < 2) {
+            sendError(
+              res,
+              'BAD_REQUEST',
+              'Action URL must be /api/__actions/{file}/{exportName}',
+              400,
+              undefined,
+              requestId,
+            )
+            logRequest({
+              method: req.method ?? 'POST',
+              url,
+              status: 400,
+              duration: Date.now() - start,
+              requestId,
+            })
             return
           }
-        }
-
-        const pathAfterPrefix = url.slice('/api/__actions/'.length).split('?')[0]
-        const segments = pathAfterPrefix.split('/').filter(Boolean)
-        if (segments.length < 2) {
-          sendError(res, 'BAD_REQUEST', 'Action URL must be /api/__actions/{file}/{exportName}', 400, undefined, requestId)
-          logRequest({ method: req.method ?? 'POST', url, status: 400, duration: Date.now() - start, requestId })
-          return
-        }
-        const exportName = segments[segments.length - 1]
-        const actionPath = segments.slice(0, -1).join('/')
-        const action = cachedActions.find((a) => a.actionPath === actionPath)
-        if (!action) {
-          const actionPaths = cachedActions.map((a) => a.actionPath)
-          const suggestion = findSuggestion(actionPath, actionPaths)
-          const msg = suggestion
-            ? `Action "${actionPath}" not found. Did you mean: ${suggestion}?`
-            : `Action "${actionPath}" not found`
-          sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
-          logRequest({ method: req.method ?? 'POST', url, status: 404, duration: Date.now() - start, requestId })
-          return
-        }
-        await executeAction(action.filePath, exportName, req, res, loadModule, serverDir, requestId)
-        logRequest({ method: req.method ?? 'POST', url, status: res.statusCode, duration: Date.now() - start, requestId })
-        return
-      }
-
-      // 2. API routes
-      if (url.startsWith('/api/')) {
-        res.setHeader('x-request-id', requestId)
-
-        // Rate limit check
-        if (rateLimiter) {
-          const check = rateLimiter(req)
-          for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
-          if (check.limited) {
-            sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
-            logRequest({ method: req.method ?? 'GET', url, status: 429, duration: Date.now() - start, requestId })
+          const exportName = segments[segments.length - 1]
+          const actionPath = segments.slice(0, -1).join('/')
+          const action = cachedActions.find((a) => a.actionPath === actionPath)
+          if (!action) {
+            const actionPaths = cachedActions.map((a) => a.actionPath)
+            const suggestion = findSuggestion(actionPath, actionPaths)
+            const msg = suggestion
+              ? `Action "${actionPath}" not found. Did you mean: ${suggestion}?`
+              : `Action "${actionPath}" not found`
+            sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
+            logRequest({
+              method: req.method ?? 'POST',
+              url,
+              status: 404,
+              duration: Date.now() - start,
+              requestId,
+            })
             return
           }
-        }
-
-        const match = matchRoute(url, cachedRoutes)
-        if (!match) {
-          const urlPath = url.split('?')[0]
-          const routePaths = cachedRoutes.map((r) => r.routePath)
-          const suggestion = findSuggestion(urlPath, routePaths)
-          const msg = suggestion
-            ? `API route not found: ${urlPath}. Did you mean: ${suggestion}?`
-            : 'API route not found'
-          sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
-          logRequest({ method: req.method ?? 'GET', url, status: 404, duration: Date.now() - start, requestId })
+          await executeAction(
+            action.filePath,
+            exportName,
+            req,
+            res,
+            loadModule,
+            serverDir,
+            requestId,
+            pluginRunner,
+            config.security?.csrf ?? 'strict',
+            config.security?.disallowed,
+          )
+          logRequest({
+            method: req.method ?? 'POST',
+            url,
+            status: res.statusCode,
+            duration: Date.now() - start,
+            requestId,
+          })
           return
         }
-        const method = (req.method ?? 'GET').toUpperCase()
-        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer)
-        logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
-        return
-      }
 
-      // 3. Static files
-      if (serveStaticFile(req, res, clientDir)) return
+        // 2. API routes
+        if (url.startsWith('/api/')) {
+          res.setHeader('x-request-id', requestId)
 
-      // 4. Custom 404 for URLs with file extensions (missing static files)
-      const urlPath = url.split('?')[0]
-      if (custom404Html && extname(urlPath)) {
-        res.writeHead(404, { 'Content-Type': 'text/html' })
-        res.end(custom404Html)
-        return
-      }
+          // Rate limit check
+          if (rateLimiter) {
+            const check = rateLimiter(req)
+            for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
+            if (check.limited) {
+              sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
+              logRequest({
+                method: req.method ?? 'GET',
+                url,
+                status: 429,
+                duration: Date.now() - start,
+                requestId,
+              })
+              return
+            }
+          }
 
-      // 5. SSR or SPA fallback
-      // T6.1: prefer streaming when config.ssrStreaming AND the build emitted renderStreaming.
-      if (ssrStreamingEnabled && ssrRenderStreaming) {
-        // Wire client-disconnect → AbortController (EC-11)
-        const controller = new AbortController()
-        const onClose = (): void => controller.abort()
-        req.on('close', onClose)
-        try {
-          const result = await ssrRenderStreaming(url, res, { signal: controller.signal })
-          if (result && typeof result === 'object' && 'redirect' in result) {
-            res.writeHead(302, { Location: (result.redirect as Response).headers.get('location') ?? '/' })
-            res.end()
+          const match = matchRoute(url, cachedRoutes)
+          if (!match) {
+            const urlPath = url.split('?')[0]
+            const routePaths = cachedRoutes.map((r) => r.routePath)
+            const suggestion = findSuggestion(urlPath, routePaths)
+            const msg = suggestion
+              ? `API route not found: ${urlPath}. Did you mean: ${suggestion}?`
+              : 'API route not found'
+            sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
+            logRequest({
+              method: req.method ?? 'GET',
+              url,
+              status: 404,
+              duration: Date.now() - start,
+              requestId,
+            })
             return
           }
-          // When renderStreaming succeeds it has already piped + flushed headers.
-          // It is responsible for calling res.end() once the stream is drained.
+          const method = (req.method ?? 'GET').toUpperCase()
+          await executeRoute(
+            match.route,
+            method,
+            match.params,
+            req,
+            res,
+            loadModule,
+            serverDir,
+            requestId,
+            pluginRunner,
+            transformer,
+            config.security?.csrf ?? 'strict',
+            config.security?.disallowed,
+          )
+          logRequest({
+            method,
+            url,
+            status: res.statusCode,
+            duration: Date.now() - start,
+            requestId,
+          })
           return
-        } catch (streamErr) {
-          console.error('[SSR Stream Error]', (streamErr as Error).message)
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'text/html' })
-          }
-          if (!res.writableEnded) {
-            res.end(custom500Html ?? '<h1>500 — Server Error</h1>')
-          }
-          return
-        } finally {
-          req.removeListener('close', onClose)
         }
-      }
-      if (ssrRender) {
-        try {
-          const result = await ssrRender(url)
-          if (result && typeof result === 'object' && 'redirect' in result) {
-            res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
-            res.end()
-            return
-          }
-          const ssrHtml = result as string
-          res.writeHead(200, { 'Content-Type': 'text/html' })
-          res.end(htmlHead + ssrHtml + htmlTail)
-          return
-        } catch (ssrErr) {
-          console.error('[SSR Error] Falling back to CSR:', (ssrErr as Error).message)
-          // Fall through to CSR fallback
-        }
-      }
 
-      // CSR fallback
-      res.writeHead(200, { 'Content-Type': 'text/html' })
-      res.end(indexHtml)
-    } catch (err) {
-      // Custom 500 page for non-API errors
-      if (custom500Html && !res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'text/html' })
-        res.end(custom500Html)
-      } else if (!res.headersSent) {
-        sendError(res, 'INTERNAL_ERROR', (err as Error).message, 500)
-      } else {
-        res.end()
+        // 3. Static files
+        if (serveStaticFile(req, res, clientDir)) return
+
+        // 4. Custom 404 for URLs with file extensions (missing static files)
+        const urlPath = url.split('?')[0]
+        if (custom404Html && extname(urlPath)) {
+          res.writeHead(404, { 'Content-Type': 'text/html' })
+          res.end(custom404Html)
+          return
+        }
+
+        // 5. SSR or SPA fallback
+        // T6.1: prefer streaming when config.ssrStreaming AND the build emitted renderStreaming.
+        if (ssrStreamingEnabled && ssrRenderStreaming) {
+          // Wire client-disconnect → AbortController (EC-11)
+          const controller = new AbortController()
+          const onClose = (): void => {
+            controller.abort()
+          }
+          req.on('close', onClose)
+          try {
+            const result = await ssrRenderStreaming(url, res, { signal: controller.signal })
+            if (result && typeof result === 'object' && 'redirect' in result) {
+              res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
+              res.end()
+              return
+            }
+            // When renderStreaming succeeds it has already piped + flushed headers.
+            // It is responsible for calling res.end() once the stream is drained.
+            return
+          } catch (streamErr) {
+            console.error('[SSR Stream Error]', (streamErr as Error).message)
+            if (!res.headersSent) {
+              res.writeHead(500, { 'Content-Type': 'text/html' })
+            }
+            if (!res.writableEnded) {
+              res.end(custom500Html ?? '<h1>500 — Server Error</h1>')
+            }
+            return
+          } finally {
+            req.removeListener('close', onClose)
+          }
+        }
+        if (ssrRender) {
+          try {
+            const result = await ssrRender(url)
+            if (result && typeof result === 'object' && 'redirect' in result) {
+              res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
+              res.end()
+              return
+            }
+            const ssrHtml = result
+            res.writeHead(200, { 'Content-Type': 'text/html' })
+            res.end(htmlHead + ssrHtml + htmlTail)
+            return
+          } catch (ssrErr) {
+            console.error('[SSR Error] Falling back to CSR:', (ssrErr as Error).message)
+            // Fall through to CSR fallback
+          }
+        }
+
+        // CSR fallback
+        res.writeHead(200, { 'Content-Type': 'text/html' })
+        res.end(indexHtml)
+      } catch (err) {
+        // Custom 500 page for non-API errors
+        if (custom500Html && !res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'text/html' })
+          res.end(custom500Html)
+        } else if (!res.headersSent) {
+          sendError(res, 'INTERNAL_ERROR', (err as Error).message, 500)
+        } else {
+          res.end()
+        }
       }
-    }
+    })()
+    /* eslint-enable max-lines-per-function, complexity, sonarjs/cognitive-complexity */
   })
 
   // WebSocket upgrade handler (opt-in: only if server/ws/ exists)
@@ -266,33 +363,41 @@ export async function startCommand(options: StartOptions): Promise<void> {
       const { WebSocketServer } = await import('ws')
       const wss = new WebSocketServer({ noServer: true })
 
-      server.on('upgrade', async (request, socket, head) => {
-        const url = request.url ?? '/'
-        if (!url.startsWith('/ws/')) {
-          socket.destroy()
-          return
-        }
+      server.on('upgrade', (request, socket, head) => {
+        void (async () => {
+          const url = request.url ?? '/'
+          if (!url.startsWith('/ws/')) {
+            socket.destroy()
+            return
+          }
 
-        const wsPath = url.split('?')[0]
-        const match = cachedWsRoutes.find(r => r.wsPath === wsPath)
-        if (!match) {
-          socket.destroy()
-          return
-        }
+          const wsPath = url.split('?')[0]
+          const match = cachedWsRoutes.find((r) => r.wsPath === wsPath)
+          if (!match) {
+            socket.destroy()
+            return
+          }
 
-        try {
-          const mod = await loadModule(match.filePath)
-          const handler = (mod.default ?? mod) as import('../../server/define-websocket.js').WebSocketHandler
+          try {
+            const mod = await loadModule(match.filePath)
+            const handler = ((mod as { default?: unknown }).default ?? mod) as WebSocketHandler
 
-          wss.handleUpgrade(request, socket, head, (ws) => {
-            handler.onOpen?.(ws, request)
-            ws.on('message', (data: Buffer) => handler.onMessage?.(ws, data.toString()))
-            ws.on('close', (code: number, reason: Buffer) => handler.onClose?.(ws, code, reason))
-            ws.on('error', (err: Error) => handler.onError?.(ws, err))
-          })
-        } catch {
-          socket.destroy()
-        }
+            wss.handleUpgrade(request, socket, head, (ws) => {
+              handler.onOpen?.(ws, request)
+              ws.on('message', (data: Buffer) => {
+                handler.onMessage?.(ws, data.toString())
+              })
+              ws.on('close', (code: number, reason: Buffer) => {
+                handler.onClose?.(ws, code, reason)
+              })
+              ws.on('error', (err: Error) => {
+                handler.onError?.(ws, err)
+              })
+            })
+          } catch {
+            socket.destroy()
+          }
+        })()
       })
     } catch {
       throw new Error(
@@ -303,6 +408,6 @@ export async function startCommand(options: StartOptions): Promise<void> {
 
   server.listen(port, () => {
     console.log(`\n  Theo production server`)
-    console.log(`  → http://localhost:${port}\n`)
+    console.log(`  → http://localhost:${String(port)}\n`)
   })
 }

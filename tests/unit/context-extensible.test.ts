@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { runMiddlewareAndContext } from '../../packages/theo/src/server/middleware-runner.js'
 import { tmpdir } from 'node:os'
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 function createMockReq(): IncomingMessage {
@@ -40,7 +40,12 @@ describe('Context extensibility', () => {
       },
     })
 
-    const result = await runMiddlewareAndContext(createMockReq(), createMockRes(), loader, serverDir)
+    const result = await runMiddlewareAndContext(
+      createMockReq(),
+      createMockRes(),
+      loader,
+      serverDir,
+    )
     expect(result.aborted).toBe(false)
     const ctx = result.ctx as { user: string; role: string }
     expect(ctx.user).toBe('alice')
@@ -60,8 +65,16 @@ describe('Context extensibility', () => {
       },
     })
 
-    const result = await runMiddlewareAndContext(createMockReq(), createMockRes(), loader, serverDir)
-    const ctx = result.ctx as { user: { name: string; permissions: string[] }; config: { theme: string } }
+    const result = await runMiddlewareAndContext(
+      createMockReq(),
+      createMockRes(),
+      loader,
+      serverDir,
+    )
+    const ctx = result.ctx as {
+      user: { name: string; permissions: string[] }
+      config: { theme: string }
+    }
     expect(ctx.user.name).toBe('bob')
     expect(ctx.user.permissions).toEqual(['read', 'write'])
     expect(ctx.config.theme).toBe('dark')
@@ -81,7 +94,12 @@ describe('Context extensibility', () => {
       },
     })
 
-    const result = await runMiddlewareAndContext(createMockReq(), createMockRes(), loader, serverDir)
+    const result = await runMiddlewareAndContext(
+      createMockReq(),
+      createMockRes(),
+      loader,
+      serverDir,
+    )
     const ctx = result.ctx as { agentId: string; tools: string[]; model: string }
     expect(ctx.agentId).toBe('agent-123')
     expect(ctx.tools).toEqual(['search', 'calculator'])
@@ -93,7 +111,12 @@ describe('Context extensibility', () => {
 
     const loader = createMockLoader({})
 
-    const result = await runMiddlewareAndContext(createMockReq(), createMockRes(), loader, serverDir)
+    const result = await runMiddlewareAndContext(
+      createMockReq(),
+      createMockRes(),
+      loader,
+      serverDir,
+    )
     expect(result.aborted).toBe(false)
     expect(result.ctx).toEqual({})
   })

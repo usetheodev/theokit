@@ -33,6 +33,7 @@ interface ScriptResult {
 }
 
 function runScript(env: Record<string, string>): ScriptResult {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local test running the project's bundle-budget script via system `bash`
   const res = spawnSync('bash', [SCRIPT], {
     cwd: resolve(__dirname, '../..'),
     env: { ...process.env, ...env, BUNDLE_SKIP_BUILD: '1' },
@@ -176,10 +177,7 @@ describe('check-bundle-budget.sh — verify gzip size compute matches Node zlib'
 
 describe('check-bundle-budget.sh — dogfood check wiring', () => {
   it('Given scripts/dogfood-smoke.sh, Then references the bundle budget check', () => {
-    const dogfood = readFileSync(
-      resolve(__dirname, '../../scripts/dogfood-smoke.sh'),
-      'utf-8',
-    )
+    const dogfood = readFileSync(resolve(__dirname, '../../scripts/dogfood-smoke.sh'), 'utf-8')
     expect(dogfood).toMatch(/bundle.budget|check-bundle-budget/i)
   })
 })

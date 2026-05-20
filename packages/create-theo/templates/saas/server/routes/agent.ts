@@ -1,8 +1,4 @@
-import {
-  defineAgentEndpoint,
-  requireAuth,
-  type AgentEvent,
-} from 'theokit/server'
+import { defineAgentEndpoint, requireAuth, type AgentEvent } from 'theokit/server'
 import type { RequestContext } from '../context.js'
 
 /**

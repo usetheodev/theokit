@@ -13,11 +13,17 @@ import {
 
 describe('isCloseShortcut', () => {
   it('matches Escape key', () => {
-    expect(isCloseShortcut({ key: 'Escape', shiftKey: false, metaKey: false, ctrlKey: false })).toBe(true)
+    expect(
+      isCloseShortcut({ key: 'Escape', shiftKey: false, metaKey: false, ctrlKey: false }),
+    ).toBe(true)
   })
   it('does not match other keys', () => {
-    expect(isCloseShortcut({ key: 'a', shiftKey: false, metaKey: false, ctrlKey: false })).toBe(false)
-    expect(isCloseShortcut({ key: 'Enter', shiftKey: false, metaKey: false, ctrlKey: false })).toBe(false)
+    expect(isCloseShortcut({ key: 'a', shiftKey: false, metaKey: false, ctrlKey: false })).toBe(
+      false,
+    )
+    expect(isCloseShortcut({ key: 'Enter', shiftKey: false, metaKey: false, ctrlKey: false })).toBe(
+      false,
+    )
   })
 })
 

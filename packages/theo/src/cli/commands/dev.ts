@@ -1,5 +1,6 @@
-import { createServer, type ViteDevServer } from 'vite'
 import react from '@vitejs/plugin-react'
+import { createServer, type ViteDevServer } from 'vite'
+
 import { loadConfig } from '../../config/load-config.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
 import { theoPlugin } from '../../vite-plugin/index.js'
@@ -8,10 +9,7 @@ interface DevOptions {
   port?: number
 }
 
-export async function startDevServer(
-  cwd: string,
-  options?: DevOptions,
-): Promise<ViteDevServer> {
+export async function startDevServer(cwd: string, options?: DevOptions): Promise<ViteDevServer> {
   const config = await loadConfig(cwd)
   validateProjectStructure(cwd)
 

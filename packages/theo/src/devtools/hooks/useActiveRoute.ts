@@ -9,7 +9,9 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { useEffect } from 'react'
+
 import type { RouteManifest } from '../shared.js'
+
 import { useDevtoolsContext } from './useDevtoolsContext.js'
 
 const LOCATION_CHANGE_EVENT = 'theo:devtools:locationchange'
@@ -19,17 +21,15 @@ let _historyPatched = false
 function patchHistoryOnce(): void {
   if (_historyPatched || typeof history === 'undefined') return
   _historyPatched = true
-  const originalPush = history.pushState
-  const originalReplace = history.replaceState
-  history.pushState = function (...args) {
-    const r = originalPush.apply(this, args)
+  const originalPush = history.pushState.bind(history)
+  const originalReplace = history.replaceState.bind(history)
+  history.pushState = function patchedPush(...args) {
+    originalPush(...args)
     window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT))
-    return r
   }
-  history.replaceState = function (...args) {
-    const r = originalReplace.apply(this, args)
+  history.replaceState = function patchedReplace(...args) {
+    originalReplace(...args)
     window.dispatchEvent(new Event(LOCATION_CHANGE_EVENT))
-    return r
   }
 }
 
@@ -44,9 +44,10 @@ function patchHistoryOnce(): void {
  *
  * Exported for unit testing.
  */
-export function matchActiveRoute(pathname: string, manifest: RouteManifest):
-  | { path: string; chain: string[] }
-  | null {
+export function matchActiveRoute(
+  pathname: string,
+  manifest: RouteManifest,
+): { path: string; chain: string[] } | null {
   const norm = (s: string) => (s.length > 1 && s.endsWith('/') ? s.slice(0, -1) : s)
   const target = norm(pathname)
 
@@ -62,7 +63,7 @@ export function matchActiveRoute(pathname: string, manifest: RouteManifest):
   let bestLen = -1
   for (const route of manifest.routes) {
     const rp = norm(route.path)
-    if (rp === '/' || target.startsWith(rp + '/')) {
+    if (rp === '/' || target.startsWith(`${rp}/`)) {
       const len = rp.length
       if (len > bestLen) {
         bestLen = len

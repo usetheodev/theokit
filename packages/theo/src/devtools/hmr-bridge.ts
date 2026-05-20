@@ -10,6 +10,7 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
+import type { Dispatcher } from './dispatcher.js'
 import {
   CHANNEL_CSRF_WARN,
   CHANNEL_ERROR,
@@ -21,7 +22,6 @@ import {
   type RequestRecord,
   type RouteManifest,
 } from './shared.js'
-import type { Dispatcher } from './dispatcher.js'
 
 export interface ViteHot {
   on(event: string, cb: (data: unknown) => void): void
@@ -42,13 +42,19 @@ function getHot(): ViteHot | null {
   return g ?? null
 }
 
+// `wrap` adapts a typed handler `(data: T) => void` into the untyped
+// Vite HMR contract `(data: unknown) => void`, casting once at the
+// boundary. `T` appears only on the argument by design — the cast IS
+// the value of the helper. ESLint flags this as `unnecessary-type-
+// parameters`, but removing T would force every call site to cast
+// internally, which is worse for readability.
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- T is the documentation; the cast lives here so call sites don't repeat it
 function wrap<T>(label: string, fn: (data: T) => void): (data: unknown) => void {
-  return (data: unknown) => {
+  return (data: unknown): void => {
     try {
       fn(data as T)
     } catch (err) {
       // EC-25: never propagate to HMR
-      // eslint-disable-next-line no-console
       console.error(`[theo devtools] ${label} callback failed`, err)
     }
   }
@@ -65,17 +71,33 @@ export interface BridgeSubscription {
 export function subscribeToServerEvents(dispatcher: Dispatcher): BridgeSubscription {
   const hot = getHot()
   if (!hot) {
-    // No HMR client (production, build, or non-Vite). No-op.
-    return { unsubscribe: () => {} }
+    // No HMR client (production, build, or non-Vite). No-op subscription
+    // — unsubscribe() is a documented contract that intentionally does
+    // nothing in this path.
+    return {
+      unsubscribe(): void {
+        /* no-op: nothing to detach in non-HMR contexts */
+      },
+    }
   }
 
-  const reqHandler = wrap<RequestRecord>('request', (req) => dispatcher.onRequest(req))
-  const errHandler = wrap<ErrorRecord>('error', (err) => dispatcher.onError(err))
-  const csrfHandler = wrap<CsrfWarnPayload>('csrf.warn', (p) => dispatcher.onCsrfWarn(p))
-  const manifestHandler = wrap<RouteManifest>('manifest', (m) => dispatcher.onManifestUpdated(m))
+  const reqHandler = wrap<RequestRecord>('request', (req) => {
+    dispatcher.onRequest(req)
+  })
+  const errHandler = wrap<ErrorRecord>('error', (err) => {
+    dispatcher.onError(err)
+  })
+  const csrfHandler = wrap<CsrfWarnPayload>('csrf.warn', (p) => {
+    dispatcher.onCsrfWarn(p)
+  })
+  const manifestHandler = wrap<RouteManifest>('manifest', (m) => {
+    dispatcher.onManifestUpdated(m)
+  })
   const routeMatchedHandler = wrap<{ path: string; chain: string[] }>(
     'route-matched',
-    ({ path, chain }) => dispatcher.onRouteMatched(path, chain),
+    ({ path, chain }) => {
+      dispatcher.onRouteMatched(path, chain)
+    },
   )
 
   hot.on(CHANNEL_REQUEST, reqHandler)

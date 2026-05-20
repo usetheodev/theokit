@@ -10,7 +10,7 @@ export type { ActionConfig } from './define-action.js'
 export { defineMiddleware } from './define-middleware.js'
 export type { MiddlewareHandler } from './define-middleware.js'
 
-export { parseRequestBody } from './body-parser.js'
+export { parseRequestBody, FileTooLargeError } from './body-parser.js'
 export type { UploadedFile, ParsedBody, BodyParserOptions } from './body-parser.js'
 
 export { getCookie, setCookie, deleteCookie } from './cookies.js'
@@ -79,7 +79,13 @@ export { serializeResponse, deserializeResponse } from './serialization.js'
 export type { SerializedResponse } from './serialization.js'
 
 export { generateManifest, writeManifest, loadManifest } from './manifest.js'
-export type { TheoManifest, ManifestRoute, ManifestAction, ManifestWebSocket, LoadedManifest } from './manifest.js'
+export type {
+  TheoManifest,
+  ManifestRoute,
+  ManifestAction,
+  ManifestWebSocket,
+  LoadedManifest,
+} from './manifest.js'
 
 // Low-level pipeline primitives — exported so runtime adapters (Bun, Netlify,
 // AWS Lambda) can drive the same executeRoute pipeline that dev mode uses.
@@ -94,11 +100,7 @@ export { defineTheoPlugin } from './define-plugin.js'
 export { PluginRunner, DuplicatePluginError, DuplicateDecorationError } from './plugin-runner.js'
 export { createPluginRunnerFromConfig, InvalidPluginShapeError } from './load-plugins.js'
 
-export {
-  superjsonTransformer,
-  jsonTransformer,
-  resolveTransformer,
-} from './transformer.js'
+export { superjsonTransformer, jsonTransformer, resolveTransformer } from './transformer.js'
 export type { TheoTransformer } from './transformer.js'
 
 export { loadCustomErrorPages, MAX_ERROR_HTML_BYTES } from './error-pages.js'

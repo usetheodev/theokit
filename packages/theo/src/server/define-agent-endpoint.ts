@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+
 import type { AgentEvent } from './agent-types.js'
 import type { RouteConfig } from './define-route.js'
 
@@ -59,13 +60,15 @@ function encodeSSE(event: AgentEvent): Uint8Array {
  * otherwise abort the SSE stream silently before the first yield.
  */
 function resolveAbortSignal(request: unknown): AbortSignal {
+  if (typeof request !== 'object' || request === null) {
+    return new AbortController().signal
+  }
   const r = request as {
     signal?: unknown
     aborted?: boolean
     on?: (event: string, cb: () => void) => void
   }
   if (
-    r &&
     typeof r.signal === 'object' &&
     r.signal !== null &&
     'aborted' in r.signal &&
@@ -75,8 +78,8 @@ function resolveAbortSignal(request: unknown): AbortSignal {
   }
 
   const controller = new AbortController()
-  if (r && r.aborted === true) controller.abort()
-  if (r && typeof r.on === 'function') {
+  if (r.aborted === true) controller.abort()
+  if (typeof r.on === 'function') {
     r.on('close', () => {
       if (!controller.signal.aborted) controller.abort()
     })
@@ -94,10 +97,10 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
     handler: ({ request, ctx, body, query, params }) => {
       const generator = config.handler({
         request,
-        ctx: ctx as TCtx,
+        ctx: ctx,
         body: body as TBody,
-        query: query as undefined,
-        params: params as undefined,
+        query: query,
+        params: params,
       })
 
       const signal = resolveAbortSignal(request)
@@ -105,7 +108,7 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
           const onAbort = () => {
-            void generator.return(undefined as unknown as void)
+            void generator.return(undefined)
           }
 
           if (signal.aborted) {
@@ -116,6 +119,11 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
 
           try {
             for await (const event of generator) {
+              // `signal.aborted` can flip true asynchronously via the
+              // listener registered above. ESLint's narrowing only sees
+              // the false assertion at line 114; the dynamic abort is
+              // legitimate and the guard prevents enqueue-after-close.
+              // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
               if (signal.aborted) break
               controller.enqueue(encodeSSE(event))
             }
@@ -128,11 +136,11 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
           }
         },
         cancel() {
-          void generator.return(undefined as unknown as void)
+          void generator.return(undefined)
         },
       })
 
-      return new Response(stream, { headers: SSE_HEADERS }) as Response
+      return new Response(stream, { headers: SSE_HEADERS })
     },
-  } as RouteConfig<z.ZodUndefined, z.ZodUndefined, z.ZodUndefined, TCtx, Response>
+  }
 }

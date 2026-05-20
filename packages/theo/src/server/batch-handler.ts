@@ -19,7 +19,7 @@ export const STRIPPED_HEADERS = [
 ] as const
 
 export const BATCH_PATH = '/api/__theo_batch__'
-export const DEFAULT_MAX_BATCH = 32
+const DEFAULT_MAX_BATCH = 32
 
 export class BatchPathConflictError extends Error {
   constructor(path: string) {
@@ -58,9 +58,7 @@ export interface HandleBatchOptions {
   outerHeaders?: Record<string, string>
 }
 
-export type BatchResultItem =
-  | { data: unknown }
-  | { error: { message: string; code?: string } }
+export type BatchResultItem = { data: unknown } | { error: { message: string; code?: string } }
 
 export interface BatchResponse {
   results: BatchResultItem[]
@@ -86,25 +84,34 @@ function sanitizeItemHeaders(
   }
   if (outerHeaders) {
     for (const stripped of STRIPPED_HEADERS) {
-      const value = outerHeaders[stripped]
-      if (value !== undefined) {
-        out[stripped] = value
+      // `Object.hasOwn` defends against missing keys without triggering
+      // `no-unnecessary-condition` (TypeScript types `outerHeaders` keys
+      // as defined; `hasOwn` keeps the conditional honest at runtime).
+      if (Object.hasOwn(outerHeaders, stripped)) {
+        out[stripped] = outerHeaders[stripped]
       }
     }
   }
   return out
 }
 
+/**
+ * Validate + execute a batch request.
+ *
+ * CR-028 fix: previously the signature was `payload: BatchPayload`,
+ * suggesting the caller had already validated. In reality `api-middleware`
+ * passes `JSON.parse(rawBody) as BatchPayload` — an unsafe cast over raw
+ * HTTP input. We widen the input type to `unknown` so the type system
+ * forces validation, then run Zod once at this single trust boundary.
+ */
 export async function handleBatchRequest(
-  payload: BatchPayload,
+  payload: unknown,
   options: HandleBatchOptions,
 ): Promise<BatchResponse> {
   const parsed = batchPayloadSchema.parse(payload)
   const max = options.max ?? DEFAULT_MAX_BATCH
   if (parsed.requests.length > max) {
-    throw new Error(
-      `Batch size ${parsed.requests.length} exceeds max ${max}`,
-    )
+    throw new Error(`Batch size ${parsed.requests.length} exceeds max ${max}`)
   }
 
   const results: BatchResultItem[] = []
@@ -117,8 +124,7 @@ export async function handleBatchRequest(
       const r = await options.execute(sanitized)
       results.push(r)
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : String(err)
+      const message = err instanceof Error ? err.message : String(err)
       results.push({ error: { message } })
     }
   }

@@ -1,17 +1,23 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs'
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * All filesystem inputs in this file are derived from:
+ *   - `process.cwd()` resolved at build time, OR
+ *   - directory tree walks rooted in `serverDir`/`appDir` (themselves
+ *     resolved from cwd), OR
+ *   - file paths produced by `collectStaticPaths` (a controlled router
+ *     scanner).
+ * No path here originates from HTTP input, environment variables, or
+ * deserialized user data. The path-traversal vector the rule guards
+ * against does not apply — this is a build-time tool, not a request
+ * handler.
+ */
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
-import type { RouteNode } from '../router/types.js'
 import { scanRoutes } from '../router/scan.js'
+import type { RouteNode } from '../router/types.js'
+
 import { nodeAdapter } from './node.js'
 import {
   collectStaticPaths,
@@ -19,6 +25,7 @@ import {
   type LoadStaticPaths,
   type ResolvedPath,
 } from './static-paths.js'
+import type { DeployAdapter } from './types.js'
 
 export class StaticApiRoutesDetectedError extends Error {
   constructor(routes: string[]) {
@@ -45,10 +52,7 @@ export class StaticRenderError extends Error {
 export interface StaticBuildDeps {
   detectApiRoutes?: (serverDir: string) => string[]
   scanAppRoutes?: (appDir: string) => RouteNode
-  collectPaths?: (
-    tree: RouteNode,
-    options: CollectOptions,
-  ) => Promise<ResolvedPath[]>
+  collectPaths?: (tree: RouteNode, options: CollectOptions) => Promise<ResolvedPath[]>
   loadStaticPaths?: LoadStaticPaths
   renderHtml?: (url: string, cwd: string) => Promise<string>
   ensureDir?: (path: string) => Promise<void>
@@ -79,17 +83,21 @@ function walkRoutes(root: string, dir: string, out: string[]): void {
   }
 }
 
+/* eslint-disable @typescript-eslint/require-await -- DI contract is async; default impl uses sync fs */
+
+// The DI surface exposes async helpers (so consumers can override with
+// real async IO — e.g. S3 uploads). The defaults use sync fs because
+// every caller awaits the result anyway.
 const defaultEnsureDir = async (path: string): Promise<void> => {
   mkdirSync(path, { recursive: true })
 }
 
-const defaultWriteFile = async (
-  path: string,
-  content: string,
-): Promise<void> => {
+const defaultWriteFile = async (path: string, content: string): Promise<void> => {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, content)
 }
+
+/* eslint-enable @typescript-eslint/require-await */
 
 /**
  * Default loader: dynamic-imports the file at `paramsFilePath` and invokes
@@ -100,10 +108,14 @@ const defaultLoadStaticPaths: LoadStaticPaths = async (paramsFilePath) => {
   if (!existsSync(paramsFilePath)) return null
   try {
     const mod = (await import(pathToFileURL(paramsFilePath).href)) as {
-      default?: () => Awaited<ReturnType<LoadStaticPaths>>
+      default?: LoadStaticPaths | (() => Awaited<ReturnType<LoadStaticPaths>>)
     }
     if (typeof mod.default !== 'function') return null
-    const result = await mod.default()
+    // The user's `static-paths.ts` may export `default` as either sync or
+    // async — `await` accepts both, but ESLint's `await-thenable` cannot
+    // see through the union.
+    const value = mod.default(paramsFilePath)
+    const result = value instanceof Promise ? await value : value
     return result ?? null
   } catch {
     return null
@@ -117,9 +129,7 @@ const defaultLoadStaticPaths: LoadStaticPaths = async (paramsFilePath) => {
  * is present (so the static adapter still emits something usable even without
  * SSR enabled).
  */
-function createDefaultRenderHtml(
-  cwd: string,
-): (url: string) => Promise<string> {
+function createDefaultRenderHtml(cwd: string): (url: string) => Promise<string> {
   return async (url: string): Promise<string> => {
     const clientDir = resolve(cwd, '.theo/client')
     const indexPath = resolve(clientDir, 'index.html')
@@ -144,10 +154,9 @@ function createDefaultRenderHtml(
       if (typeof mod.render !== 'function') return baseHtml
       const result = await mod.render(url)
       if (typeof result === 'string') {
-        const rootMatch = baseHtml.match(/<div id=["']root["'][^>]*>/)
+        const rootMatch = /<div id=["']root["'][^>]*>/.exec(baseHtml)
         if (rootMatch) {
-          const splitIdx =
-            baseHtml.indexOf(rootMatch[0]) + rootMatch[0].length
+          const splitIdx = baseHtml.indexOf(rootMatch[0]) + rootMatch[0].length
           return baseHtml.slice(0, splitIdx) + result + baseHtml.slice(splitIdx)
         }
         return baseHtml.replace('</body>', result + '</body>')

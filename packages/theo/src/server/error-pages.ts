@@ -9,6 +9,11 @@
  * console.warn and the default JSON error path is used.
  */
 
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Loads `.theo/client/404.html` and `500.html` from a directory `dir` that
+ * is always the build output of the current project. The names are fixed
+ * literals (`'404.html'` / `'500.html'`) — no HTTP input.
+ */
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 

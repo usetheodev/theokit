@@ -9,13 +9,13 @@
 export interface ParsedWebBody {
   json?: unknown
   fields: Record<string, string>
-  files: Array<{
+  files: {
     fieldName: string
     filename: string
     contentType: string
     size: number
     buffer: Uint8Array
-  }>
+  }[]
 }
 
 export interface WebBodyParserOptions {
@@ -48,10 +48,7 @@ export function parseWebRequestBody(
   return promise
 }
 
-async function parseImpl(
-  request: Request,
-  options: WebBodyParserOptions,
-): Promise<ParsedWebBody> {
+async function parseImpl(request: Request, options: WebBodyParserOptions): Promise<ParsedWebBody> {
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE
   const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES
   const maxTotal = maxFileSize * maxFiles + SAFETY_MARGIN

@@ -25,27 +25,38 @@ function bytesToBase64(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString('base64')
   }
   let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
+  for (const b of bytes) {
+    binary += String.fromCharCode(b)
   }
   // `btoa` exists in browsers + edge runtimes; if it doesn't, the caller
   // is on a JS runtime we don't support — let the ReferenceError bubble.
   return btoa(binary)
 }
 
-export function generateNonce(): string {
-  // Web Crypto path — available on Node 19+ globalThis, Bun, Deno,
-  // Cloudflare Workers, Vercel Edge.
-  const webCrypto = (globalThis as { crypto?: Crypto }).crypto
-  if (webCrypto && typeof webCrypto.getRandomValues === 'function') {
-    const buf = new Uint8Array(16)
-    webCrypto.getRandomValues(buf)
-    return bytesToBase64(buf)
+// CR-027 fix: the previous fallback path used `require('node:crypto')`,
+// which throws ReferenceError in strict ESM contexts (Bun, Deno, Vercel
+// Edge) when reached. Web Crypto has been a hard requirement since Node
+// 19; for older Node we now throw a clear error at module load time
+// instead of failing on first SSR request.
+let cachedWebCrypto: Crypto | null | undefined
+
+function getWebCrypto(): Crypto {
+  if (cachedWebCrypto === undefined) {
+    const candidate = (globalThis as { crypto?: Crypto }).crypto
+    cachedWebCrypto =
+      candidate && typeof candidate.getRandomValues === 'function' ? candidate : null
   }
-  // Node fallback (Node < 19 without --experimental-global-webcrypto).
-  // require() chosen over import() to keep the function synchronous —
-  // nonce generation sits on the request hot path.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeCrypto = require('node:crypto') as typeof import('node:crypto')
-  return nodeCrypto.randomBytes(16).toString('base64')
+  if (!cachedWebCrypto) {
+    throw new Error(
+      'generateNonce: Web Crypto unavailable. TheoKit requires Node.js 19+, Bun, Deno, ' +
+        'or any modern Edge runtime where `globalThis.crypto.getRandomValues` is present.',
+    )
+  }
+  return cachedWebCrypto
+}
+
+export function generateNonce(): string {
+  const buf = new Uint8Array(16)
+  getWebCrypto().getRandomValues(buf)
+  return bytesToBase64(buf)
 }

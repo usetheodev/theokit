@@ -6,8 +6,28 @@ on:
   pull_request:
     branches: [main]
 
+# Quality gates — every job runs on every PR. Failing job blocks merge.
+# See CLAUDE.md "Quality Gates" for the rationale per gate.
+
 jobs:
-  lint-and-typecheck:
+  lint-and-format:
+    name: Lint + Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint (strict — zero warnings)
+        run: pnpm lint
+      - name: Prettier (format check)
+        run: pnpm format:check
+
+  typecheck-build:
+    name: Typecheck + Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,6 +41,7 @@ jobs:
       - run: pnpm build
 
   test:
+    name: Unit + Type tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -36,7 +57,29 @@ jobs:
       - run: pnpm test
       - run: pnpm test:types
 
+  coverage:
+    name: Coverage gate (>=80%)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Run tests with coverage thresholds
+        run: pnpm test:coverage
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
   e2e:
+    name: Playwright E2E
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,9 +92,85 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: pnpm test:e2e
 
-  package-validation:
+  dead-code:
+    name: Dead code (Knip)
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm knip
+
+  dependency-audit:
+    name: Dependency audit (npm audit, high+)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:audit
+
+  dependency-review:
+    name: Dependency review (GitHub)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Dependency Review'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          allow-licenses: MIT, Apache-2.0, ISC, BSD-2-Clause, BSD-3-Clause, 0BSD, CC0-1.0, CC-BY-3.0, CC-BY-4.0, Unlicense, Python-2.0, BlueOak-1.0.0
+
+  license-check:
+    name: License compliance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:licenses
+
+  bundle-budget:
+    name: Bundle budget (<=350 KB gzipped)
+    runs-on: ubuntu-latest
+    needs: [typecheck-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm check:bundle
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: bash scripts/prevent-secrets.sh
+
+  package-validation:
+    name: Package validation (publint + ATTW + smoke)
+    runs-on: ubuntu-latest
+    needs: [lint-and-format, typecheck-build, test]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

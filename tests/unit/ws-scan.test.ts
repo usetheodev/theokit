@@ -9,7 +9,7 @@ describe('scanWebSocketRoutes', () => {
   it('should scan server/ws/ directory and return routes', () => {
     const routes = scanWebSocketRoutes(fixtureDir)
     expect(routes.length).toBeGreaterThanOrEqual(2)
-    const paths = routes.map(r => r.wsPath)
+    const paths = routes.map((r) => r.wsPath)
     expect(paths).toContain('/ws/echo')
     expect(paths).toContain('/ws/notifications')
   })
@@ -34,7 +34,6 @@ describe('scanWebSocketRoutes', () => {
 
   it('should ignore non-ts files', () => {
     const routes = scanWebSocketRoutes(fixtureDir)
-    const paths = routes.map(r => r.wsPath)
     // All routes should be from .ts files
     for (const route of routes) {
       expect(route.filePath).toMatch(/\.(ts|tsx|js|jsx)$/)

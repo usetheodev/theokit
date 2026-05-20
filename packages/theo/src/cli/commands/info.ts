@@ -1,5 +1,10 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI `theo info` reader. Reads `package.json`, `theo.config.*`, lock
+ * files under the user's `cwd`. Read-only build-time tool. No HTTP input.
+ */
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+
 import { loadConfig } from '../../config/load-config.js'
 import { scanRoutes } from '../../router/scan.js'
 
@@ -28,13 +33,13 @@ export interface BuildInfoDeps {
 
 function defaultDetectRuntime(): RuntimeInfo {
   const g = globalThis as { Bun?: { version: string }; Deno?: { version: { deno: string } } }
-  if (typeof g.Bun !== 'undefined' && g.Bun.version) {
+  if (g.Bun?.version) {
     return { name: 'bun', version: g.Bun.version }
   }
-  if (typeof g.Deno !== 'undefined' && g.Deno.version) {
+  if (g.Deno?.version) {
     return { name: 'deno', version: g.Deno.version.deno }
   }
-  if (typeof process !== 'undefined' && process.versions?.node) {
+  if (typeof process !== 'undefined' && process.versions.node) {
     return { name: 'node', version: process.versions.node }
   }
   return { name: 'unknown', version: '?' }
@@ -92,17 +97,11 @@ export async function buildInfo(deps: BuildInfoDeps): Promise<string> {
     scanError = (err as Error).message
   }
 
-  const projectLine = pkg && pkg.name
-    ? `${pkg.name}@${pkg.version ?? '?'}`
-    : '(missing)'
+  const projectLine = pkg?.name ? `${pkg.name}@${pkg.version ?? '?'}` : '(missing)'
 
-  const configLine = config.ok
-    ? 'OK'
-    : `INVALID — ${config.summary}`
+  const configLine = config.ok ? 'OK' : `INVALID — ${config.summary}`
 
-  const routesLine = scanError
-    ? `Scan failed: ${scanError}`
-    : `Routes: ${routesCount}`
+  const routesLine = scanError ? `Scan failed: ${scanError}` : `Routes: ${routesCount}`
 
   return [
     `# Theo info`,

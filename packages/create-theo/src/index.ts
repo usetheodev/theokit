@@ -1,3 +1,9 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * `create-theokit` scaffold tool. All write paths are derived from the
+ * user-supplied target directory (CLI argument, resolved to absolute).
+ * Read paths are the bundled `templates/` shipped with this package.
+ * Build-time tool — no HTTP input.
+ */
 import {
   existsSync,
   cpSync,
@@ -10,6 +16,7 @@ import {
 } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
 import { applyBareTransform } from './bare-transform.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -60,9 +67,7 @@ export function scaffold(
   if (existsSync(targetDir)) {
     const contents = readdirSync(targetDir)
     if (contents.length > 0) {
-      throw new Error(
-        `Directory "${targetDir}" is not empty. Please use an empty directory.`,
-      )
+      throw new Error(`Directory "${targetDir}" is not empty. Please use an empty directory.`)
     }
   }
 

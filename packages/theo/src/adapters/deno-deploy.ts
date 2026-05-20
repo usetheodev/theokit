@@ -1,8 +1,13 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Deno Deploy adapter. Writes to `cwd/.theo/deno-deploy/`. Build-time.
+ */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+
 import { nodeAdapter } from './node.js'
+import type { DeployAdapter } from './types.js'
 
 export interface DenoBuildDeps {
   runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
@@ -92,9 +97,14 @@ export async function buildDeno(
   ensureDir(outputDir)
 
   const entry = renderDenoEntry(config.port)
-  const write = deps.writeEntry ?? ((p, c) => writeFileSync(p, c))
+  const write =
+    deps.writeEntry ??
+    ((p, c) => {
+      writeFileSync(p, c)
+    })
   write(resolve(outputDir, 'server.ts'), entry)
 
+  // eslint-disable-next-line no-console -- CLI build progress
   console.log('\n  ✓ Deno Deploy output → .theo/deno/server.ts\n')
 }
 

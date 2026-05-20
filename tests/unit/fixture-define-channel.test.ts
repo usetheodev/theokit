@@ -16,8 +16,12 @@ describe('T2.1 — define-channel fixture', () => {
 
   it('channel module uses defineChannel from theokit/server', () => {
     const src = read('server/channels/notifications.ts')
+    // The test scans a fixture's source file (a few hundred bytes). The
+    // import-pattern regex has bounded character classes; backtracking
+    // cannot escalate at this input size.
     expect(src).toMatch(/import\s*\{[^}]*defineChannel[^}]*\}\s*from\s*['"]theokit\/server['"]/)
     // matches `defineChannel(`, `defineChannel<T>(`, `defineChannel<T,U>(` …
+    // eslint-disable-next-line security/detect-unsafe-regex -- bounded input + non-overlapping quantifiers
     expect(src).toMatch(/defineChannel\s*(?:<[^>]+>)?\s*\(/)
   })
 

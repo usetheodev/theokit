@@ -85,12 +85,10 @@ describe('T3.1 — migration guide internal links resolve', () => {
   it('Given each ](#anchor) link, Then a matching heading slug exists in the same file', () => {
     const content = readGuide()
     const headings = new Set(
-      (content.match(/^#{1,6}\s+.+$/gm) ?? []).map((h) =>
-        slugify(h.replace(/^#+\s+/, '')),
-      ),
+      (content.match(/^#{1,6}\s+.+$/gm) ?? []).map((h) => slugify(h.replace(/^#+\s+/, ''))),
     )
-    const links = Array.from(content.matchAll(/\]\(#([a-z0-9-]+)\)/gi)).map(
-      (m) => m[1].toLowerCase(),
+    const links = Array.from(content.matchAll(/\]\(#([a-z0-9-]+)\)/gi)).map((m) =>
+      m[1].toLowerCase(),
     )
     const missing = links.filter((href) => !headings.has(href))
     expect(missing, `missing anchors: ${missing.join(', ')}`).toEqual([])

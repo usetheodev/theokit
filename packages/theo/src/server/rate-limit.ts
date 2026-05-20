@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http'
+
 import { InMemoryStore, type RateLimitStore } from './rate-limit-store.js'
 
 /**
@@ -29,19 +30,19 @@ export interface RateLimitResult {
  * (single-thread JS makes this safe). External stores remain async and
  * would require a different async wrapper at the middleware layer.
  */
-export function createRateLimiter(
-  config: RateLimitConfig,
-  opts: { store?: RateLimitStore } = {},
-) {
+export function createRateLimiter(config: RateLimitConfig, opts: { store?: RateLimitStore } = {}) {
   const store = opts.store ?? new InMemoryStore()
   const isInMemory = store instanceof InMemoryStore
 
   return function checkRateLimit(req: IncomingMessage): RateLimitResult {
+    // `req.socket` is typed as always-present in Node typings; defensive
+    // for test doubles (object literals without `socket`).
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive for test doubles
     const key = req.socket?.remoteAddress ?? 'unknown'
 
     if (isInMemory) {
       // Sync fast-path: the in-memory store exposes a sync incr.
-      const state = (store as InMemoryStore).incrSync(key, config.windowMs)
+      const state = store.incrSync(key, config.windowMs)
       return resultFromState(state, config)
     }
 
@@ -56,7 +57,10 @@ export function createRateLimiter(
   }
 }
 
-function resultFromState(state: { count: number; resetAt: number }, config: RateLimitConfig): RateLimitResult {
+function resultFromState(
+  state: { count: number; resetAt: number },
+  config: RateLimitConfig,
+): RateLimitResult {
   if (state.count > config.max) {
     const retryAfter = Math.ceil((state.resetAt - Date.now()) / 1000)
     return {

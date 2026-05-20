@@ -49,7 +49,10 @@ describe('EC-20 — devtools has zero dangerouslySetInnerHTML', () => {
         }
       }
     }
-    expect(offenders, offenders.length ? `EC-20 violations:\n${offenders.join('\n')}` : 'OK').toEqual([])
+    expect(
+      offenders,
+      offenders.length ? `EC-20 violations:\n${offenders.join('\n')}` : 'OK',
+    ).toEqual([])
   })
 
   it('every devtools file carries the EC-20 guard comment', () => {
@@ -60,6 +63,9 @@ describe('EC-20 — devtools has zero dangerouslySetInnerHTML', () => {
         missing.push(file)
       }
     }
-    expect(missing, missing.length ? `missing EC-20 guard comment:\n${missing.join('\n')}` : 'OK').toEqual([])
+    expect(
+      missing,
+      missing.length ? `missing EC-20 guard comment:\n${missing.join('\n')}` : 'OK',
+    ).toEqual([])
   })
 })

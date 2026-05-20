@@ -1,11 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import {
-  AgentComposer,
-  AgentTimeline,
-  type AgentEvent as AgentRow,
-} from '@usetheo/ui'
+import { AgentComposer, AgentTimeline, type AgentEvent as AgentRow } from '@usetheo/ui'
 import { useAgentStream } from 'theokit/client'
 
 interface Me {
@@ -44,10 +40,14 @@ export default function Page() {
 
   if (!me) {
     return (
-      <main style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360 }}>
+      <main
+        style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 360 }}
+      >
         <h1>Sign in</h1>
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email" />
-        <button type="button" onClick={login}>Sign in (demo)</button>
+        <button type="button" onClick={login}>
+          Sign in (demo)
+        </button>
       </main>
     )
   }
@@ -56,16 +56,21 @@ export default function Page() {
     id: `e-${i}`,
     type: e.type === 'tool_call' ? 'tool' : 'command',
     label:
-      e.type === 'message' ? e.content
-      : e.type === 'tool_call' ? `tool: ${e.name}`
-      : e.type === 'error' ? `error: ${e.message}`
-      : e.type,
+      e.type === 'message'
+        ? e.content
+        : e.type === 'tool_call'
+          ? `tool: ${e.name}`
+          : e.type === 'error'
+            ? `error: ${e.message}`
+            : e.type,
     status: e.type === 'error' ? 'failed' : 'success',
     timestamp: new Date().toISOString(),
   }))
 
   return (
-    <main style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 24, gap: 16 }}>
+    <main
+      style={{ display: 'flex', flexDirection: 'column', height: '100vh', padding: 24, gap: 16 }}
+    >
       <header style={{ display: 'flex', justifyContent: 'space-between' }}>
         <div>
           <h1>SaaS Agent</h1>
@@ -73,7 +78,9 @@ export default function Page() {
             Signed in as {me.email} · status: <code>{status}</code>
           </p>
         </div>
-        <button type="button" onClick={logout}>Sign out</button>
+        <button type="button" onClick={logout}>
+          Sign out
+        </button>
       </header>
       <section style={{ flex: 1, overflowY: 'auto' }}>
         <AgentTimeline events={rows} />

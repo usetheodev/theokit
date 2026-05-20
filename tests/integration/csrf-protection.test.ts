@@ -32,7 +32,9 @@ function makeReq(opts: Partial<FakeReq> = {}): IncomingMessage {
     url: opts.url ?? '/api/login',
     on() {},
     removeListener() {},
-    emit() { return true },
+    emit() {
+      return true
+    },
   } as unknown as IncomingMessage
 }
 
@@ -51,9 +53,17 @@ function makeRes(): FakeRes & ServerResponse {
     statusCode: 200,
     headers: {},
     ended: false,
-    writeHead(s, h) { this.statusCode = s; if (h) Object.assign(this.headers, h) },
-    setHeader(k, v) { this.headers[k.toLowerCase()] = v },
-    end(body) { this.body = body; this.ended = true },
+    writeHead(s, h) {
+      this.statusCode = s
+      if (h) Object.assign(this.headers, h)
+    },
+    setHeader(k, v) {
+      this.headers[k.toLowerCase()] = v
+    },
+    end(body) {
+      this.body = body
+      this.ended = true
+    },
   }
   return res as FakeRes & ServerResponse
 }
@@ -85,8 +95,17 @@ describe('CSRF integration — warn mode (default)', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-1', undefined, undefined, 'warn',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-1',
+      undefined,
+      undefined,
+      'warn',
     )
 
     expect(handler).toHaveBeenCalledOnce()
@@ -103,8 +122,17 @@ describe('CSRF integration — warn mode (default)', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-2', undefined, undefined, 'warn',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-2',
+      undefined,
+      undefined,
+      'warn',
     )
 
     expect(handler).toHaveBeenCalledOnce()
@@ -117,8 +145,17 @@ describe('CSRF integration — warn mode (default)', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'GET', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-3', undefined, undefined, 'warn',
+      ROUTE,
+      'GET',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-3',
+      undefined,
+      undefined,
+      'warn',
     )
 
     expect(handler).toHaveBeenCalledOnce()
@@ -133,8 +170,17 @@ describe('CSRF integration — strict mode', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-4', undefined, undefined, 'strict',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-4',
+      undefined,
+      undefined,
+      'strict',
     )
 
     expect(handler).not.toHaveBeenCalled()
@@ -148,8 +194,17 @@ describe('CSRF integration — strict mode', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-5', undefined, undefined, 'strict',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-5',
+      undefined,
+      undefined,
+      'strict',
     )
 
     expect(handler).toHaveBeenCalledOnce()
@@ -169,8 +224,17 @@ describe('CSRF integration — strict mode', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-6', undefined, undefined, 'strict',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-6',
+      undefined,
+      undefined,
+      'strict',
     )
 
     expect(handler).not.toHaveBeenCalled()
@@ -183,8 +247,17 @@ describe('CSRF integration — strict mode', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler, csrf: false }),
-      undefined, 'rid-7', undefined, undefined, 'strict',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler, csrf: false }),
+      undefined,
+      'rid-7',
+      undefined,
+      undefined,
+      'strict',
     )
 
     expect(handler).toHaveBeenCalledOnce()
@@ -199,8 +272,17 @@ describe('CSRF integration — off mode', () => {
     const res = makeRes()
 
     await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-8', undefined, undefined, 'off',
+      ROUTE,
+      'POST',
+      {},
+      req,
+      res,
+      makeLoader({ handler }),
+      undefined,
+      'rid-8',
+      undefined,
+      undefined,
+      'off',
     )
 
     expect(handler).toHaveBeenCalledOnce()

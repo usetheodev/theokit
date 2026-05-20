@@ -9,12 +9,7 @@ import type { RequestContext } from '../context.js'
  * The framework's error handler converts `AuthRequiredError` (status: 401)
  * into a JSON response automatically.
  */
-export const GET = defineRoute<
-  z.ZodUndefined,
-  z.ZodUndefined,
-  z.ZodUndefined,
-  RequestContext
->({
+export const GET = defineRoute<z.ZodUndefined, z.ZodUndefined, z.ZodUndefined, RequestContext>({
   handler: ({ ctx }) => {
     requireAuth(ctx.session)
     return {

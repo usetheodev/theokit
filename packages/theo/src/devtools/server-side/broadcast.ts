@@ -10,13 +10,9 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
-import {
-  redactHeaders,
-  redactQueryString,
-  serializeSafely,
-  truncateBody,
-} from './redact.js'
 import type { RequestRecord, CsrfWarnPayload, ErrorRecord } from '../shared.js'
+
+import { redactHeaders, redactQueryString, serializeSafely, truncateBody } from './redact.js'
 
 interface ViteWsLike {
   ws?: {
@@ -44,7 +40,6 @@ export function broadcastToDevtools(event: string, data: unknown): void {
     const safe = serializeSafely(data)
     server.ws.send({ type: 'custom', event, data: safe })
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.warn('[theo devtools] broadcast failed', err)
   }
 }

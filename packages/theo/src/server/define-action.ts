@@ -2,7 +2,7 @@ import type { z } from 'zod'
 
 export interface ActionConfig<TInput extends z.ZodType, TCtx = unknown> {
   input: TInput
-  handler: (ctx: { input: z.infer<TInput>; ctx: TCtx }) => unknown | Promise<unknown>
+  handler: (ctx: { input: z.infer<TInput>; ctx: TCtx }) => unknown
 }
 
 /**

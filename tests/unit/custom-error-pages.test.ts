@@ -5,7 +5,7 @@ import {
   loadCustomErrorPages,
   MAX_ERROR_HTML_BYTES,
 } from '../../packages/theo/src/server/error-pages.js'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 

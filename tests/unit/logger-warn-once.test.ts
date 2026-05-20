@@ -1,8 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import {
-  warnOnce,
-  _resetWarnOnceForTests,
-} from '../../packages/theo/src/server/logger.js'
+import { warnOnce, _resetWarnOnceForTests } from '../../packages/theo/src/server/logger.js'
 
 /**
  * T2.1 — `warnOnce` helper.
@@ -67,7 +64,10 @@ describe('warnOnce — payload serialization', () => {
   })
 
   it('EC-2: Given payload with circular reference, When emit, Then console.warn still called with fallback string (no throw)', () => {
-    type Circ = { name: string; self?: Circ }
+    interface Circ {
+      name: string
+      self?: Circ
+    }
     const circular: Circ = { name: 'loop' }
     circular.self = circular
 

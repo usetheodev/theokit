@@ -36,9 +36,8 @@ describe('generateEntryServer — renderStreamingWeb (T2.3)', () => {
 
 describe('cf/bun/vercel adapters consume renderStreamingWeb when streaming on', () => {
   it('cloudflare template references renderStreamingWeb option', async () => {
-    const { renderCloudflareWorkerEntry } = await import(
-      '../../packages/theo/src/adapters/cloudflare.js'
-    )
+    const { renderCloudflareWorkerEntry } =
+      await import('../../packages/theo/src/adapters/cloudflare.js')
     const out = renderCloudflareWorkerEntry()
     // CF template must support routing GET non-API requests through the
     // streaming entry when available. Adapter detects via env-injected flag.
@@ -46,9 +45,7 @@ describe('cf/bun/vercel adapters consume renderStreamingWeb when streaming on', 
   })
 
   it('bun adapter mentions streaming branch when feature wired', async () => {
-    const { renderBunEntry } = await import(
-      '../../packages/theo/src/adapters/bun.js'
-    )
+    const { renderBunEntry } = await import('../../packages/theo/src/adapters/bun.js')
     const out = renderBunEntry(3000)
     // Bun template should reference the streaming entry name when streaming
     // is part of the build output.

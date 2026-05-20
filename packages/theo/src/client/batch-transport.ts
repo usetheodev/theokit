@@ -13,7 +13,7 @@ import {
   type BatchResponse,
 } from './batch.js'
 
-export const BATCH_ENDPOINT = '/api/__theo_batch__'
+const BATCH_ENDPOINT = '/api/__theo_batch__'
 
 export interface CreateBatchTransportOptions {
   /** Override fetch (default: globalThis.fetch). Used by tests. */
@@ -22,9 +22,7 @@ export interface CreateBatchTransportOptions {
   endpoint?: string
 }
 
-export function createBatchTransport(
-  options: CreateBatchTransportOptions = {},
-): BatchTransport {
+export function createBatchTransport(options: CreateBatchTransportOptions = {}): BatchTransport {
   const fetchImpl = options.fetchImpl ?? fetch
   const endpoint = options.endpoint ?? BATCH_ENDPOINT
   return async (requests: BatchRequest[]): Promise<BatchResponse[]> => {
@@ -66,8 +64,6 @@ export function __resetGlobalBatcherForTests(): void {
 export function getGlobalBatcher(): Batcher | undefined {
   const g = globalThis as { __THEO_BATCHING__?: boolean }
   if (!g.__THEO_BATCHING__) return undefined
-  if (!globalBatcher) {
-    globalBatcher = createBatcher({ transport: createBatchTransport() })
-  }
+  globalBatcher ??= createBatcher({ transport: createBatchTransport() })
   return globalBatcher
 }

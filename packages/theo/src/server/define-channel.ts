@@ -1,5 +1,6 @@
-import type { WebSocketLike } from './define-websocket.js'
 import type { IncomingMessage } from 'node:http'
+
+import type { WebSocketLike } from './define-websocket.js'
 
 export interface ChannelHandler<TMessage = unknown> {
   onSubscribe?: (ws: WebSocketLike, room: string, req: IncomingMessage) => void

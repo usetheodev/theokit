@@ -67,13 +67,10 @@ describe('T9.1 — every shipped index.html wires the entry-client script', () =
         absPath,
       }))
     })(),
-  )(
-    'Given $label, When read, Then it includes the entry-client script',
-    ({ absPath }) => {
-      const html = readFileSync(absPath, 'utf-8')
-      expect(html).toContain(ENTRY_CLIENT_URL)
-    },
-  )
+  )('Given $label, When read, Then it includes the entry-client script', ({ absPath }) => {
+    const html = readFileSync(absPath, 'utf-8')
+    expect(html).toContain(ENTRY_CLIENT_URL)
+  })
 
   it('Given any future index.html, When the template ships, Then a </body> tag exists for safe injection', () => {
     // The Vite plugin's injectEntryClient() falls back to appending at EOF

@@ -16,7 +16,7 @@ describe('defineAction', () => {
     const schema = z.object({ email: z.string().email() })
     const config = {
       input: schema,
-      handler: ({ input }: { input: { email: string } }) => ({ ok: true }),
+      handler: ({ input: _input }: { input: { email: string } }) => ({ ok: true }),
     }
     const result = defineAction(config)
     expect(result.input).toBe(schema)

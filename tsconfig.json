@@ -20,6 +20,15 @@
       "theokit/client": ["./packages/theo/src/client/index.ts"]
     }
   },
-  "include": ["packages/*/src/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["node_modules", "dist", "fixtures", "referencias"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "tests/**/*.ts",
+    "tests/**/*.tsx",
+    "scripts/**/*.ts",
+    "scripts/**/*.mjs",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "fixtures", "referencias", "examples", "my-test"]
 }

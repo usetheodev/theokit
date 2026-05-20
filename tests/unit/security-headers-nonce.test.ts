@@ -49,11 +49,7 @@ describe('buildSecurityHeaders — nonce path', () => {
   })
 
   it('Given report-only mode + nonce, Then nonce appears in CSP-Report-Only header', () => {
-    const headers = buildSecurityHeaders(
-      { cspMode: 'report-only' },
-      env,
-      { nonce: 'xyz789' },
-    )
+    const headers = buildSecurityHeaders({ cspMode: 'report-only' }, env, { nonce: 'xyz789' })
     expect(headers['Content-Security-Policy-Report-Only']).toContain("'nonce-xyz789'")
     expect(headers['Content-Security-Policy']).toBeUndefined()
   })

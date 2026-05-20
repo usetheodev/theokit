@@ -1,8 +1,10 @@
-import { build as viteBuild } from 'vite'
 import react from '@vitejs/plugin-react'
-import { theoPlugin } from '../vite-plugin/index.js'
-import type { DeployAdapter } from './types.js'
+import { build as viteBuild } from 'vite'
+
 import type { TheoConfig } from '../config/schema.js'
+import { theoPlugin } from '../vite-plugin/index.js'
+
+import type { DeployAdapter } from './types.js'
 
 export const nodeAdapter: DeployAdapter = {
   name: 'node',
@@ -21,6 +23,7 @@ export const nodeAdapter: DeployAdapter = {
 
     // SSR build (only when ssr: true)
     if (config.ssr) {
+      // eslint-disable-next-line no-console -- CLI build progress
       console.log('\n  Building SSR...\n')
       await viteBuild({
         root: cwd,

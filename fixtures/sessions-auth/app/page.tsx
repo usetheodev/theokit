@@ -39,13 +39,17 @@ export default function Page() {
       {me ? (
         <>
           <p>Logged in as {me.username}</p>
-          <button type="button" onClick={logout}>Logout</button>
+          <button type="button" onClick={logout}>
+            Logout
+          </button>
         </>
       ) : (
         <>
           <p>Not logged in.</p>
           <input value={username} onChange={(e) => setUsername(e.target.value)} />
-          <button type="button" onClick={login}>Login</button>
+          <button type="button" onClick={login}>
+            Login
+          </button>
         </>
       )}
     </main>

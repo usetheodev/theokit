@@ -26,9 +26,11 @@ export async function safeClose(
     }, timeoutMs)
     // `unref` so the timer alone doesn't keep the test process alive.
     if (typeof timer.unref === 'function') timer.unref()
-    server
+    void server
       .close()
-      .catch(() => {})
+      .catch(() => {
+        // Vite teardown errors are noise here — the timeout will resolve.
+      })
       .then(() => {
         if (settled) return
         settled = true

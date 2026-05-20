@@ -5,22 +5,23 @@ export interface EntryClientOptions {
   }
 }
 
-export function generateEntryClient(
-  ssr?: boolean,
-  opts: EntryClientOptions = {},
-): string {
+export function generateEntryClient(ssr?: boolean, opts: EntryClientOptions = {}): string {
   const rootMethod = ssr ? 'hydrateRoot' : 'createRoot'
 
   // T2.2 — TheoUI CSS imports (client-only; EC-2: NEVER in entry-server)
   // T2.3 — Wrap RouterProvider in <TheoUIProvider>
   const theoUiImports: string[] = []
   if (opts.theoUi) {
-    theoUiImports.push(`// T2.2 — TheoUI CSS auto-injected (config.ui)`)
-    theoUiImports.push(`import '@usetheo/ui/styles.css'`)
+    theoUiImports.push(
+      `// T2.2 — TheoUI CSS auto-injected (config.ui)`,
+      `import '@usetheo/ui/styles.css'`,
+    )
     const fontsModule = opts.theoUi.fonts === 'cdn' ? 'fonts-cdn.css' : 'fonts.css'
-    theoUiImports.push(`import '@usetheo/ui/${fontsModule}'`)
-    theoUiImports.push(`// T2.3 — TheoUIProvider auto-wraps RouterProvider`)
-    theoUiImports.push(`import { TheoUIProvider } from '@usetheo/ui'`)
+    theoUiImports.push(
+      `import '@usetheo/ui/${fontsModule}'`,
+      `// T2.3 — TheoUIProvider auto-wraps RouterProvider`,
+      `import { TheoUIProvider } from '@usetheo/ui'`,
+    )
   }
 
   const theme = opts.theoUi?.theme ?? 'violet-forge'
@@ -92,15 +93,11 @@ export function generateEntryClient(
         `if (el) {`,
         `  ;(async () => {`,
         ...preloadBlock.map((l) => '    ' + l),
-        `${renderCall}`,
+        renderCall,
         `  })()`,
         `}`,
       ]
-    : [
-        `if (el) {`,
-        renderCall,
-        `}`,
-      ]
+    : [`if (el) {`, renderCall, `}`]
 
   const manifestImports = ssr
     ? `import { routes, __theoPreloadMap } from '/@theo/route-manifest'`

@@ -154,11 +154,9 @@ describe('enforceCsrf — disallowed behavior = warn (no escalation)', () => {
 
 describe('enforceCsrf — undefined disallowed config (legacy path)', () => {
   it('Given no disallowed config, Then enforceCsrf behaves identically to the legacy 3-arg signature', () => {
-    const result = enforceCsrf(
-      makeReq({ method: 'POST', headers: {} }) as never,
-      'warn',
-      { warn: vi.fn() },
-    )
+    const result = enforceCsrf(makeReq({ method: 'POST', headers: {} }) as never, 'warn', {
+      warn: vi.fn(),
+    })
     expect(result.allow).toBe(true)
   })
 })

@@ -301,12 +301,7 @@ describe('runMiddlewareAndContext', () => {
     })
 
     // When: running middleware
-    const result = await runMiddlewareAndContext(
-      createMockReq(),
-      mockRes,
-      loadModule,
-      tempDir,
-    )
+    const result = await runMiddlewareAndContext(createMockReq(), mockRes, loadModule, tempDir)
 
     // Then: aborted because response ended
     expect(result.aborted).toBe(true)

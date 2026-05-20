@@ -20,12 +20,8 @@ export interface PkceChallenge {
   codeChallengeMethod: 'S256'
 }
 
-/** RFC 7636 §4.1 — base64url-encode without padding. */
-function base64urlEncode(bytes: Uint8Array): string {
-  let s = ''
-  for (const b of bytes) s += String.fromCharCode(b)
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
+// CR-020 DRY: single canonical base64url encoder lives in _internal/encoding.
+import { base64urlEncode } from './_internal/encoding.js'
 
 /**
  * Compute the code_challenge from a code_verifier per RFC 7636 §4.2.
@@ -33,7 +29,7 @@ function base64urlEncode(bytes: Uint8Array): string {
  */
 export async function pkceChallengeFromVerifier(verifier: string): Promise<string> {
   const bytes = new TextEncoder().encode(verifier)
-  const hash = await crypto.subtle.digest('SHA-256', bytes as BufferSource)
+  const hash = await crypto.subtle.digest('SHA-256', bytes)
   return base64urlEncode(new Uint8Array(hash))
 }
 

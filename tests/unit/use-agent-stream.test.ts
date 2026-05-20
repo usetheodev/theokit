@@ -161,10 +161,7 @@ describe('consumeAgentStream (T5.2 primitive)', () => {
 
     const fetchSplit: typeof fetch = async () => {
       return new Response(
-        streamFrom([
-          enc.encode(ev1.slice(0, split)),
-          enc.encode(ev1.slice(split) + ev2),
-        ]),
+        streamFrom([enc.encode(ev1.slice(0, split)), enc.encode(ev1.slice(split) + ev2)]),
         { headers: { 'content-type': 'text/event-stream' } },
       )
     }
@@ -253,12 +250,11 @@ describe('consumeAgentStream (T5.2 primitive)', () => {
       },
     })
     // EC-1: framework default MUST NOT erase user headers
-    expect(capturedHeaders?.['Authorization']).toBe('Bearer abc')
+    expect(capturedHeaders?.Authorization).toBe('Bearer abc')
     expect(capturedHeaders?.['X-Request-Id']).toBe('req-123')
     // AND the framework header is still present
     const hasCsrf =
-      capturedHeaders?.['x-theo-action'] === '1' ||
-      capturedHeaders?.['X-Theo-Action'] === '1'
+      capturedHeaders?.['x-theo-action'] === '1' || capturedHeaders?.['X-Theo-Action'] === '1'
     expect(hasCsrf).toBe(true)
   })
 })

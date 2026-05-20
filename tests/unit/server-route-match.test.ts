@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { compilePattern, matchRoute, type ServerRouteNode } from '../../packages/theo/src/server/match.js'
+import {
+  compilePattern,
+  matchRoute,
+  type ServerRouteNode,
+} from '../../packages/theo/src/server/match.js'
 
 describe('compilePattern', () => {
   it('should match static path', () => {
@@ -28,9 +32,23 @@ describe('compilePattern', () => {
 
 describe('matchRoute', () => {
   const routes: ServerRouteNode[] = [
-    { filePath: '/health.ts', routePath: '/api/health', paramNames: [], pattern: compilePattern('/api/health').pattern },
-    { filePath: '/users.ts', routePath: '/api/users', paramNames: [], pattern: compilePattern('/api/users').pattern },
-    { filePath: '/users/[id].ts', routePath: '/api/users/:id', ...compilePattern('/api/users/:id') },
+    {
+      filePath: '/health.ts',
+      routePath: '/api/health',
+      paramNames: [],
+      pattern: compilePattern('/api/health').pattern,
+    },
+    {
+      filePath: '/users.ts',
+      routePath: '/api/users',
+      paramNames: [],
+      pattern: compilePattern('/api/users').pattern,
+    },
+    {
+      filePath: '/users/[id].ts',
+      routePath: '/api/users/:id',
+      ...compilePattern('/api/users/:id'),
+    },
   ]
 
   it('should match static route', () => {

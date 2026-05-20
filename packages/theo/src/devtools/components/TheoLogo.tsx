@@ -13,7 +13,7 @@ export interface TheoLogoProps {
   size?: number
 }
 
-export function TheoLogo({ size = 18 }: TheoLogoProps) {
+export function TheoLogo({ size = 18 }: Readonly<TheoLogoProps>) {
   return (
     <img
       src={THEO_LOGO_BASE64}

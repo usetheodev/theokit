@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http'
+
 import type { AuditLogger } from './audit-log.js'
 import { safeAudit } from './audit-log.js'
 
@@ -39,7 +40,7 @@ export interface CsrfLogger {
  * skipped entirely and disallowed dispatch never runs.
  */
 export interface DisallowedConfig {
-  routes: Array<string | RegExp>
+  routes: (string | RegExp)[]
   behavior: 'warn' | 'raise'
 }
 
@@ -51,20 +52,16 @@ export interface DisallowedConfig {
  * `lastIndex` and the next invocation may miss. We reset `lastIndex`
  * before each test so the matcher is a pure function.
  */
-export function matchDisallowed(
-  path: string,
-  patterns: ReadonlyArray<string | RegExp>,
-): boolean {
+export function matchDisallowed(path: string, patterns: readonly (string | RegExp)[]): boolean {
   for (const p of patterns) {
     if (typeof p === 'string') {
       if (path === p) return true
-      continue
-    }
-    if (p instanceof RegExp) {
+    } else if (p instanceof RegExp) {
       p.lastIndex = 0
       if (p.test(path)) return true
-      continue
     }
+    // Neither string nor RegExp: ignore silently (defensive — the public
+    // type forbids it but runtime data may slip past).
   }
   return false
 }
@@ -80,6 +77,17 @@ export function matchDisallowed(
  */
 export const CSRF_WARN_CODE = 'CSRF_STRICT_CUTOVER' as const
 export const CSRF_WARN_DOCS_URL = 'https://theokit.dev/upgrade/csrf-strict-cutover' as const
+
+/**
+ * Pick a header value, choosing the first entry when an array (Node sets
+ * arrays for headers that legitimately appear multiple times). Returns
+ * `''` when the header is absent or empty — callers treat `''` as "skip".
+ */
+function pickHeader(value: string | string[] | undefined): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value) && value.length > 0) return value[0]
+  return ''
+}
 
 export interface CsrfWarnPayload {
   event: 'csrf.warn'
@@ -108,27 +116,27 @@ export function validateCsrf(
   }
 
   // 2. Origin matching (secondary defense)
-  const origin = req.headers['origin']
+  const origin = req.headers.origin
   if (!origin) {
     // Browsers omit Origin for same-origin requests — treat as valid
     return { valid: true }
   }
 
-  const host = req.headers['host']
+  const host = req.headers.host
   if (!host) {
     return { valid: true }
   }
 
+  const originStr = pickHeader(origin)
+  const hostStr = pickHeader(host)
+  if (originStr === '' || hostStr === '') return { valid: true }
   try {
-    const originStr = Array.isArray(origin) ? origin[0] : origin
-    const hostStr = Array.isArray(host) ? host[0] : host
-    if (!originStr || !hostStr) return { valid: true }
     const originHost = new URL(originStr).host
     if (originHost !== hostStr) {
       return { valid: false, reason: `Origin ${originStr} does not match host ${hostStr}` }
     }
   } catch {
-    return { valid: false, reason: `Invalid origin: ${String(origin)}` }
+    return { valid: false, reason: `Invalid origin: ${originStr}` }
   }
 
   return { valid: true }
@@ -141,6 +149,36 @@ export function validateCsrf(
  *
  * Phase 5 — CSRF warn-first (EC-1). See plan docs/plans/nextjs-maturity-plan.md.
  */
+/**
+ * Dispatch the csrf.warn payload to both the structured logger and the
+ * audit sink (when configured). Extracted from `enforceCsrf` to keep that
+ * function's complexity within ceiling.
+ */
+function dispatchCsrfWarn(
+  req: IncomingMessage,
+  reason: string,
+  logger: CsrfLogger | undefined,
+  auditLogger: AuditLogger | undefined,
+  pathFallback = '',
+): void {
+  const payload: CsrfWarnPayload = {
+    event: 'csrf.warn',
+    method: req.method ?? 'UNKNOWN',
+    path: logger?.path ?? pathFallback,
+    reason,
+    code: CSRF_WARN_CODE,
+    docsUrl: CSRF_WARN_DOCS_URL,
+  }
+  logger?.warn(payload)
+  // `metadata` is typed as Record<string, unknown>; CsrfWarnPayload is a
+  // structurally-equivalent shape but lacks the index signature.
+  safeAudit(auditLogger, {
+    action: 'csrf.warn',
+    actor: { type: 'anonymous' },
+    metadata: { ...payload },
+  })
+}
+
 export function enforceCsrf(
   req: IncomingMessage,
   mode: CsrfMode,
@@ -165,7 +203,7 @@ export function enforceCsrf(
   // disallowed pattern AND behavior is 'raise', escalate to 403 even if
   // global mode is 'warn'. Strict mode would 403 anyway, so the branch
   // is a no-op there.
-  if (disallowed && disallowed.behavior === 'raise') {
+  if (disallowed?.behavior === 'raise') {
     const path = logger?.path ?? req.url ?? ''
     if (matchDisallowed(path, disallowed.routes)) {
       return { allow: false, reason: check.reason }
@@ -177,41 +215,13 @@ export function enforceCsrf(
     // injected logger.warn (tests, custom log routers).
     // T2.2: include the stable cutover code + docsUrl so logs are
     // grep-able and click-through-able.
-    const payload = {
-      event: 'csrf.warn' as const,
-      method: req.method ?? 'UNKNOWN',
-      path: logger?.path,
-      reason: check.reason,
-      code: CSRF_WARN_CODE,
-      docsUrl: CSRF_WARN_DOCS_URL,
-    }
-    logger?.warn(payload)
-    // T4.2 — also forward to audit logger when configured.
-    safeAudit(auditLogger, {
-      action: 'csrf.warn',
-      actor: { type: 'anonymous' },
-      metadata: payload as unknown as Record<string, unknown>,
-    })
+    dispatchCsrfWarn(req, check.reason, logger, auditLogger)
     return { allow: true, reason: check.reason }
   }
 
   // strict — 403 the request, AND emit a warn payload so the dev (and
   // devtools UI) sees WHY it was blocked + the docsUrl to fix it.
   // Without this, strict-mode users get a silent 403 with no context.
-  const strictPayload = {
-    event: 'csrf.warn' as const,
-    method: req.method ?? 'UNKNOWN',
-    path: logger?.path ?? '',
-    reason: check.reason,
-    code: CSRF_WARN_CODE,
-    docsUrl: CSRF_WARN_DOCS_URL,
-  }
-  logger?.warn(strictPayload)
-  // T4.2 — also forward to audit logger when configured.
-  safeAudit(auditLogger, {
-    action: 'csrf.warn',
-    actor: { type: 'anonymous' },
-    metadata: strictPayload as unknown as Record<string, unknown>,
-  })
+  dispatchCsrfWarn(req, check.reason, logger, auditLogger)
   return { allow: false, reason: check.reason }
 }

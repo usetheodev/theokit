@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, expectTypeOf } from 'vitest'
+import { describe, it, expect, vi, expectTypeOf } from 'vitest'
 import {
   enforceCsrf,
   type CsrfMode,
@@ -61,11 +61,9 @@ describe('enforceCsrf — mode === "warn"', () => {
 
   it('Given a valid request, When mode is warn, Then allow=true and no warning', () => {
     const warn = vi.fn()
-    const result = enforceCsrf(
-      makeReq({ headers: { 'x-theo-action': '1' } }) as never,
-      'warn',
-      { warn },
-    )
+    const result = enforceCsrf(makeReq({ headers: { 'x-theo-action': '1' } }) as never, 'warn', {
+      warn,
+    })
     expect(result.allow).toBe(true)
     expect(warn).not.toHaveBeenCalled()
   })
@@ -90,11 +88,10 @@ describe('enforceCsrf — mode === "warn"', () => {
 
   it('Warn payload includes the request method and path for log correlation', () => {
     const warn = vi.fn()
-    enforceCsrf(
-      makeReq({ method: 'POST', headers: {} }) as never,
-      'warn',
-      { warn, path: '/api/login' },
-    )
+    enforceCsrf(makeReq({ method: 'POST', headers: {} }) as never, 'warn', {
+      warn,
+      path: '/api/login',
+    })
     const [arg] = warn.mock.calls[0]
     expect(arg).toMatchObject({
       event: 'csrf.warn',
@@ -112,10 +109,7 @@ describe('enforceCsrf — mode === "strict"', () => {
   })
 
   it('Given a valid header, When mode is strict, Then allow=true', () => {
-    const result = enforceCsrf(
-      makeReq({ headers: { 'x-theo-action': '1' } }) as never,
-      'strict',
-    )
+    const result = enforceCsrf(makeReq({ headers: { 'x-theo-action': '1' } }) as never, 'strict')
     expect(result.allow).toBe(true)
   })
 

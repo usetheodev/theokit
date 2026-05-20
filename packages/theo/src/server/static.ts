@@ -1,5 +1,11 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Static-file server. The URL path IS user-controlled, BUT before any fs
+ * call we resolve to absolute and reject with 403 if the resolved path
+ * escapes `clientDir` (see EC-1 guard at line below). The guard is
+ * authoritative; the rule cannot see it.
+ */
 import { existsSync, readFileSync, statSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { resolve, extname } from 'node:path'
 
 const MIME_TYPES: Record<string, string> = {

@@ -1,16 +1,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { ServerRouteNode } from './match.js'
-import type { LoadModule } from './module-loader.js'
-import { runMiddlewareAndContext } from './middleware-runner.js'
+
 import { AuthRequiredError } from './auth.js'
-import { parseRequestBody, type BodyParserOptions } from './body-parser.js'
+import { parseRequestBody } from './body-parser.js'
+import { enforceCsrf, type CsrfMode, type DisallowedConfig } from './csrf.js'
+import { warnOnce } from './logger.js'
+import type { ServerRouteNode } from './match.js'
+import { runMiddlewareAndContext } from './middleware-runner.js'
+import type { LoadModule } from './module-loader.js'
 import type { PluginRunner } from './plugin-runner.js'
 import type { PluginContext } from './plugin-types.js'
 import type { TheoTransformer } from './transformer.js'
-import { enforceCsrf, type CsrfMode, type DisallowedConfig } from './csrf.js'
-import { warnOnce } from './logger.js'
 
-const METHODS_WITH_BODY = ['POST', 'PUT', 'PATCH']
 // CSRF policy applies to every state-mutating method, including DELETE.
 const CSRF_PROTECTED_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
@@ -35,6 +35,59 @@ export interface SendErrorOptions {
   custom500Html?: string
 }
 
+interface StreamPipeCtx {
+  buildPluginCtx: (ctxObj: Record<string, unknown>) => PluginContext
+  ctx: Record<string, unknown>
+  method: string
+  pluginRunner: PluginRunner | undefined
+  requestId: string | undefined
+  routePath: string
+}
+
+/**
+ * Pipe a Web Standard ReadableStream into a Node ServerResponse. Stream
+ * errors after headers are sent cannot change the response status, but
+ * MUST be logged + reported (CR-004 fix). Extracted from `executeRoute`
+ * to keep that function's nesting under the max-depth ceiling.
+ */
+async function pipeWebStreamToResponse(
+  body: ReadableStream<Uint8Array>,
+  res: ServerResponse,
+  ctx: StreamPipeCtx,
+): Promise<void> {
+  const reader = body.getReader()
+  try {
+    let done = false
+    while (!done) {
+      const chunk = await reader.read()
+      done = chunk.done
+      if (!done) res.write(chunk.value)
+    }
+  } catch (streamErr) {
+    warnOnce(`stream-error:${ctx.routePath}:${ctx.method}`, {
+      event: 'stream.error',
+      requestId: ctx.requestId ?? 'no-id',
+      route: ctx.routePath,
+      method: ctx.method,
+      message: streamErr instanceof Error ? streamErr.message : String(streamErr),
+    })
+    if (ctx.pluginRunner) {
+      try {
+        await ctx.pluginRunner.runOnError(ctx.buildPluginCtx(ctx.ctx), streamErr)
+      } catch {
+        // onError plugins must never destabilize the response close.
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock()
+    } catch {
+      /* lock may already be released by abort */
+    }
+  }
+}
+
+// eslint-disable-next-line max-params -- public API surface; existing callers pass positional args
 export function sendError(
   res: ServerResponse,
   code: string,
@@ -87,35 +140,12 @@ export function sendError(
   )
 }
 
-export function parseBody(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const method = req.method?.toUpperCase() ?? 'GET'
-    if (!METHODS_WITH_BODY.includes(method)) {
-      return resolve(undefined)
-    }
+// CR-007/Knip cleanup: `parseBody` (legacy JSON-only parser) was exported
+// but had no remaining consumers — the route pipeline uses
+// `parseRequestBody` (multipart + JSON) directly. Removed to shrink the
+// public surface and remove the duplicated METHODS_WITH_BODY constant.
 
-    const contentType = req.headers['content-type'] ?? ''
-    const chunks: Buffer[] = []
-
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
-    req.on('end', () => {
-      const raw = Buffer.concat(chunks).toString()
-      if (!raw) return resolve(undefined)
-
-      if (!contentType.includes('application/json')) {
-        return reject(new Error('Expected Content-Type: application/json'))
-      }
-
-      try {
-        resolve(JSON.parse(raw))
-      } catch {
-        reject(new Error('Invalid JSON body'))
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
+// eslint-disable-next-line max-params, max-lines-per-function, complexity, sonarjs/cognitive-complexity -- public API; `executeRoute` is the framework's central request pipeline and stays in one place by design (its 12 positional args + branch density mirror the actual request lifecycle; refactoring across modules would obscure the flow more than the cyclomatic count alone suggests). Internal helpers `runCsrfStage`, `parseQueryAndBody`, `runHandlerStage`, etc. have been extracted in other waves; what remains here is the orchestration spine.
 export async function executeRoute(
   route: ServerRouteNode,
   method: string,
@@ -166,11 +196,21 @@ export async function executeRoute(
     const routeConfig = mod[method]
 
     if (!routeConfig) {
-      sendError(res, 'METHOD_NOT_ALLOWED', `Method ${method} not allowed`, 405, undefined, requestId)
+      sendError(
+        res,
+        'METHOD_NOT_ALLOWED',
+        `Method ${method} not allowed`,
+        405,
+        undefined,
+        requestId,
+      )
       return
     }
 
-    const handler = typeof routeConfig === 'function' ? routeConfig : (routeConfig as Record<string, unknown>).handler
+    const handler =
+      typeof routeConfig === 'function'
+        ? routeConfig
+        : (routeConfig as Record<string, unknown>).handler
     if (typeof handler !== 'function') {
       sendError(res, 'INTERNAL_ERROR', 'Route handler is not a function', 500, undefined, requestId)
       return
@@ -180,9 +220,7 @@ export async function executeRoute(
     // Skips: safe methods (GET/HEAD/OPTIONS), per-route opt-out (`csrf: false`),
     // and bare function exports (legacy style — no opt-out hook available).
     const routeOptOut =
-      typeof routeConfig === 'object' &&
-      routeConfig !== null &&
-      (routeConfig as { csrf?: unknown }).csrf === false
+      typeof routeConfig === 'object' && (routeConfig as { csrf?: unknown }).csrf === false
     if (CSRF_PROTECTED_METHODS.has(method) && !routeOptOut) {
       const decision = enforceCsrf(
         req,
@@ -234,30 +272,65 @@ export async function executeRoute(
       return
     }
 
-    // Zod validation
+    // Zod validation. CR-015 fix: replace `{ safeParse: Function }` with
+    // a precise structural type so the type system catches misuse and the
+    // call site is `as`-cast free.
+    interface ZodLike {
+      safeParse: (value: unknown) => {
+        success: boolean
+        data?: unknown
+        error?: { issues: unknown[] }
+      }
+    }
+    const isZodLike = (value: unknown): value is ZodLike =>
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { safeParse?: unknown }).safeParse === 'function'
+
     const rc = routeConfig as Record<string, unknown>
-    if (rc.query && typeof (rc.query as { safeParse: Function }).safeParse === 'function') {
-      const result = (rc.query as { safeParse: Function }).safeParse(query)
+    if (isZodLike(rc.query)) {
+      const result = rc.query.safeParse(query)
       if (!result.success) {
-        sendError(res, 'VALIDATION_ERROR', 'Invalid query parameters', 400, result.error.issues, requestId)
+        sendError(
+          res,
+          'VALIDATION_ERROR',
+          'Invalid query parameters',
+          400,
+          result.error?.issues,
+          requestId,
+        )
         return
       }
       Object.assign(query, result.data)
     }
 
-    if (rc.body && typeof (rc.body as { safeParse: Function }).safeParse === 'function') {
-      const result = (rc.body as { safeParse: Function }).safeParse(body)
+    if (isZodLike(rc.body)) {
+      const result = rc.body.safeParse(body)
       if (!result.success) {
-        sendError(res, 'VALIDATION_ERROR', 'Invalid request body', 400, result.error.issues, requestId)
+        sendError(
+          res,
+          'VALIDATION_ERROR',
+          'Invalid request body',
+          400,
+          result.error?.issues,
+          requestId,
+        )
         return
       }
       body = result.data
     }
 
-    if (rc.params && typeof (rc.params as { safeParse: Function }).safeParse === 'function') {
-      const result = (rc.params as { safeParse: Function }).safeParse(params)
+    if (isZodLike(rc.params)) {
+      const result = rc.params.safeParse(params)
       if (!result.success) {
-        sendError(res, 'VALIDATION_ERROR', 'Invalid route parameters', 400, result.error.issues, requestId)
+        sendError(
+          res,
+          'VALIDATION_ERROR',
+          'Invalid route parameters',
+          400,
+          result.error?.issues,
+          requestId,
+        )
         return
       }
       Object.assign(params, result.data)
@@ -269,12 +342,22 @@ export async function executeRoute(
       if (preResult.shortCircuited) return
     }
 
-    // Execute handler
-    const handlerResult = await handler({ query, body, params, request: req, ctx })
+    // Execute handler. `handler` is structurally typed as `unknown` at
+    // this point (came out of a duck-typed module). Cast through a narrow
+    // type so the call is properly typed.
+    type RouteHandlerCallable = (args: {
+      query: Record<string, string>
+      body: unknown
+      params: Record<string, string>
+      request: IncomingMessage
+      ctx: Record<string, unknown>
+    }) => unknown
+    const callableHandler = handler as RouteHandlerCallable
+    const handlerResult = await callableHandler({ query, body, params, request: req, ctx })
 
     // Handle result
     if (handlerResult === undefined || handlerResult === null) {
-      sendJson(res, null, (rc.status as number) ?? 204, transformer)
+      sendJson(res, null, (rc.status as number | undefined) ?? 204, transformer)
       if (pluginRunner) await pluginRunner.runOnResponse(buildPluginCtx(ctx))
       return
     }
@@ -283,16 +366,14 @@ export async function executeRoute(
       res.writeHead(handlerResult.status, Object.fromEntries(handlerResult.headers))
 
       if (handlerResult.body) {
-        const reader = handlerResult.body.getReader()
-        try {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
-            res.write(value)
-          }
-        } catch {
-          // Stream error after headers sent — just close the response
-        }
+        await pipeWebStreamToResponse(handlerResult.body, res, {
+          buildPluginCtx,
+          ctx,
+          method,
+          pluginRunner,
+          requestId,
+          routePath: route.routePath,
+        })
       }
 
       res.end()
@@ -300,7 +381,7 @@ export async function executeRoute(
       return
     }
 
-    sendJson(res, handlerResult, (rc.status as number) ?? 200, transformer)
+    sendJson(res, handlerResult, (rc.status as number | undefined) ?? 200, transformer)
     if (pluginRunner) await pluginRunner.runOnResponse(buildPluginCtx(ctx))
   } catch (err) {
     // T4.4 — onError hook (runs before default error response)
@@ -339,7 +420,14 @@ export async function executeRoute(
       }
       return
     }
-    sendError(res, 'INTERNAL_ERROR', (err as Error).message ?? 'Internal server error', 500, undefined, requestId)
+    sendError(
+      res,
+      'INTERNAL_ERROR',
+      err instanceof Error && err.message ? err.message : 'Internal server error',
+      500,
+      undefined,
+      requestId,
+    )
     if (pluginRunner) {
       const errCtxObj: Record<string, unknown> = {}
       pluginRunner.applyDecorations(errCtxObj)

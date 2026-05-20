@@ -8,9 +8,7 @@ export class TheoConfigError extends Error {
   public readonly configPath: string
 
   constructor(issues: ConfigIssue[], configPath: string) {
-    const issueLines = issues
-      .map((i) => `  - ${i.field}: ${i.message}`)
-      .join('\n')
+    const issueLines = issues.map((i) => `  - ${i.field}: ${i.message}`).join('\n')
 
     super(
       `Invalid theo.config.ts\n\n` +

@@ -30,11 +30,7 @@ export default function Page() {
   return (
     <main>
       <h1>React Query + theokit/react-query</h1>
-      <input
-        placeholder="Search…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} />
       {isLoading && <p>Loading…</p>}
       {isError && <p>Error</p>}
       <ul>

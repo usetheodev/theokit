@@ -3,7 +3,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { enforceCsrf } from '../../packages/theo/src/server/csrf.js'
 import { createRouteRateLimiter } from '../../packages/theo/src/server/rate-limit-per-route.js'
 import { createSessionManager } from '../../packages/theo/src/server/session.js'
-import { safeAudit, type AuditEvent, type AuditLogger } from '../../packages/theo/src/server/audit-log.js'
+import {
+  safeAudit,
+  type AuditEvent,
+  type AuditLogger,
+} from '../../packages/theo/src/server/audit-log.js'
 
 /**
  * T4.2 — Wire framework events to audit logger.
@@ -102,11 +106,15 @@ describe('T4.2 — session.rotated emits audit event', () => {
       const headers: Record<string, string | string[]> = {}
       return {
         getHeader: (n: string) => headers[n.toLowerCase()],
-        setHeader: (n: string, v: string | string[]) => { headers[n.toLowerCase()] = v },
+        setHeader: (n: string, v: string | string[]) => {
+          headers[n.toLowerCase()] = v
+        },
       } as unknown as ServerResponse
     }
     function mockReqWithCookie(c: string): IncomingMessage {
-      return { headers: { cookie: `theo_session=${encodeURIComponent(c)}` } } as unknown as IncomingMessage
+      return {
+        headers: { cookie: `theo_session=${encodeURIComponent(c)}` },
+      } as unknown as IncomingMessage
     }
     function extract(res: ServerResponse): string {
       const sc = res.getHeader('set-cookie')

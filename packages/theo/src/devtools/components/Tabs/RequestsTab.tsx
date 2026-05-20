@@ -42,11 +42,15 @@ export function RequestsTab() {
   return (
     <div data-testid="devtools-requests-tab">
       <div className={headerClass}>
-        <span>{state.requests.length} request{state.requests.length === 1 ? '' : 's'}</span>
+        <span>
+          {state.requests.length} request{state.requests.length === 1 ? '' : 's'}
+        </span>
         <button
           type="button"
           className={clearBtn}
-          onClick={() => dispatch({ type: 'RESET_REQUESTS' })}
+          onClick={() => {
+            dispatch({ type: 'RESET_REQUESTS' })
+          }}
         >
           clear
         </button>

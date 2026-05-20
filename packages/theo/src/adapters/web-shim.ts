@@ -39,41 +39,94 @@ export interface ShimContext {
   toResponse: () => Promise<Response>
 }
 
+export interface CreateWebShimOptions {
+  /**
+   * CR-018 fix: how to resolve the client IP from forwarded headers.
+   *
+   * - `'platform'` (default for `cf-connecting-ip`): trust runtime-injected
+   *   headers only (`cf-connecting-ip` on Cloudflare, `x-real-ip` on
+   *   Netlify/Vercel when the platform writes it). Ignores
+   *   `x-forwarded-for` because clients can spoof it.
+   * - `'trusted-proxy'`: read the **rightmost** entry of `x-forwarded-for`.
+   *   Only safe when the request literally went through a trusted proxy
+   *   that strips client-set headers and appends the real client IP last.
+   * - `'none'`: skip all forwarded-header lookups and report
+   *   `'0.0.0.0'`. Force this when the adapter has no reliable way to
+   *   identify the client (rate-limiters then must use a different key).
+   *
+   * Default: `'platform'`.
+   */
+  trustedProxy?: 'platform' | 'trusted-proxy' | 'none'
+}
+
+function resolveRemoteAddress(
+  headers: Record<string, string>,
+  policy: NonNullable<CreateWebShimOptions['trustedProxy']>,
+): string {
+  if (policy === 'none') return '0.0.0.0'
+
+  // Runtime-injected headers — these come from the platform itself and
+  // cannot be set by the client.
+  const cf = headers['cf-connecting-ip']
+  if (cf) return cf
+
+  if (policy === 'trusted-proxy') {
+    // Take the RIGHTMOST entry of x-forwarded-for. The rightmost is the
+    // hop nearest the application, which a trusted proxy appended; entries
+    // to the left may have been forged by the client.
+    const xff = headers['x-forwarded-for']
+    if (xff) {
+      const parts = xff
+        .split(',')
+        .map((p) => p.trim())
+        .filter(Boolean)
+      if (parts.length > 0) return parts[parts.length - 1]
+    }
+    // x-real-ip is typically platform-set (NGINX/Netlify/Vercel).
+    const xri = headers['x-real-ip']
+    if (xri) return xri
+  }
+
+  return '0.0.0.0'
+}
+
 /**
  * Build Node-style req/res objects around a Web Standard Request.
  * `toResponse()` returns a Promise that resolves when `res.end()` has been
  * invoked, materializing a Web Standard Response with the accumulated body
  * + headers + status.
  */
-export function createWebShim(request: Request): ShimContext {
+export function createWebShim(request: Request, options?: CreateWebShimOptions): ShimContext {
   const url = new URL(request.url)
   const headers: Record<string, string> = {}
   request.headers.forEach((value, key) => {
     headers[key] = value
   })
 
-  const bodyChunks: Uint8Array[] = []
-  let bodyConsumed = false
+  const pumpState = { consumed: false }
 
   // Consume the request body once, then dispatch data/end events to whatever
   // listener attaches later (executeRoute's body parser).
-  const dataListeners: Array<(chunk: Uint8Array) => void> = []
-  const endListeners: Array<() => void> = []
-  const errorListeners: Array<(err: unknown) => void> = []
+  const dataListeners: ((chunk: Uint8Array) => void)[] = []
+  const endListeners: (() => void)[] = []
+  const errorListeners: ((err: unknown) => void)[] = []
 
   async function pumpBody(): Promise<void> {
-    if (bodyConsumed) return
-    bodyConsumed = true
+    if (pumpState.consumed) return
+    pumpState.consumed = true
     if (!request.body) {
       for (const cb of endListeners) cb()
       return
     }
     try {
       const reader = request.body.getReader()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        if (value) for (const cb of dataListeners) cb(value)
+      let done = false
+      while (!done) {
+        const chunk = await reader.read()
+        done = chunk.done
+        if (!done && chunk.value) {
+          for (const cb of dataListeners) cb(chunk.value)
+        }
       }
       for (const cb of endListeners) cb()
     } catch (err) {
@@ -81,20 +134,18 @@ export function createWebShim(request: Request): ShimContext {
     }
   }
 
+  const trustedProxy = options?.trustedProxy ?? 'platform'
+
   const req: ShimRequest = {
     method: request.method,
     url: url.pathname + url.search,
     headers,
     socket: {
-      remoteAddress:
-        headers['cf-connecting-ip'] ??
-        headers['x-forwarded-for'] ??
-        headers['x-real-ip'] ??
-        '0.0.0.0',
+      remoteAddress: resolveRemoteAddress(headers, trustedProxy),
     },
     on(event, cb) {
-      if (event === 'data') dataListeners.push(cb as (c: Uint8Array) => void)
-      if (event === 'end') endListeners.push(cb as () => void)
+      if (event === 'data') dataListeners.push(cb)
+      if (event === 'end') endListeners.push(cb)
       if (event === 'error') errorListeners.push(cb)
       // Lazily start pumping when end is registered (executeRoute always
       // listens for end before doing anything with the body).

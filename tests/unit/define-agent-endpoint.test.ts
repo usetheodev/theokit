@@ -154,7 +154,6 @@ describe('defineAgentEndpoint (T5.1)', () => {
 
   it('emits no chunks for empty generator (edge case)', async () => {
     const endpoint = defineAgentEndpoint({
-      // eslint-disable-next-line require-yield
       async *handler(): AsyncGenerator<AgentEvent> {
         // emits nothing
       },

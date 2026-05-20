@@ -15,7 +15,10 @@ describe('requireAuth type narrowing', () => {
   })
 
   it('should narrow custom type after passing', () => {
-    interface CustomSession { id: number; name: string }
+    interface CustomSession {
+      id: number
+      name: string
+    }
     const session: CustomSession | null = { id: 1, name: 'test' }
     requireAuth(session)
     expectTypeOf(session).toEqualTypeOf<CustomSession>()

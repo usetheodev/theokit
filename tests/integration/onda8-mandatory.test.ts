@@ -9,10 +9,7 @@ describe('Onda 8 — Observability + Error Model', () => {
   let port: number
 
   beforeAll(async () => {
-    server = await startDevServer(
-      path.join(FIXTURES, 'observability'),
-      { port: 0 },
-    )
+    server = await startDevServer(path.join(FIXTURES, 'observability'), { port: 0 })
     const address = server.httpServer!.address()
     port = typeof address === 'object' && address ? address.port : 0
   }, 15000)

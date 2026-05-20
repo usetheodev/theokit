@@ -26,6 +26,7 @@ let buildError: string | null = null
 
 beforeAll(() => {
   try {
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local test running the project's own build CLI
     execSync('pnpm exec theokit build', {
       cwd: FIXTURE,
       stdio: 'pipe',
@@ -42,9 +43,7 @@ beforeAll(() => {
     return
   }
   const files = readdirSync(DIST_ASSETS).filter((f) => f.endsWith('.js'))
-  const combined = files
-    .map((f) => readFileSync(resolve(DIST_ASSETS, f), 'utf-8'))
-    .join('\n')
+  const combined = files.map((f) => readFileSync(resolve(DIST_ASSETS, f), 'utf-8')).join('\n')
   snapshot = { files, combined }
 }, 200_000)
 

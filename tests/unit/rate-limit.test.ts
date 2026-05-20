@@ -27,7 +27,7 @@ describe('Rate Limiter', () => {
     const check = createRateLimiter({ windowMs: 100, max: 1 })
     check(mockReq())
     expect(check(mockReq()).limited).toBe(true)
-    await new Promise(r => setTimeout(r, 150))
+    await new Promise((r) => setTimeout(r, 150))
     expect(check(mockReq()).limited).toBe(false)
   })
 

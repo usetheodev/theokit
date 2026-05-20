@@ -24,9 +24,7 @@ function getPackageDeps(pkgPath: string): { deps: string[]; peerDeps: string[] }
 }
 
 function findLLMDeps(depNames: string[]): string[] {
-  return depNames.filter(dep =>
-    LLM_PROVIDER_BLOCKLIST.some(blocked => dep.startsWith(blocked))
-  )
+  return depNames.filter((dep) => LLM_PROVIDER_BLOCKLIST.some((blocked) => dep.startsWith(blocked)))
 }
 
 describe('Bundle Audit: zero LLM dependencies', () => {

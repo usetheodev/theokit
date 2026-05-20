@@ -13,7 +13,7 @@ import { css as gooberCss, setup as gooberSetup } from 'goober'
 let _initialized: WeakSet<ShadowRoot> | null = null
 
 function getInitialized(): WeakSet<ShadowRoot> {
-  if (!_initialized) _initialized = new WeakSet()
+  _initialized ??= new WeakSet()
   return _initialized
 }
 
@@ -38,7 +38,9 @@ export function createStyles(shadowRoot: ShadowRoot): StyleFactory {
 
   // goober.css.bind({ target }) returns a new tagged template fn whose
   // emitted styles land inside shadowRoot, not document.head.
-  const bound = (gooberCss as unknown as { bind: (ctx: { target: ShadowRoot }) => typeof gooberCss }).bind({
+  const bound = (
+    gooberCss as unknown as { bind: (ctx: { target: ShadowRoot }) => typeof gooberCss }
+  ).bind({
     target: shadowRoot,
   })
 

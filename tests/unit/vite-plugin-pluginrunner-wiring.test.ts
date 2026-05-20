@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { theoPlugin } from '../../packages/theo/src/vite-plugin/index.js'
 import { createActionMiddleware } from '../../packages/theo/src/vite-plugin/action-middleware.js'
 import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'

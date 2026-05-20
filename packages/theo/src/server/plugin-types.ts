@@ -38,6 +38,8 @@ export type HookByName<K extends HookName> = K extends 'onError'
 
 export interface TheoApp {
   addHook<K extends HookName>(name: K, fn: HookByName<K>): void
+  // `T` lets plugin authors document the per-key shape of decorations.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- T documents the value type for plugin authors
   decorateRequest<T>(key: string, value: T): void
 }
 

@@ -21,9 +21,7 @@ import { Overlay } from './Overlay.js'
 const NoopDevtools = () => null
 
 export const Devtools =
-  typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production'
-    ? NoopDevtools
-    : Overlay
+  typeof process !== 'undefined' && process.env.NODE_ENV === 'production' ? NoopDevtools : Overlay
 
 export const DevtoolsInProd = Overlay
 

@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { scaffold } from '../../packages/create-theo/src/index.js'
 
 function makeTargetDir(): string {
@@ -61,9 +61,9 @@ describe('create-theokit --bare flag (T4.1)', () => {
   it('--bare + non-default template throws clear error', () => {
     const target = makeTargetDir()
     rmSync(target, { recursive: true, force: true })
-    expect(() =>
-      scaffold(target, 'demo-app', 'dashboard', { bare: true }),
-    ).toThrow(/bare.+default/i)
+    expect(() => scaffold(target, 'demo-app', 'dashboard', { bare: true })).toThrow(
+      /bare.+default/i,
+    )
   })
 
   it('--bare with default template: still has health route + theo.config + tsconfig', () => {

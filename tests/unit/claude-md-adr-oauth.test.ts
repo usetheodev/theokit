@@ -24,7 +24,10 @@ describe('T7.1 — CLAUDE.md ADR-AUTH-DELEGATION', () => {
 
   it('enumerates at least three re-evaluation triggers (numbered list)', () => {
     // Find the ADR section
-    const section = content.split(/AUTH[-_ ]?DELEGATION/i).slice(1).join('\n')
+    const section = content
+      .split(/AUTH[-_ ]?DELEGATION/i)
+      .slice(1)
+      .join('\n')
     // Look for "Re-evaluation triggers" header + numbered items 1./2./3.
     const triggers = section.match(/^\s*\d+\.\s+/gm) ?? []
     expect(triggers.length).toBeGreaterThanOrEqual(3)

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Readable, PassThrough } from 'node:stream'
+import { PassThrough } from 'node:stream'
 import type { IncomingMessage } from 'node:http'
 import { parseRequestBody } from '../../packages/theo/src/server/body-parser.js'
 
@@ -180,6 +180,16 @@ describe('parseRequestBody — multipart', () => {
     })
 
     await expect(parseRequestBody(req)).rejects.toThrow('Missing multipart boundary')
+  })
+
+  it('should reject when multipart payload is malformed (busboy error)', async () => {
+    // Boundary declared in header but body lacks the matching delimiter.
+    const req = createMockRequest({
+      contentType: 'multipart/form-data; boundary=declaredbutmissing',
+      body: '--otherboundary\r\nContent-Disposition: form-data; name="x"\r\n\r\nvalue\r\n--otherboundary--\r\n',
+    })
+
+    await expect(parseRequestBody(req)).rejects.toThrow()
   })
 
   it('should sanitize filenames with path traversal (EC-6)', async () => {

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+
 import { safeAudit, type AuditLogger } from './audit-log.js'
 
 /**
@@ -49,18 +50,32 @@ export interface CspReportHandlerOptions {
  * Map a legacy `application/csp-report` payload to the internal shape.
  * Caller must ensure `raw` is a non-null object.
  */
+function pickHeader(value: string | string[] | undefined): string {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value) && value.length > 0) return value[0]
+  return ''
+}
+
+function toStringSafe(value: unknown, fallback = '(missing)'): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return fallback
+}
+
 export function normalizeLegacy(raw: Record<string, unknown>): CspViolation {
   return {
-    blockedUrl: String(raw['blocked-uri'] ?? '(missing)'),
-    documentUrl: String(raw['document-uri'] ?? '(missing)'),
-    violatedDirective: String(raw['violated-directive'] ?? '(missing)'),
-    effectiveDirective: typeof raw['effective-directive'] === 'string' ? (raw['effective-directive'] as string) : undefined,
-    originalPolicy: typeof raw['original-policy'] === 'string' ? (raw['original-policy'] as string) : undefined,
-    disposition: raw.disposition === 'enforce' || raw.disposition === 'report' ? (raw.disposition as 'enforce' | 'report') : undefined,
-    statusCode: typeof raw['status-code'] === 'number' ? (raw['status-code'] as number) : undefined,
-    sourceFile: typeof raw['source-file'] === 'string' ? (raw['source-file'] as string) : undefined,
-    lineNumber: typeof raw['line-number'] === 'number' ? (raw['line-number'] as number) : undefined,
-    columnNumber: typeof raw['column-number'] === 'number' ? (raw['column-number'] as number) : undefined,
+    blockedUrl: toStringSafe(raw['blocked-uri']),
+    documentUrl: toStringSafe(raw['document-uri']),
+    violatedDirective: toStringSafe(raw['violated-directive']),
+    effectiveDirective:
+      typeof raw['effective-directive'] === 'string' ? raw['effective-directive'] : undefined,
+    originalPolicy: typeof raw['original-policy'] === 'string' ? raw['original-policy'] : undefined,
+    disposition:
+      raw.disposition === 'enforce' || raw.disposition === 'report' ? raw.disposition : undefined,
+    statusCode: typeof raw['status-code'] === 'number' ? raw['status-code'] : undefined,
+    sourceFile: typeof raw['source-file'] === 'string' ? raw['source-file'] : undefined,
+    lineNumber: typeof raw['line-number'] === 'number' ? raw['line-number'] : undefined,
+    columnNumber: typeof raw['column-number'] === 'number' ? raw['column-number'] : undefined,
   }
 }
 
@@ -74,16 +89,17 @@ export function normalizeNew(entry: unknown): CspViolation | null {
   if (!body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>
   return {
-    blockedUrl: String(b.blockedURL ?? '(missing)'),
-    documentUrl: String(b.documentURL ?? '(missing)'),
-    violatedDirective: String(b.violatedDirective ?? '(missing)'),
-    effectiveDirective: typeof b.effectiveDirective === 'string' ? (b.effectiveDirective as string) : undefined,
-    originalPolicy: typeof b.originalPolicy === 'string' ? (b.originalPolicy as string) : undefined,
-    disposition: b.disposition === 'enforce' || b.disposition === 'report' ? (b.disposition as 'enforce' | 'report') : undefined,
-    statusCode: typeof b.statusCode === 'number' ? (b.statusCode as number) : undefined,
-    sourceFile: typeof b.sourceFile === 'string' ? (b.sourceFile as string) : undefined,
-    lineNumber: typeof b.lineNumber === 'number' ? (b.lineNumber as number) : undefined,
-    columnNumber: typeof b.columnNumber === 'number' ? (b.columnNumber as number) : undefined,
+    blockedUrl: toStringSafe(b.blockedURL),
+    documentUrl: toStringSafe(b.documentURL),
+    violatedDirective: toStringSafe(b.violatedDirective),
+    effectiveDirective: typeof b.effectiveDirective === 'string' ? b.effectiveDirective : undefined,
+    originalPolicy: typeof b.originalPolicy === 'string' ? b.originalPolicy : undefined,
+    disposition:
+      b.disposition === 'enforce' || b.disposition === 'report' ? b.disposition : undefined,
+    statusCode: typeof b.statusCode === 'number' ? b.statusCode : undefined,
+    sourceFile: typeof b.sourceFile === 'string' ? b.sourceFile : undefined,
+    lineNumber: typeof b.lineNumber === 'number' ? b.lineNumber : undefined,
+    columnNumber: typeof b.columnNumber === 'number' ? b.columnNumber : undefined,
   }
 }
 
@@ -100,7 +116,9 @@ async function readBody(req: IncomingMessage, maxBytes: number): Promise<string>
       }
       chunks.push(chunk)
     })
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('end', () => {
+      resolve(Buffer.concat(chunks).toString('utf8'))
+    })
     req.on('error', reject)
   })
 }
@@ -110,7 +128,8 @@ export async function handleCspReport(
   res: ServerResponse,
   opts: CspReportHandlerOptions,
 ): Promise<void> {
-  const ct = (req.headers['content-type'] ?? '').toString()
+  const ctHeader = req.headers['content-type']
+  const ct = pickHeader(ctHeader)
 
   let raw: string
   try {
@@ -127,7 +146,7 @@ export async function handleCspReport(
       // EC-2: browsers MAY POST {"csp-report": null} or {} on
       // disposition='report' policies. Guard against null/undefined/non-object.
       const parsed = JSON.parse(raw) as Record<string, unknown>
-      const inner = parsed?.['csp-report']
+      const inner = parsed['csp-report']
       if (!inner || typeof inner !== 'object') {
         res.statusCode = 204
         res.end()
@@ -136,11 +155,9 @@ export async function handleCspReport(
       violations = [normalizeLegacy(inner as Record<string, unknown>)]
     } else if (ct.startsWith('application/reports+json')) {
       // EC-2: filter out entries lacking `body` BEFORE normalizing.
-      const parsed = JSON.parse(raw)
+      const parsed: unknown = JSON.parse(raw)
       const entries = Array.isArray(parsed) ? parsed : []
-      violations = entries
-        .map((e) => normalizeNew(e))
-        .filter((v): v is CspViolation => v !== null)
+      violations = entries.map((e) => normalizeNew(e)).filter((v): v is CspViolation => v !== null)
     } else {
       res.statusCode = 415
       res.end()
@@ -153,7 +170,10 @@ export async function handleCspReport(
   }
 
   for (const v of violations) {
-    safeAudit(opts.auditLogger, { action: 'csp.violation', metadata: v as unknown as Record<string, unknown> })
+    safeAudit(opts.auditLogger, {
+      action: 'csp.violation',
+      metadata: v as unknown as Record<string, unknown>,
+    })
     try {
       opts.devtoolsDispatcher?.onCspViolation?.(v)
     } catch {

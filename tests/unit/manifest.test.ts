@@ -101,9 +101,7 @@ describe('writeManifest', () => {
     const manifest = {
       version: 1 as const,
       generatedAt: new Date().toISOString(),
-      routes: [
-        { filePath: 'routes/health.ts', routePath: '/api/health', paramNames: [] },
-      ],
+      routes: [{ filePath: 'routes/health.ts', routePath: '/api/health', paramNames: [] }],
       actions: [],
       websockets: [],
     }
@@ -164,12 +162,8 @@ describe('loadManifest', () => {
       JSON.stringify({
         version: 1,
         generatedAt: new Date().toISOString(),
-        routes: [
-          { filePath: 'routes/health.ts', routePath: '/api/health', paramNames: [] },
-        ],
-        actions: [
-          { filePath: 'actions/create-user.ts', actionPath: 'create-user' },
-        ],
+        routes: [{ filePath: 'routes/health.ts', routePath: '/api/health', paramNames: [] }],
+        actions: [{ filePath: 'actions/create-user.ts', actionPath: 'create-user' }],
         websockets: [],
       }),
     )
@@ -189,9 +183,7 @@ describe('loadManifest', () => {
       JSON.stringify({
         version: 1,
         generatedAt: new Date().toISOString(),
-        routes: [
-          { filePath: 'routes/health.ts', routePath: '/api/health', paramNames: [] },
-        ],
+        routes: [{ filePath: 'routes/health.ts', routePath: '/api/health', paramNames: [] }],
         actions: [],
         websockets: [],
       }),

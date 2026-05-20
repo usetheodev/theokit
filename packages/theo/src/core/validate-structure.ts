@@ -1,5 +1,10 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Project-structure validator. Reads paths joined onto `projectRoot`,
+ * with names from a fixed `ValidationRule[]` table. No HTTP input.
+ */
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+
 import { TheoProjectError } from './errors.js'
 
 interface ValidationRule {
@@ -27,10 +32,7 @@ const REQUIRED_FILES: ValidationRule[] = [
 
 export function validateProjectStructure(rootDir: string): void {
   if (!existsSync(rootDir)) {
-    throw new TheoProjectError(
-      [`Project directory does not exist: ${rootDir}`],
-      rootDir,
-    )
+    throw new TheoProjectError([`Project directory does not exist: ${rootDir}`], rootDir)
   }
 
   const errors: string[] = []

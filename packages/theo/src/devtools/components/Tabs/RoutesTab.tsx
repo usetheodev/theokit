@@ -38,7 +38,9 @@ export function RoutesTab() {
     fetch(`/__open-in-editor?file=${encodeURIComponent(file)}`)
       .then((res) => {
         if (!res.ok) {
-          console.warn('[theo devtools] Editor not configured — set VITE_EDITOR=code (or your editor) in your env')
+          console.warn(
+            '[theo devtools] Editor not configured — set VITE_EDITOR=code (or your editor) in your env',
+          )
         }
       })
       .catch(() => {
@@ -50,18 +52,24 @@ export function RoutesTab() {
     <div data-testid="devtools-routes-tab">
       {state.routeManifest.routes.map((route) => {
         const active =
-          state.activeRoutePath === route.path ||
-          state.activeChain.includes(route.absoluteFilePath)
+          state.activeRoutePath === route.path || state.activeChain.includes(route.absoluteFilePath)
         return (
           <button
             key={route.absoluteFilePath}
             type="button"
             className={rowClass}
             data-active={active}
-            onClick={() => openInEditor(route.absoluteFilePath)}
+            onClick={() => {
+              openInEditor(route.absoluteFilePath)
+            }}
             title={`Open ${route.absoluteFilePath} in editor`}
           >
-            <span style={{ color: active ? tokens.colors.accent : tokens.colors.textMuted, minWidth: 12 }}>
+            <span
+              style={{
+                color: active ? tokens.colors.accent : tokens.colors.textMuted,
+                minWidth: 12,
+              }}
+            >
               {active ? '▸' : ' '}
             </span>
             <span style={{ flex: 1 }}>{route.path}</span>

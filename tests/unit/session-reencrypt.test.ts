@@ -21,7 +21,9 @@ function createMockRes(): ServerResponse {
   const headers: Record<string, string | string[]> = {}
   return {
     getHeader: (name: string) => headers[name.toLowerCase()],
-    setHeader: (name: string, value: string | string[]) => { headers[name.toLowerCase()] = value },
+    setHeader: (name: string, value: string | string[]) => {
+      headers[name.toLowerCase()] = value
+    },
   } as unknown as ServerResponse
 }
 
@@ -54,7 +56,9 @@ describe('T3.2 — getSessionWithMeta', () => {
 
     // Step 2: rotate
     const rotated = createSessionManager<TS>({ secret: [NEW_SECRET, OLD_SECRET] })
-    const { data, meta } = await rotated.getSessionWithMeta(createMockReq({ theo_session: legacyCookie }))
+    const { data, meta } = await rotated.getSessionWithMeta(
+      createMockReq({ theo_session: legacyCookie }),
+    )
     expect(data).toEqual({ userId: 'u1' })
     expect(meta.needsReencrypt).toBe(true)
     expect(meta.secretIndex).toBe(1)
@@ -66,7 +70,9 @@ describe('T3.2 — getSessionWithMeta', () => {
     await auth.createSession(r1, { userId: 'u1' })
     const cookieValue = extractCookieValue(r1, 'theo_session')!
 
-    const { data, meta } = await auth.getSessionWithMeta(createMockReq({ theo_session: cookieValue }))
+    const { data, meta } = await auth.getSessionWithMeta(
+      createMockReq({ theo_session: cookieValue }),
+    )
     expect(data).toEqual({ userId: 'u1' })
     expect(meta.needsReencrypt).toBe(false)
     expect(meta.secretIndex).toBe(0)
@@ -95,7 +101,9 @@ describe('T3.2 — getSessionWithMeta', () => {
     const cookieValue = extractCookieValue(r1, 'theo_session')!
 
     const ours = createSessionManager<TS>({ secret: [NEW_SECRET, OLD_SECRET] })
-    const { data, meta } = await ours.getSessionWithMeta(createMockReq({ theo_session: cookieValue }))
+    const { data, meta } = await ours.getSessionWithMeta(
+      createMockReq({ theo_session: cookieValue }),
+    )
     expect(data).toBeNull()
     expect(meta.needsReencrypt).toBe(false)
   })

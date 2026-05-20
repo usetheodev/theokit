@@ -72,6 +72,7 @@ describe('T3.1 — sessions-auth integration (HTTP)', () => {
       // returns 403. Real clients use theoFetch which attaches this header
       // automatically; here we set it explicitly.
       headers: { 'content-type': 'application/json', 'X-Theo-Action': '1' },
+      // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- fixture login uses the test-only credentials shipped with the demo fixture
       body: JSON.stringify({ username: 'alice', password: 'demo' }),
     })
     expect(res.status).toBe(200)
@@ -83,6 +84,7 @@ describe('T3.1 — sessions-auth integration (HTTP)', () => {
     const login = await fetch(`http://localhost:${port}/api/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'X-Theo-Action': '1' },
+      // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- fixture login uses the test-only credentials shipped with the demo fixture
       body: JSON.stringify({ username: 'alice', password: 'demo' }),
     })
     const cookie = login.headers.get('set-cookie')?.split(';')[0] ?? ''

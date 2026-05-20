@@ -32,7 +32,9 @@ describe('buildRouteManifest', () => {
   })
 
   it('nested route inherits parent layout in chain', () => {
-    const tree: RouteNode = node('', { layout: '/app/layout.tsx' },
+    const tree: RouteNode = node(
+      '',
+      { layout: '/app/layout.tsx' },
       leaf('about', '/app/about/page.tsx'),
     )
     const manifest = buildRouteManifest(tree)
@@ -42,8 +44,12 @@ describe('buildRouteManifest', () => {
   })
 
   it('multiple nested levels accumulate layouts in chain', () => {
-    const tree: RouteNode = node('', { layout: '/app/layout.tsx' },
-      node('blog', { layout: '/app/blog/layout.tsx', page: '/app/blog/page.tsx' },
+    const tree: RouteNode = node(
+      '',
+      { layout: '/app/layout.tsx' },
+      node(
+        'blog',
+        { layout: '/app/blog/layout.tsx', page: '/app/blog/page.tsx' },
         leaf('post', '/app/blog/post/page.tsx'),
       ),
     )
@@ -56,7 +62,9 @@ describe('buildRouteManifest', () => {
   })
 
   it('records hasLoading / hasError / hasNotFound flags', () => {
-    const tree: RouteNode = node('', {},
+    const tree: RouteNode = node(
+      '',
+      {},
       leaf('users', '/app/users/page.tsx', {
         loading: '/app/users/loading.tsx',
         error: '/app/users/error.tsx',
@@ -71,11 +79,11 @@ describe('buildRouteManifest', () => {
   })
 
   it('skips nodes without page', () => {
-    const tree: RouteNode = node('', { layout: '/app/layout.tsx' },
+    const tree: RouteNode = node(
+      '',
+      { layout: '/app/layout.tsx' },
       // intermediate dir with no page — should NOT appear in routes
-      node('api', {},
-        leaf('users', '/app/api/users/page.tsx'),
-      ),
+      node('api', {}, leaf('users', '/app/api/users/page.tsx')),
     )
     const manifest = buildRouteManifest(tree)
     expect(manifest.routes).toHaveLength(1)
@@ -85,9 +93,13 @@ describe('buildRouteManifest', () => {
 
 describe('matchActiveRoute', () => {
   const manifest = buildRouteManifest(
-    node('', { layout: '/app/layout.tsx', page: '/app/page.tsx' },
+    node(
+      '',
+      { layout: '/app/layout.tsx', page: '/app/page.tsx' },
       leaf('about', '/app/about/page.tsx'),
-      node('blog', { layout: '/app/blog/layout.tsx', page: '/app/blog/page.tsx' },
+      node(
+        'blog',
+        { layout: '/app/blog/layout.tsx', page: '/app/blog/page.tsx' },
         leaf('post', '/app/blog/post/page.tsx'),
       ),
     ),

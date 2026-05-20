@@ -1,7 +1,7 @@
 name: Feature request
 description: Propose a new feature or improvement for TheoKit.
-title: "[feat]: "
-labels: ["enhancement", "triage"]
+title: '[feat]: '
+labels: ['enhancement', 'triage']
 body:
   - type: markdown
     attributes:
@@ -13,21 +13,21 @@ body:
     attributes:
       label: Problem
       description: "What problem are you trying to solve? What's the friction today?"
-      placeholder: "When I do X, I have to Y manually every time. I expected the framework to..."
+      placeholder: 'When I do X, I have to Y manually every time. I expected the framework to...'
     validations:
       required: true
   - type: textarea
     id: proposed_solution
     attributes:
       label: Proposed solution
-      description: "How would you like the framework to behave? Be specific — API shape, file layout, config keys."
+      description: 'How would you like the framework to behave? Be specific — API shape, file layout, config keys.'
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: "What else did you try or think about? Why is your proposal better than those?"
+      description: 'What else did you try or think about? Why is your proposal better than those?'
     validations:
       required: false
   - type: textarea
@@ -41,7 +41,7 @@ body:
     id: scope_check
     attributes:
       label: Scope check
-      description: "TheoKit is a vertical framework for agent-shaped apps. We say no to features that dilute that focus."
+      description: 'TheoKit is a vertical framework for agent-shaped apps. We say no to features that dilute that focus.'
       options:
         - label: I've read the roadmap and this isn't already on it.
           required: true

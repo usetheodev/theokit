@@ -10,23 +10,20 @@ import type { AgentEvent as AgentEventClient } from '../../packages/theo/src/cli
 
 describe('AgentEvent runtime variant (T1.1 — standalone in TheoKit, no TheoUI coupling)', () => {
   it('AgentEvent is a discriminated union of 4 variants', () => {
-    expectTypeOf<AgentEvent>().toMatchTypeOf<
-      | AgentMessageEvent
-      | AgentToolCallEvent
-      | AgentToolResultEvent
-      | AgentErrorEvent
+    expectTypeOf<AgentEvent>().toExtend<
+      AgentMessageEvent | AgentToolCallEvent | AgentToolResultEvent | AgentErrorEvent
     >()
   })
 
   it('message event has type and content fields', () => {
-    expectTypeOf<AgentMessageEvent>().toMatchTypeOf<{
+    expectTypeOf<AgentMessageEvent>().toExtend<{
       type: 'message'
       content: string
     }>()
   })
 
   it('tool_call event has type, name, args fields', () => {
-    expectTypeOf<AgentToolCallEvent>().toMatchTypeOf<{
+    expectTypeOf<AgentToolCallEvent>().toExtend<{
       type: 'tool_call'
       name: string
       args: Record<string, unknown>
@@ -34,7 +31,7 @@ describe('AgentEvent runtime variant (T1.1 — standalone in TheoKit, no TheoUI 
   })
 
   it('tool_result event has type, name, data fields', () => {
-    expectTypeOf<AgentToolResultEvent>().toMatchTypeOf<{
+    expectTypeOf<AgentToolResultEvent>().toExtend<{
       type: 'tool_result'
       name: string
       data: unknown
@@ -42,7 +39,7 @@ describe('AgentEvent runtime variant (T1.1 — standalone in TheoKit, no TheoUI 
   })
 
   it('error event has type and message fields', () => {
-    expectTypeOf<AgentErrorEvent>().toMatchTypeOf<{
+    expectTypeOf<AgentErrorEvent>().toExtend<{
       type: 'error'
       message: string
     }>()

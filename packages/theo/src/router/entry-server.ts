@@ -41,9 +41,7 @@ function buildAppTreeJs(options: EntryServerOptions): string {
 }
 
 function generateSingleShotEntry(options: EntryServerOptions): string {
-  const theoUiImport = options.theoUi
-    ? `import { TheoUIProvider } from '@usetheo/ui'\n`
-    : ''
+  const theoUiImport = options.theoUi ? `import { TheoUIProvider } from '@usetheo/ui'\n` : ''
   const appTree = buildAppTreeJs(options)
   return [
     `import React, { Suspense } from 'react'`,
@@ -91,18 +89,10 @@ function generateSingleShotEntry(options: EntryServerOptions): string {
   ].join('\n')
 }
 
-function generateStreamingEntry(options: EntryServerOptions): string {
-  const theoUiImport = options.theoUi
-    ? `import { TheoUIProvider } from '@usetheo/ui'\n`
-    : ''
-  const appTree = buildAppTreeJs(options)
+// Generated-code fragments — extracted so the parent emitter stays under
+// the max-lines-per-function ceiling.
+function streamingWebRenderer(appTree: string): string[] {
   return [
-    `import React, { Suspense } from 'react'`,
-    `import { renderToPipeableStream, renderToReadableStream } from 'react-dom/server'`,
-    `import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router'`,
-    `import { routes } from '/@theo/route-manifest'`,
-    theoUiImport,
-    ``,
     `// T2.3 — Web Standards streaming entry for edge runtimes (Cloudflare,`,
     `// Bun, Deno, Vercel Edge). Uses renderToReadableStream and returns a`,
     `// Response with the stream as body. Honors request.signal for client`,
@@ -132,7 +122,11 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `    },`,
     `  })`,
     `}`,
-    ``,
+  ]
+}
+
+function streamingNodeRenderer(appTree: string): string[] {
+  return [
     `// T6.1 — Node streaming SSR entry (opt-in via theo.config.ts > ssrStreaming: true)`,
     `// Flushes the shell as soon as it's ready, then streams Suspense boundaries.`,
     `// EC-11: respects request.signal for client-disconnect cleanup.`,
@@ -153,18 +147,13 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `    const stream = renderToPipeableStream(app, {`,
     `      nonce: options.nonce,`,
     `      onShellReady() {`,
-    `        // Flush shell immediately; Suspense boundaries stream after.`,
     `        response.statusCode = didError ? 500 : 200`,
     `        response.setHeader('Content-Type', 'text/html; charset=utf-8')`,
     `        response.setHeader('Transfer-Encoding', 'chunked')`,
     `        stream.pipe(response)`,
     `        resolve({ streaming: true })`,
     `      },`,
-    `      onShellError(err) {`,
-    `        // Error before shell — fall back to 500 and reject so caller can`,
-    `        // emit a synchronous error response.`,
-    `        reject(err)`,
-    `      },`,
+    `      onShellError(err) { reject(err) },`,
     `      onError(err) {`,
     `        didError = true`,
     `        console.error('[SSR Stream Error]', err)`,
@@ -173,13 +162,15 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     ``,
     `    // EC-11: client disconnect cleanup`,
     `    if (options.signal) {`,
-    `      options.signal.addEventListener('abort', () => {`,
-    `        stream.abort()`,
-    `      })`,
+    `      options.signal.addEventListener('abort', () => { stream.abort() })`,
     `    }`,
     `  })`,
     `}`,
-    ``,
+  ]
+}
+
+function backCompatRenderer(appTree: string): string[] {
+  return [
     `// Backward compatibility: keep the single-shot render export available so`,
     `// callers that always used 'render()' don't break when streaming is on.`,
     `export async function render(url, options = {}) {`,
@@ -203,14 +194,7 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `    passthrough.on('end', () => { resolve(html) })`,
     `    passthrough.on('error', reject)`,
     ``,
-    `    // T3.1 — Pipe on onShellReady (Next.js pattern). Calling pipe()`,
-    `    // twice throws "React currently only supports piping to one`,
-    `    // writable stream". The \`piped\` flag is a belt-and-suspenders`,
-    `    // guard if onShellReady fires unexpectedly more than once.`,
-    `    // T4.1 — Forward options.nonce to React so every <script> tag`,
-    `    // React emits (StaticRouterProvider hydration data + Suspense`,
-    `    // boundary scripts) carries the nonce attribute. Required for`,
-    `    // 0.3.0 strict CSP without 'unsafe-inline'. EC-12.`,
+    `    // T3.1 — pipe on onShellReady (Next.js pattern). T4.1 — nonce.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
     `      nonce: options.nonce,`,
     `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,
@@ -219,5 +203,23 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `    })`,
     `  })`,
     `}`,
+  ]
+}
+
+function generateStreamingEntry(options: EntryServerOptions): string {
+  const theoUiImport = options.theoUi ? `import { TheoUIProvider } from '@usetheo/ui'\n` : ''
+  const appTree = buildAppTreeJs(options)
+  return [
+    `import React, { Suspense } from 'react'`,
+    `import { renderToPipeableStream, renderToReadableStream } from 'react-dom/server'`,
+    `import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router'`,
+    `import { routes } from '/@theo/route-manifest'`,
+    theoUiImport,
+    ``,
+    ...streamingWebRenderer(appTree),
+    ``,
+    ...streamingNodeRenderer(appTree),
+    ``,
+    ...backCompatRenderer(appTree),
   ].join('\n')
 }

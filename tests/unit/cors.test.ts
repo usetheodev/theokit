@@ -1,3 +1,5 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
 import { describe, it, expect } from 'vitest'
 import { createCorsHandler, matchesOrigin } from '../../packages/theo/src/server/cors.js'
 import { corsSchema } from '../../packages/theo/src/config/schema.js'
@@ -30,7 +32,7 @@ function mockReq(input: {
   if (input.origin !== undefined && input.origin !== null) headers.origin = input.origin
   if (input.acRequestMethod) headers['access-control-request-method'] = input.acRequestMethod
   if (input.acRequestHeaders) headers['access-control-request-headers'] = input.acRequestHeaders
-  return { method: input.method, headers } as unknown as import('node:http').IncomingMessage
+  return { method: input.method, headers } as unknown as IncomingMessage
 }
 
 function mockRes() {
@@ -39,18 +41,32 @@ function mockRes() {
   let ended = false
   return {
     headers,
-    get statusCode() { return statusCode },
-    set statusCode(v: number) { statusCode = v },
-    setHeader(k: string, v: string) { headers[k] = v },
-    end() { ended = true },
-    get ended() { return ended },
-  } as unknown as import('node:http').ServerResponse & { headers: Record<string, string>; ended: boolean }
+    get statusCode() {
+      return statusCode
+    },
+    set statusCode(v: number) {
+      statusCode = v
+    },
+    setHeader(k: string, v: string) {
+      headers[k] = v
+    },
+    end() {
+      ended = true
+    },
+    get ended() {
+      return ended
+    },
+  } as unknown as ServerResponse & { headers: Record<string, string>; ended: boolean }
 }
 
 describe('T1.2 — CORS preflight handling', () => {
   it('Given OPTIONS request with allowed origin + method, Then 204 + Access-Control-Allow-* headers set', () => {
     const cors = createCorsHandler({ origins: ['https://app.example.com'] })
-    const req = mockReq({ method: 'OPTIONS', origin: 'https://app.example.com', acRequestMethod: 'POST' })
+    const req = mockReq({
+      method: 'OPTIONS',
+      origin: 'https://app.example.com',
+      acRequestMethod: 'POST',
+    })
     const res = mockRes() as any
     const handled = cors.handlePreflight(req, res)
     expect(handled).toBe(true)
@@ -62,7 +78,11 @@ describe('T1.2 — CORS preflight handling', () => {
 
   it('Given OPTIONS from origin NOT in list, Then 403 + no allow-origin header', () => {
     const cors = createCorsHandler({ origins: ['https://app.example.com'] })
-    const req = mockReq({ method: 'OPTIONS', origin: 'https://evil.example', acRequestMethod: 'POST' })
+    const req = mockReq({
+      method: 'OPTIONS',
+      origin: 'https://evil.example',
+      acRequestMethod: 'POST',
+    })
     const res = mockRes() as any
     const handled = cors.handlePreflight(req, res)
     expect(handled).toBe(true)
@@ -97,7 +117,10 @@ describe('T1.2 — applyHeaders for non-preflight requests', () => {
   })
 
   it('Given exposedHeaders configured, Then Access-Control-Expose-Headers header added', () => {
-    const cors = createCorsHandler({ origins: ['https://app.example.com'], exposedHeaders: ['X-Trace-Id'] })
+    const cors = createCorsHandler({
+      origins: ['https://app.example.com'],
+      exposedHeaders: ['X-Trace-Id'],
+    })
     const req = mockReq({ method: 'GET', origin: 'https://app.example.com' })
     const res = mockRes() as any
     cors.applyHeaders(req, res)
@@ -114,7 +137,11 @@ describe('T1.2 — applyHeaders for non-preflight requests', () => {
 
   it('Given maxAge=3600, Then preflight response has Access-Control-Max-Age: 3600', () => {
     const cors = createCorsHandler({ origins: ['https://app.example.com'], maxAge: 3600 })
-    const req = mockReq({ method: 'OPTIONS', origin: 'https://app.example.com', acRequestMethod: 'POST' })
+    const req = mockReq({
+      method: 'OPTIONS',
+      origin: 'https://app.example.com',
+      acRequestMethod: 'POST',
+    })
     const res = mockRes() as any
     cors.handlePreflight(req, res)
     expect(res.headers['Access-Control-Max-Age']).toBe('3600')
@@ -139,7 +166,9 @@ describe('T1.2 — origin matching variants', () => {
   })
 
   it('EC-8: callback that throws is fail-closed (denies origin)', () => {
-    const cb = () => { throw new Error('userDB offline') }
+    const cb = () => {
+      throw new Error('userDB offline')
+    }
     expect(matchesOrigin('https://app.example.com', cb)).toBe(false)
   })
 
@@ -160,13 +189,19 @@ describe('T1.2 — corsSchema validation', () => {
 
   it('EC-3: allowedHeaders entries containing CR/LF rejected (CWE-113)', () => {
     expect(() =>
-      corsSchema.parse({ origins: ['https://app.example.com'], allowedHeaders: ['X-Good', 'X-Bad\r\nX-Injected: yes'] })
+      corsSchema.parse({
+        origins: ['https://app.example.com'],
+        allowedHeaders: ['X-Good', 'X-Bad\r\nX-Injected: yes'],
+      }),
     ).toThrow()
   })
 
   it('EC-3: exposedHeaders entries containing CR/LF rejected (CWE-113)', () => {
     expect(() =>
-      corsSchema.parse({ origins: ['https://app.example.com'], exposedHeaders: ['X-Trace-Id\nbad'] })
+      corsSchema.parse({
+        origins: ['https://app.example.com'],
+        exposedHeaders: ['X-Trace-Id\nbad'],
+      }),
     ).toThrow()
   })
 })

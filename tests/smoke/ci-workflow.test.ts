@@ -39,8 +39,10 @@ describe('CI Workflow', () => {
 
   it('should use pnpm/action-setup', () => {
     const workflow = loadWorkflow('ci.yml')
-    const steps = workflow.jobs['lint-and-typecheck'].steps
-    const hasPnpmSetup = steps.some((s: Record<string, string>) => s.uses?.includes('pnpm/action-setup'))
+    const steps = workflow.jobs['lint-and-format'].steps
+    const hasPnpmSetup = steps.some((s: Record<string, string>) =>
+      s.uses?.includes('pnpm/action-setup'),
+    )
     expect(hasPnpmSetup).toBe(true)
   })
 
@@ -53,7 +55,7 @@ describe('CI Workflow', () => {
 
   it('should have build step', () => {
     const workflow = loadWorkflow('ci.yml')
-    const steps = workflow.jobs['lint-and-typecheck'].steps
+    const steps = workflow.jobs['typecheck-build'].steps
     const hasBuild = steps.some((s: Record<string, string>) => s.run?.includes('pnpm build'))
     expect(hasBuild).toBe(true)
   })
@@ -68,7 +70,9 @@ describe('CI Workflow', () => {
   it('should have e2e job with playwright install', () => {
     const workflow = loadWorkflow('ci.yml')
     const steps = workflow.jobs.e2e.steps
-    const hasPlaywright = steps.some((s: Record<string, string>) => s.run?.includes('playwright install'))
+    const hasPlaywright = steps.some((s: Record<string, string>) =>
+      s.run?.includes('playwright install'),
+    )
     expect(hasPlaywright).toBe(true)
   })
 })
@@ -89,7 +93,9 @@ describe('Release Workflow', () => {
   it('should use changesets/action@v1', () => {
     const workflow = loadWorkflow('release.yml')
     const steps = workflow.jobs.release.steps
-    const hasChangesets = steps.some((s: Record<string, string>) => s.uses?.includes('changesets/action'))
+    const hasChangesets = steps.some((s: Record<string, string>) =>
+      s.uses?.includes('changesets/action'),
+    )
     expect(hasChangesets).toBe(true)
   })
 
@@ -102,7 +108,9 @@ describe('Release Workflow', () => {
     const workflow = loadWorkflow('release.yml')
     const steps = workflow.jobs.release.steps
     const buildIdx = steps.findIndex((s: Record<string, string>) => s.run?.includes('pnpm build'))
-    const changesetsIdx = steps.findIndex((s: Record<string, string>) => s.uses?.includes('changesets/action'))
+    const changesetsIdx = steps.findIndex((s: Record<string, string>) =>
+      s.uses?.includes('changesets/action'),
+    )
     expect(buildIdx).toBeLessThan(changesetsIdx)
   })
 })

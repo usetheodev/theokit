@@ -6,12 +6,12 @@ export default function Page() {
       <h1>Dynamic routes demo</h1>
       <ul>
         <li>
-          <Link to="/blog/hello-world">/blog/hello-world</Link> — single dynamic
-          segment <code>[id]</code>
+          <Link to="/blog/hello-world">/blog/hello-world</Link> — single dynamic segment{' '}
+          <code>[id]</code>
         </li>
         <li>
-          <Link to="/docs/guides/setup/quickstart">/docs/guides/setup/quickstart</Link>{' '}
-          — catch-all <code>[...slug]</code>
+          <Link to="/docs/guides/setup/quickstart">/docs/guides/setup/quickstart</Link> — catch-all{' '}
+          <code>[...slug]</code>
         </li>
         <li>
           <Link to="/docs">/docs</Link> — catch-all with empty path

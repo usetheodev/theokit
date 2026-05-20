@@ -1,3 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Resolves theokit's own install directory (the `node_modules/theokit/`).
+ * Build-time tool. Read-only check. No HTTP input.
+ */
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 

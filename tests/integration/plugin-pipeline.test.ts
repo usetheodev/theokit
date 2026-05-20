@@ -229,16 +229,7 @@ describe('executeRoute — plugin pipeline (T4.2 + T4.3 + T4.4)', () => {
     })
 
     const res = createMockRes()
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
-      res,
-      loader,
-      undefined,
-      'req-5',
-    )
+    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-5')
 
     expect(res._getStatus()).toBe(200)
     const body = JSON.parse(res._getBody())

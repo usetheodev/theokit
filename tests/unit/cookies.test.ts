@@ -6,12 +6,20 @@ function mockReq(cookieHeader: string): IncomingMessage {
   return { headers: { cookie: cookieHeader } } as unknown as IncomingMessage
 }
 
+type HeaderValue = string | string[] | undefined
+
 function mockRes(): ServerResponse & { _headers: Record<string, string | string[]> } {
   const headers: Record<string, string | string[]> = {}
   return {
     _headers: headers,
-    getHeader(name: string) { return headers[name.toLowerCase()] },
-    setHeader(name: string, value: string | string[]) { headers[name.toLowerCase()] = value },
+    // eslint-disable-next-line sonarjs/function-return-type -- Node's `res.getHeader` REQUIRES the `string | string[] | undefined` union
+    getHeader(name: string): HeaderValue {
+      const key = name.toLowerCase()
+      return Object.hasOwn(headers, key) ? headers[key] : undefined
+    },
+    setHeader(name: string, value: string | string[]) {
+      headers[name.toLowerCase()] = value
+    },
   } as unknown as ServerResponse & { _headers: Record<string, string | string[]> }
 }
 

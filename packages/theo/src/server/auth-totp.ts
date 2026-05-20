@@ -14,6 +14,11 @@
  *   - Use `verifyTotp` constant-time (we use crypto.timingSafeEqual internally).
  */
 
+// CR-012 fix: use the shared constant-time helper that does not early-exit
+// on length mismatch (the previous local version did, leaking the digit
+// count via timing).
+import { constantTimeEquals } from './_internal/encoding.js'
+
 /** Supported HMAC algorithms per RFC 6238 §1.2. Default SHA-1. */
 export type TotpAlgorithm = 'SHA-1' | 'SHA-256' | 'SHA-512'
 
@@ -45,6 +50,10 @@ const DEFAULT_ALGORITHM: TotpAlgorithm = 'SHA-1'
 /** Decode base32 (RFC 4648, no padding) to bytes. Throws on invalid input. */
 function base32Decode(s: string): Uint8Array {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  // Trailing `=` is bounded by spec to 0..6 chars; `\s+` collapses runs
+  // of whitespace. Input length is the user's TOTP secret (10..50 chars
+  // typical), so super-linear backtracking cannot escalate.
+  // eslint-disable-next-line sonarjs/slow-regex -- bounded inputs (TOTP secrets are short)
   const clean = s.toUpperCase().replace(/=+$/, '').replace(/\s+/g, '')
   if (!/^[A-Z2-7]+$/.test(clean)) {
     throw new Error('Invalid base32 secret')
@@ -106,8 +115,18 @@ function counterBytes(timeMs: number, stepSec: number): Uint8Array {
   return out
 }
 
-async function hmac(secret: Uint8Array, message: Uint8Array, algorithm: TotpAlgorithm): Promise<Uint8Array> {
-  const key = await crypto.subtle.importKey('raw', secret as BufferSource, { name: 'HMAC', hash: algorithm }, false, ['sign'])
+async function hmac(
+  secret: Uint8Array,
+  message: Uint8Array,
+  algorithm: TotpAlgorithm,
+): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    secret as BufferSource,
+    { name: 'HMAC', hash: algorithm },
+    false,
+    ['sign'],
+  )
   const sig = await crypto.subtle.sign('HMAC', key, message as BufferSource)
   return new Uint8Array(sig)
 }
@@ -133,14 +152,6 @@ export async function generateTotp(opts: TotpOptions): Promise<string> {
   const time = opts.time ?? Date.now()
   const mac = await hmac(secret, counterBytes(time, step), algorithm)
   return truncate(mac, digits)
-}
-
-/** Constant-time string compare. Pure JS — no platform-specific crypto. */
-function constantTimeEquals(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return diff === 0
 }
 
 /**

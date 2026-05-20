@@ -2,10 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const TEMPLATE_ROOT = resolve(
-  __dirname,
-  '../../packages/create-theo/templates/default',
-)
+const TEMPLATE_ROOT = resolve(__dirname, '../../packages/create-theo/templates/default')
 
 function read(rel: string): string {
   return readFileSync(resolve(TEMPLATE_ROOT, rel), 'utf-8')
@@ -101,7 +98,9 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
 
   it('app/page.tsx is a Client Component ("use client" directive)', () => {
     const page = read('app/page.tsx')
-    expect(page.trim().startsWith("'use client'") || page.trim().startsWith('"use client"')).toBe(true)
+    expect(page.trim().startsWith("'use client'") || page.trim().startsWith('"use client"')).toBe(
+      true,
+    )
   })
 
   it('T1.2: page.tsx uses useAgentStream hook', () => {

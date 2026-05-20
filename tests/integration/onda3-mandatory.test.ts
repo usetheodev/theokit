@@ -9,10 +9,7 @@ describe('Onda 3 — Backend Routes', () => {
   let port: number
 
   beforeAll(async () => {
-    server = await startDevServer(
-      path.join(FIXTURES, 'server-routes-basic'),
-      { port: 0 },
-    )
+    server = await startDevServer(path.join(FIXTURES, 'server-routes-basic'), { port: 0 })
     const address = server.httpServer!.address()
     port = typeof address === 'object' && address ? address.port : 0
   }, 15000)

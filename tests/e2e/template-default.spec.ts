@@ -1,4 +1,4 @@
-import { test, expect, type ConsoleMessage } from '@playwright/test'
+import { test, expect, type ConsoleMessage, type Page } from '@playwright/test'
 
 /**
  * Phase 10 — T10.1 Playwright browser test for the default template.
@@ -26,7 +26,7 @@ const SAFE_TO_IGNORE_CONSOLE = [
   // does not log a console error — listed here just to document the policy.
 ]
 
-function collectConsoleErrors(page: import('@playwright/test').Page) {
+function collectConsoleErrors(page: Page) {
   const errors: string[] = []
   page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() !== 'error') return
@@ -74,7 +74,9 @@ test.describe('Default template — agent surface', () => {
     await expect(page.locator('h1, [class*="font-display"]').first()).toBeVisible()
   })
 
-  test('chat composer accepts input + auto-attaches X-Theo-Action header (T1.1)', async ({ page }) => {
+  test('chat composer accepts input + auto-attaches X-Theo-Action header (T1.1)', async ({
+    page,
+  }) => {
     const errors = collectConsoleErrors(page)
 
     // T1.1 — Phase 1 BLOCKING fix: consumeAgentStream now attaches
@@ -174,7 +176,9 @@ test.describe('Default template — agent surface', () => {
     await expect(page.getByPlaceholder('Run a command…')).toHaveCount(0)
   })
 
-  test('Phase 7 — every response carries an x-trace-id header (traceparent / x-request-id / generated)', async ({ page }) => {
+  test('Phase 7 — every response carries an x-trace-id header (traceparent / x-request-id / generated)', async ({
+    page,
+  }) => {
     // No header → generated UUID propagates as x-trace-id (and x-request-id).
     const generatedResp = await page.request.get('/api/chat')
     const generatedTrace = generatedResp.headers()['x-trace-id']

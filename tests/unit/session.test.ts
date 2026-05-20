@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createSessionManager } from '../../packages/theo/src/server/session.js'
 
@@ -13,7 +13,9 @@ function createMockRes(): ServerResponse {
   const headers: Record<string, string | string[]> = {}
   return {
     getHeader: (name: string) => headers[name.toLowerCase()],
-    setHeader: (name: string, value: string | string[]) => { headers[name.toLowerCase()] = value },
+    setHeader: (name: string, value: string | string[]) => {
+      headers[name.toLowerCase()] = value
+    },
   } as unknown as ServerResponse
 }
 
@@ -71,7 +73,7 @@ describe('Session Manager', () => {
     await auth.createSession(res, { userId: '123', role: 'admin' })
 
     // Session created with maxAge=0 → exp = Date.now() + 0 → already expired
-    await new Promise(r => setTimeout(r, 10))
+    await new Promise((r) => setTimeout(r, 10))
     const cookieValue = extractCookieValue(res, 'theo_session')!
     const req = createMockReq({ theo_session: cookieValue })
     const session = await auth.getSession(req)
@@ -106,10 +108,18 @@ describe('Session Manager', () => {
   })
 
   it('should preserve generic TSession through round-trip', async () => {
-    interface CustomSession { userId: string; permissions: string[]; theme: 'dark' | 'light' }
+    interface CustomSession {
+      userId: string
+      permissions: string[]
+      theme: 'dark' | 'light'
+    }
     const auth = createSessionManager<CustomSession>({ secret: SECRET })
     const res = createMockRes()
-    const sessionData: CustomSession = { userId: '456', permissions: ['read', 'write'], theme: 'dark' }
+    const sessionData: CustomSession = {
+      userId: '456',
+      permissions: ['read', 'write'],
+      theme: 'dark',
+    }
     await auth.createSession(res, sessionData)
 
     const cookieValue = extractCookieValue(res, 'theo_session')!
@@ -119,8 +129,9 @@ describe('Session Manager', () => {
   })
 
   it('should reject secret shorter than 32 characters (EC-1)', () => {
-    expect(() => createSessionManager<TestSession>({ secret: 'short' }))
-      .toThrow('Session secret must be at least 32 characters')
+    expect(() => createSessionManager<TestSession>({ secret: 'short' })).toThrow(
+      'Session secret must be at least 32 characters',
+    )
   })
 })
 
@@ -154,7 +165,10 @@ describe('T3.1 — Session secret as string | string[]', () => {
     // Session created with NEW_SECRET — managers with only NEW_SECRET should read it
     const cookieValue = extractCookieValue(res, 'theo_session')!
     const onlyNew = createSessionManager<TestSession>({ secret: NEW_SECRET })
-    expect(await onlyNew.getSession(createMockReq({ theo_session: cookieValue }))).toEqual({ userId: '1', role: 'a' })
+    expect(await onlyNew.getSession(createMockReq({ theo_session: cookieValue }))).toEqual({
+      userId: '1',
+      role: 'a',
+    })
   })
 
   it('Decrypt falls back to old key when newest fails', async () => {
@@ -171,7 +185,9 @@ describe('T3.1 — Session secret as string | string[]', () => {
   })
 
   it('Decrypt returns null when no secret in array matches', async () => {
-    const thirdParty = createSessionManager<TestSession>({ secret: 'unknown-secret-' + 'z'.repeat(32) })
+    const thirdParty = createSessionManager<TestSession>({
+      secret: 'unknown-secret-' + 'z'.repeat(32),
+    })
     const r = createMockRes()
     await thirdParty.createSession(r, { userId: '99', role: 'x' })
     const cookieValue = extractCookieValue(r, 'theo_session')!
@@ -185,7 +201,9 @@ describe('T3.1 — Session secret as string | string[]', () => {
   })
 
   it('Array with one too-short secret throws at construction', () => {
-    expect(() => createSessionManager<TestSession>({ secret: [NEW_SECRET, 'shrt'] })).toThrow(/32 characters/)
+    expect(() => createSessionManager<TestSession>({ secret: [NEW_SECRET, 'shrt'] })).toThrow(
+      /32 characters/,
+    )
   })
 
   it('EC-1: Array with more than 5 secrets throws at construction (fail-loud, no silent truncation)', () => {

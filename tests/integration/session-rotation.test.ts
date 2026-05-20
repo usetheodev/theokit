@@ -29,13 +29,17 @@ function createMockRes(): ServerResponse & { headersSent: boolean } {
   const headers: Record<string, string | string[]> = {}
   let headersSent = false
   const res = {
-    get headersSent() { return headersSent },
+    get headersSent() {
+      return headersSent
+    },
     getHeader: (name: string) => headers[name.toLowerCase()],
     setHeader: (name: string, value: string | string[]) => {
       if (headersSent) throw new Error('Cannot set headers after they are sent')
       headers[name.toLowerCase()] = value
     },
-    writeHead: (_statusCode?: number) => { headersSent = true },
+    writeHead: (_statusCode?: number) => {
+      headersSent = true
+    },
   } as unknown as ServerResponse & { headersSent: boolean }
   return res
 }
@@ -138,6 +142,8 @@ describe('T3.2 — session rotation integration (rotateIfNeeded)', () => {
     const rotated = createSessionManager<TS>({ secret: [NEW_SECRET, OLD_SECRET] })
     const res = createMockRes()
     res.writeHead(200) // headers already sent
-    await expect(rotateIfNeeded(rotated, createMockReq({ theo_session: legacyCookie }), res)).rejects.toThrow(/headers/i)
+    await expect(
+      rotateIfNeeded(rotated, createMockReq({ theo_session: legacyCookie }), res),
+    ).rejects.toThrow(/headers/i)
   })
 })

@@ -153,14 +153,7 @@ describe('executeRoute with transformer (T1.2)', () => {
     const loader = async () => ({
       GET: { handler: () => ({ ok: true, n: 42 }) },
     })
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
-      res,
-      loader,
-    )
+    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader)
     expect(JSON.parse(res._getBody())).toEqual({ ok: true, n: 42 })
     expect(res._getHeader('x-theo-transformer')).toBeUndefined()
   })

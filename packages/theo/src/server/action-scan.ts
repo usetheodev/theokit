@@ -1,3 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Build-time scanner: walks `serverDir/actions/` derived from cwd.
+ * No HTTP input ever reaches these fs calls.
+ */
 import { readdirSync, existsSync, statSync } from 'node:fs'
 import { join, resolve, relative, extname } from 'node:path'
 
@@ -6,7 +10,7 @@ export interface ActionNode {
   actionPath: string
 }
 
-const ACTION_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx']
+const ACTION_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx'])
 
 function scanDir(dir: string, actionsDir: string, results: ActionNode[]): void {
   const entries = readdirSync(dir, { withFileTypes: true })
@@ -19,7 +23,7 @@ function scanDir(dir: string, actionsDir: string, results: ActionNode[]): void {
       }
     } else if (entry.isFile()) {
       const ext = extname(entry.name)
-      if (!ACTION_EXTENSIONS.includes(ext)) continue
+      if (!ACTION_EXTENSIONS.has(ext)) continue
 
       let rel = relative(actionsDir, fullPath)
       rel = rel.replace(/\\/g, '/')

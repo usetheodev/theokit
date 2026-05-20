@@ -10,14 +10,15 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { useEffect, useInsertionEffect, useMemo, useReducer } from 'react'
+
 import { Indicator } from './components/Indicator.js'
 import { Panel } from './components/Panel.js'
 import { dispatcher } from './dispatcher.js'
-import { DevtoolsContext } from './hooks/useDevtoolsContext.js'
+import { subscribeToServerEvents } from './hmr-bridge.js'
 import { useActiveRoute } from './hooks/useActiveRoute.js'
+import { DevtoolsContext } from './hooks/useDevtoolsContext.js'
 import { useResolvedTheme } from './hooks/useResolvedTheme.js'
 import { useShortcuts } from './hooks/useShortcuts.js'
-import { subscribeToServerEvents } from './hmr-bridge.js'
 import { loadFromStorage, writeToStorage } from './persistence.js'
 import { devtoolsReducer, initialState } from './reducer.js'
 import { ShadowPortal } from './shadow-portal.js'
@@ -44,12 +45,12 @@ function ShortcutsTracker() {
  * createPortal mounts as direct children of the shadow root (siblings of
  * the React root div, NOT descendants).
  */
-function ThemeVars({ resolved }: { resolved: 'light' | 'dark' }) {
+function ThemeVars({ resolved }: Readonly<{ resolved: 'light' | 'dark' }>) {
   const css = `:host { color-scheme: ${resolved}; ${buildThemeCssVars(resolved)} }`
   return <style data-theo-devtools-theme={resolved}>{css}</style>
 }
 
-export function Overlay({ shadowRoot }: { shadowRoot: ShadowRoot }) {
+export function Overlay({ shadowRoot }: Readonly<{ shadowRoot: ShadowRoot }>) {
   const [state, dispatch] = useReducer(
     devtoolsReducer,
     initialState,
@@ -84,7 +85,9 @@ export function Overlay({ shadowRoot }: { shadowRoot: ShadowRoot }) {
   // either queue or dispatch synchronously, both safe paths).
   useEffect(() => {
     const sub = subscribeToServerEvents(dispatcher)
-    return () => sub.unsubscribe()
+    return () => {
+      sub.unsubscribe()
+    }
   }, [])
 
   return (
@@ -99,5 +102,3 @@ export function Overlay({ shadowRoot }: { shadowRoot: ShadowRoot }) {
     </DevtoolsContext.Provider>
   )
 }
-
-export default Overlay

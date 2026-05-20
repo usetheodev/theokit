@@ -116,7 +116,9 @@ describe('applySecurityHeaders — integration with ServerResponse', () => {
     const headers: Record<string, string> = {}
     return {
       headers,
-      setHeader(k: string, v: string) { headers[k] = v },
+      setHeader(k: string, v: string) {
+        headers[k] = v
+      },
     }
   }
 
@@ -163,7 +165,9 @@ describe('T1.1 — Permissions-Policy header', () => {
     const headers: Record<string, string> = {}
     return {
       headers,
-      setHeader(k: string, v: string) { headers[k] = v },
+      setHeader(k: string, v: string) {
+        headers[k] = v
+      },
     }
   }
 
@@ -173,7 +177,10 @@ describe('T1.1 — Permissions-Policy header', () => {
   })
 
   it('Given config.permissionsPolicy = "geolocation=(self)", Then response has that exact header value (override)', () => {
-    const headers = buildSecurityHeaders({ permissionsPolicy: 'geolocation=(self)' }, { production: false })
+    const headers = buildSecurityHeaders(
+      { permissionsPolicy: 'geolocation=(self)' },
+      { production: false },
+    )
     expect(headers['Permissions-Policy']).toBe('geolocation=(self)')
   })
 
@@ -189,7 +196,9 @@ describe('T1.1 — Permissions-Policy header', () => {
   })
 
   it('EC-3: Given config.permissionsPolicy with CR or LF, Then schema.parse throws (CWE-113 HTTP Response Splitting mitigation)', () => {
-    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=(); \r\nX-Injected: yes' })).toThrow()
+    expect(() =>
+      securityHeadersSchema.parse({ permissionsPolicy: 'x=(); \r\nX-Injected: yes' }),
+    ).toThrow()
     expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()\nY: bad' })).toThrow()
     expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()\rZ: bad' })).toThrow()
   })

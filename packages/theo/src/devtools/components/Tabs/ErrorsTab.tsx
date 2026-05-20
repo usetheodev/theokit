@@ -42,11 +42,15 @@ export function ErrorsTab() {
   return (
     <div data-testid="devtools-errors-tab">
       <div className={headerClass}>
-        <span>{state.errors.length} error{state.errors.length === 1 ? '' : 's'}</span>
+        <span>
+          {state.errors.length} error{state.errors.length === 1 ? '' : 's'}
+        </span>
         <button
           type="button"
           className={clearBtn}
-          onClick={() => dispatch({ type: 'RESET_ERRORS' })}
+          onClick={() => {
+            dispatch({ type: 'RESET_ERRORS' })
+          }}
         >
           clear
         </button>

@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
-import { handleCspReport, normalizeLegacy, normalizeNew, CSP_REPORT_PATH } from '../../packages/theo/src/server/csp-report.js'
+import {
+  handleCspReport,
+  normalizeLegacy,
+  normalizeNew,
+  CSP_REPORT_PATH,
+} from '../../packages/theo/src/server/csp-report.js'
 
 /**
  * T5.1 — CSP report endpoint.
@@ -31,11 +36,21 @@ function makeRes() {
   let ended = false
   const headers: Record<string, string> = {}
   return {
-    get statusCode() { return statusCode },
-    set statusCode(v: number) { statusCode = v },
-    setHeader(k: string, v: string) { headers[k] = v },
-    end() { ended = true },
-    get ended() { return ended },
+    get statusCode() {
+      return statusCode
+    },
+    set statusCode(v: number) {
+      statusCode = v
+    },
+    setHeader(k: string, v: string) {
+      headers[k] = v
+    },
+    end() {
+      ended = true
+    },
+    get ended() {
+      return ended
+    },
     headers,
   } as unknown as ServerResponse & { ended: boolean; headers: Record<string, string> }
 }
@@ -80,7 +95,13 @@ describe('T5.1 — CSP report endpoint', () => {
   })
 
   it('returns 204 + empty body on success', async () => {
-    const body = JSON.stringify({ 'csp-report': { 'blocked-uri': 'x', 'document-uri': 'y', 'violated-directive': "script-src 'self'" } })
+    const body = JSON.stringify({
+      'csp-report': {
+        'blocked-uri': 'x',
+        'document-uri': 'y',
+        'violated-directive': "script-src 'self'",
+      },
+    })
     const req = makeReq({ contentType: 'application/csp-report', body })
     const res = makeRes() as any
     await handleCspReport(req, res, {})
@@ -111,7 +132,13 @@ describe('T5.1 — CSP report endpoint', () => {
 
   it('user hook invoked with normalized violation', async () => {
     const onViolation = vi.fn()
-    const body = JSON.stringify({ 'csp-report': { 'blocked-uri': 'x', 'document-uri': 'y', 'violated-directive': "script-src 'self'" } })
+    const body = JSON.stringify({
+      'csp-report': {
+        'blocked-uri': 'x',
+        'document-uri': 'y',
+        'violated-directive': "script-src 'self'",
+      },
+    })
     const req = makeReq({ contentType: 'application/csp-report', body })
     const res = makeRes() as any
     await handleCspReport(req, res, { onViolation })
@@ -120,8 +147,16 @@ describe('T5.1 — CSP report endpoint', () => {
   })
 
   it('EC: user hook throw does not crash → 204', async () => {
-    const onViolation = vi.fn().mockImplementation(() => { throw new Error('oops') })
-    const body = JSON.stringify({ 'csp-report': { 'blocked-uri': 'x', 'document-uri': 'y', 'violated-directive': "script-src 'self'" } })
+    const onViolation = vi.fn().mockImplementation(() => {
+      throw new Error('oops')
+    })
+    const body = JSON.stringify({
+      'csp-report': {
+        'blocked-uri': 'x',
+        'document-uri': 'y',
+        'violated-directive': "script-src 'self'",
+      },
+    })
     const req = makeReq({ contentType: 'application/csp-report', body })
     const res = makeRes() as any
     await handleCspReport(req, res, { onViolation })

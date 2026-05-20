@@ -11,9 +11,7 @@ import { useAgentStream } from 'theokit/client'
  */
 export default function Page() {
   const [draft, setDraft] = useState('')
-  const { events, send, status, reset } = useAgentStream<{ message: string }>(
-    '/api/agent',
-  )
+  const { events, send, status, reset } = useAgentStream<{ message: string }>('/api/agent')
 
   return (
     <main>

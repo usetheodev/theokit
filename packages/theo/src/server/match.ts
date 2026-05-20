@@ -11,11 +11,15 @@ export function compilePattern(routePath: string): {
 } {
   const paramNames: string[] = []
   // Single pass: handle both catch-all (:...name) and regular (:name) params
-  const regexStr = routePath.replace(/:(?:\.\.\.)?([^/]+)/g, (match, name) => {
+  const regexStr = routePath.replace(/:(?:\.\.\.)?([^/]+)/g, (match: string, name: string) => {
     paramNames.push(name)
     // Catch-all matches across slashes, regular matches single segment
     return match.startsWith(':...') ? '(.+)' : '([^/]+)'
   })
+  // `regexStr` is derived from a developer-authored route path (build-time
+  // input, not HTTP-controlled). The `security/detect-non-literal-regexp`
+  // rule cannot see this constraint — disable narrowly.
+  // eslint-disable-next-line security/detect-non-literal-regexp -- route pattern from build-time scan, never HTTP input
   return { pattern: new RegExp(`^${regexStr}$`), paramNames }
 }
 

@@ -1,8 +1,13 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * AWS Lambda adapter. Writes to `cwd/.theo/lambda/`. Build-time tool.
+ */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+
 import { nodeAdapter } from './node.js'
+import type { DeployAdapter } from './types.js'
 
 export interface AwsLambdaBuildDeps {
   runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
@@ -187,9 +192,14 @@ export async function buildAwsLambda(
   ensureDir(outputDir)
 
   const entry = renderAwsLambdaEntry()
-  const write = deps.writeEntry ?? ((p, c) => writeFileSync(p, c))
+  const write =
+    deps.writeEntry ??
+    ((p, c) => {
+      writeFileSync(p, c)
+    })
   write(resolve(outputDir, 'handler.mjs'), entry)
 
+  // eslint-disable-next-line no-console -- CLI build progress
   console.log('\n  ✓ AWS Lambda output → .theo/aws/handler.mjs\n')
 }
 

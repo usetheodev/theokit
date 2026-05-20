@@ -69,6 +69,10 @@ export class PluginRunner {
             return
         }
       },
+      // `T` lets call sites bind a stronger value type via the plugin API.
+      // The runtime body stores `value` without inspection, so T appears
+      // only on the parameter — that is the intended contract.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- T documents the per-decoration type for consumers
       decorateRequest: <T>(key: string, value: T) => {
         const existing = this.decorations.get(key)
         if (existing) {
@@ -97,10 +101,7 @@ export class PluginRunner {
     return this.runHookList(this.preHandlerHooks, ctx)
   }
 
-  async runOnResponse(
-    ctx: PluginContext,
-    options: RunHookOptions = {},
-  ): Promise<HookResult> {
+  async runOnResponse(ctx: PluginContext, options: RunHookOptions = {}): Promise<HookResult> {
     return this.runHookList(this.onResponseHooks, ctx, options)
   }
 
@@ -126,7 +127,7 @@ export class PluginRunner {
   }
 
   private async runHookList(
-    hooks: ReadonlyArray<(ctx: PluginContext) => void | Promise<void>>,
+    hooks: readonly ((ctx: PluginContext) => void | Promise<void>)[],
     ctx: PluginContext,
     options: RunHookOptions = {},
   ): Promise<HookResult> {
@@ -136,10 +137,7 @@ export class PluginRunner {
       } catch (err) {
         if (options.inErrorPath) {
           // EC-9: we're already handling an error; do NOT trigger onError again.
-          console.error(
-            `[plugin-runner] hook threw during error path; suppressed (EC-9):`,
-            err,
-          )
+          console.error(`[plugin-runner] hook threw during error path; suppressed (EC-9):`, err)
           continue
         }
         throw err

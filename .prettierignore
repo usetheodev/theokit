@@ -1,0 +1,12 @@
+node_modules
+dist
+.theo
+coverage
+test-results
+referencias
+pnpm-lock.yaml
+my-test
+fixtures/**/dist
+examples/**/dist
+*.md
+CHANGELOG.md

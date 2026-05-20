@@ -7,11 +7,8 @@
  * an attacker can authorize on the user's account using a captured code.
  */
 
-function base64urlEncode(bytes: Uint8Array): string {
-  let s = ''
-  for (const b of bytes) s += String.fromCharCode(b)
-  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
+// CR-020 DRY + CR-012 constant-time: shared helpers in _internal/encoding.
+import { base64urlEncode, constantTimeEquals } from './_internal/encoding.js'
 
 /**
  * Generate a cryptographically random state token. Default 32 bytes
@@ -28,14 +25,10 @@ export function generateOAuthState(opts: { bytes?: number } = {}): string {
 /**
  * Verify a state token. Constant-time compare. Empty inputs always fail
  * (defensive — never accept empty as "they match").
+ *
+ * CR-012 fix: `constantTimeEquals` does not early-exit on length mismatch,
+ * so the comparison time is independent of how the input was forged.
  */
 export function verifyOAuthState(provided: string, stored: string): boolean {
-  if (typeof provided !== 'string' || typeof stored !== 'string') return false
-  if (provided.length === 0 || stored.length === 0) return false
-  if (provided.length !== stored.length) return false
-  let diff = 0
-  for (let i = 0; i < provided.length; i++) {
-    diff |= provided.charCodeAt(i) ^ stored.charCodeAt(i)
-  }
-  return diff === 0
+  return constantTimeEquals(provided, stored)
 }

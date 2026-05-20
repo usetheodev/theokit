@@ -116,7 +116,9 @@ describe('redactQueryString (EC-18)', () => {
   })
 
   it('redacts URL-encoded key (token written as %74%6F%6B%65%6E)', () => {
-    expect(redactQueryString('/api?%74%6F%6B%65%6E=xyz')).toBe('/api?%74%6F%6B%65%6E=%5BREDACTED%5D')
+    expect(redactQueryString('/api?%74%6F%6B%65%6E=xyz')).toBe(
+      '/api?%74%6F%6B%65%6E=%5BREDACTED%5D',
+    )
   })
 
   it('returns path unchanged when no query string', () => {
@@ -128,6 +130,7 @@ describe('redactQueryString (EC-18)', () => {
   })
 
   it('handles password / secret / auth / access_token keys', () => {
+    // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- testing the REDACTOR with literal sensitive-shaped strings
     expect(redactQueryString('/x?password=abc')).toContain('password=%5BREDACTED%5D')
     expect(redactQueryString('/x?secret=abc')).toContain('secret=%5BREDACTED%5D')
     expect(redactQueryString('/x?auth=abc')).toContain('auth=%5BREDACTED%5D')

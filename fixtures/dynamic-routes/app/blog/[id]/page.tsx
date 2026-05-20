@@ -5,7 +5,9 @@ export default function BlogPostPage() {
   return (
     <article>
       <h1>Post: {params.id}</h1>
-      <p>This page is rendered for the dynamic segment <code>[id]</code>.</p>
+      <p>
+        This page is rendered for the dynamic segment <code>[id]</code>.
+      </p>
     </article>
   )
 }

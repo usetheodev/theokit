@@ -18,8 +18,8 @@ describe('Env Vars: THEO_PUBLIC_* prefix', () => {
     const resolve = config.resolve as { alias: Array<{ find: string }> }
     expect(resolve.alias).toBeDefined()
     expect(resolve.alias.length).toBeGreaterThanOrEqual(2)
-    expect(resolve.alias.some(a => a.find === 'theokit')).toBe(true)
-    expect(resolve.alias.some(a => a.find === 'theokit/server')).toBe(true)
+    expect(resolve.alias.some((a) => a.find === 'theokit')).toBe(true)
+    expect(resolve.alias.some((a) => a.find === 'theokit/server')).toBe(true)
   })
 
   it('should have both envPrefix and resolve in config', () => {

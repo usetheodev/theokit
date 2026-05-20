@@ -7,7 +7,10 @@ import {
 import type { RouteNode } from '../../packages/theo/src/router/types.js'
 
 const stubLoader = (db: Record<string, unknown>) => async (file: string) => {
-  if (file in db) return db[file] as Awaited<ReturnType<Parameters<typeof collectStaticPaths>[1]['loadStaticPaths']>>
+  if (file in db)
+    return db[file] as Awaited<
+      ReturnType<Parameters<typeof collectStaticPaths>[1]['loadStaticPaths']>
+    >
   return null
 }
 
@@ -116,10 +119,7 @@ describe('collectStaticPaths', () => {
     const result = await collectStaticPaths(tree, {
       appDir,
       loadStaticPaths: stubLoader({
-        '/app/docs/[...slug]/static-paths.ts': [
-          { slug: ['intro'] },
-          { slug: ['guides', 'auth'] },
-        ],
+        '/app/docs/[...slug]/static-paths.ts': [{ slug: ['intro'] }, { slug: ['guides', 'auth'] }],
       }),
     })
     expect(result).toEqual([
@@ -145,7 +145,7 @@ describe('collectStaticPaths', () => {
       collectStaticPaths(tree, {
         appDir,
         loadStaticPaths: stubLoader({}),
-      })
+      }),
     ).rejects.toThrow(StaticPathsRequiredError)
   })
 
@@ -166,7 +166,7 @@ describe('collectStaticPaths', () => {
       collectStaticPaths(tree, {
         appDir,
         loadStaticPaths: stubLoader({}),
-      })
+      }),
     ).rejects.toThrow(/\[\.\.\.slug\]/)
   })
 
@@ -181,7 +181,12 @@ describe('collectStaticPaths', () => {
           path: '/dashboard',
           layout: '/app/dashboard/layout.tsx',
           children: [
-            { segment: 'inbox', path: '/dashboard/inbox', page: '/app/dashboard/inbox/page.tsx', children: [] },
+            {
+              segment: 'inbox',
+              path: '/dashboard/inbox',
+              page: '/app/dashboard/inbox/page.tsx',
+              children: [],
+            },
           ],
         },
       ],

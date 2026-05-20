@@ -122,8 +122,8 @@ What ships in this version is everything the `nextjs-maturity` plan closed. The 
 
 - [x] Default scaffold redesigned with 20 TheoUI components (chat agent surface out of the box)
 - [x] Code-splitting with `matchRoutes` preload + 1500ms timeout safeguard (EC-3)
-- [x] CSRF default-on in **warn-first** mode (`X-Theo-Action: 1` + Origin match, opt-out via `csrf: false`) (EC-1)
-- [x] Default security headers — CSP report-only / X-Frame-Options DENY / X-Content-Type-Options nosniff / Referrer-Policy / HSTS prod-only (EC-2)
+- [x] CSRF default-on in **warn-first** mode (`X-Theo-Action: 1` + Origin match, opt-out via `csrf: false`) (EC-1) **— SHIPPED as warn-first; the strict-default flip moved into 0.3.0 (see below).**
+- [x] Default security headers — CSP report-only / X-Frame-Options DENY / X-Content-Type-Options nosniff / Referrer-Policy / HSTS prod-only (EC-2) **— SHIPPED as report-only; enforce-default flip moved into 0.3.0.**
 - [x] W3C Trace Context propagation — `traceparent` → `x-trace-id` response header + log correlation
 - [x] Argon2id password hashing in `examples/agent-saas` via `hash-wasm` (Alpine + Vercel Edge safe), legacy PBKDF2 verify + transparent rehash on login (EC-4)
 - [x] Six hydration regression tests pinning the 2026-05-17 bug class
@@ -134,6 +134,8 @@ What ships in this version is everything the `nextjs-maturity` plan closed. The 
 - [ ] **Open: README banner** announcing 0.2.0 with the bundle / security baseline / agent-surface story
 
 ### 0.3.0 — Enforcement cutover (HIGH RISK — most dangerous release on the roadmap)
+
+**Status (2026-05-19):** **Implementation LANDED via commit `3ee9dac` on the `develop` branch.** The framework defaults in `packages/theo/src/config/schema.ts` already declare `csrf: 'strict'` and `cspMode: 'enforce'`; the SSR nonce machinery (`per-request nonce`) is wired through `entry-server` + `security-headers`. The pre-requisites and risk analysis below remain authoritative for **the release decision**, not the code state. Do not ship to `latest` until items 1, 3, 5, and 6 below are GREEN (item 2 is already done in `useAgentStream`; item 4 is implemented).
 
 **Criticality: ALTA.** This is not a flag flip. It is the most dangerous release on the roadmap because it (a) fails silently — no compile error, no test fail, only runtime breakage in production, (b) hits sensitive flows (login, auth, forms) users may not re-test on every bump, (c) breaks every app with inline scripts (gtag, intercom, sentry, Plausible), and (d) **breaks our own default scaffold's chat demo** if shipped as-is (`useAgentStream` uses native fetch and does not yet send `X-Theo-Action: 1`).
 

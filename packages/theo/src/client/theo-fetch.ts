@@ -1,5 +1,6 @@
-import type { z } from 'zod'
 import superjson from 'superjson'
+import type { z } from 'zod'
+
 import { getGlobalBatcher } from './batch-transport.js'
 
 // --- Transformer (T1.3) ---
@@ -30,7 +31,9 @@ export function deserializeFetchResponse(
   serverTransformerName: string | null,
   clientTransformerName: string,
 ): unknown {
-  if (raw === '' || raw === null || raw === undefined) {
+  // `raw` is typed `string`, but stay defensive: callers pass `await response.text()`
+  // which can be empty.
+  if (raw === '') {
     return null
   }
 
@@ -67,12 +70,16 @@ type ExtractBody<T> = T extends { body?: infer B } ? (B extends z.ZodType ? B : 
 /** Infer query type from a route's query Zod schema */
 export type InferQuery<T> = [ExtractQuery<T>] extends [never]
   ? undefined
-  : ExtractQuery<T> extends z.ZodUndefined ? undefined : z.infer<ExtractQuery<T>>
+  : ExtractQuery<T> extends z.ZodUndefined
+    ? undefined
+    : z.infer<ExtractQuery<T>>
 
 /** Infer body type from a route's body Zod schema */
 export type InferBody<T> = [ExtractBody<T>] extends [never]
   ? undefined
-  : ExtractBody<T> extends z.ZodUndefined ? undefined : z.infer<ExtractBody<T>>
+  : ExtractBody<T> extends z.ZodUndefined
+    ? undefined
+    : z.infer<ExtractBody<T>>
 
 /** Build the options type based on what schemas the route has */
 export type TheoFetchOptions<T> = Omit<RequestInit, 'body' | 'method'> &
@@ -89,76 +96,153 @@ export class TheoFetchError extends Error {
   constructor(status: number, body?: unknown) {
     const parsed = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
     const error = parsed?.error as Record<string, unknown> | undefined
-    const message = (error?.message as string) ?? `HTTP ${status}`
-    super(message)
+    const errorMessage = typeof error?.message === 'string' ? error.message : undefined
+    super(errorMessage ?? `HTTP ${String(status)}`)
     this.name = 'TheoFetchError'
     this.status = status
-    this.code = error?.code as string | undefined
-    this.issues = error?.issues as unknown[] | undefined
+    this.code = typeof error?.code === 'string' ? error.code : undefined
+    this.issues = Array.isArray(error?.issues) ? error.issues : undefined
+  }
+}
+
+/**
+ * Serialize a query-param value to a string. Handles primitives, dates,
+ * and falls back to JSON for arrays/objects. Avoids the
+ * `[object Object]` foot-gun that `no-base-to-string` warns against.
+ */
+function stringifyQueryValue(value: unknown): string {
+  if (value === null) return 'null'
+  if (value instanceof Date) return value.toISOString()
+  switch (typeof value) {
+    case 'string':
+      return value
+    case 'number':
+    case 'boolean':
+    case 'bigint':
+      return String(value)
+    default:
+      return JSON.stringify(value)
   }
 }
 
 // --- Main Function ---
 
-export async function theoFetch<T>(
-  url: string,
-  options?: TheoFetchOptions<T>,
-): Promise<InferResponse<T>> {
-  // T1.5 — Transparent batching: when globalThis.__THEO_BATCHING__ is truthy
-  // (set via Vite virtual module when config.batching=true), route this call
-  // through the global batcher. Falls back to direct fetch on batcher failure
-  // (degrade gracefully).
-  const batcher = getGlobalBatcher()
-  if (batcher) {
-    try {
-      const method = (options as { method?: string } | undefined)?.method ?? 'GET'
-      const result = await batcher.dispatch({
-        path: url,
-        method,
-        query: (options as { query?: Record<string, unknown> } | undefined)?.query,
-        body: (options as { body?: unknown } | undefined)?.body,
-      })
-      return result as InferResponse<T>
-    } catch (err) {
-      // Fall through to direct fetch path below
-      void err
+interface TheoFetchInternalOptions {
+  method?: string
+  query?: Record<string, unknown>
+  body?: unknown
+  headers?: HeadersInit
+  signal?: AbortSignal
+}
+
+/**
+ * Resolve the request origin per the documented fallback hierarchy. Pure
+ * helper extracted to keep `theoFetch` under the complexity ceiling.
+ *   1. `globalThis.location.origin` (browser)
+ *   2. `globalThis.__THEO_ORIGIN__` (build-time literal)
+ *   3. `process.env.THEO_ORIGIN` (escape hatch)
+ *   4. `http://localhost` (placeholder for URL parsing — the URL is built
+ *      relative so only pathname+search ever flows to the wire)
+ */
+function resolveRequestOrigin(): string {
+  const g = globalThis as { location?: { origin?: string }; __THEO_ORIGIN__?: string }
+  const fromEnv = typeof process !== 'undefined' ? process.env.THEO_ORIGIN : undefined
+  return g.location?.origin ?? g.__THEO_ORIGIN__ ?? fromEnv ?? 'http://localhost'
+}
+
+function buildFetchUrl(path: string, query: Record<string, unknown> | undefined): URL {
+  const fetchUrl = new URL(path, resolveRequestOrigin())
+  if (!query) return fetchUrl
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined) {
+      fetchUrl.searchParams.set(k, stringifyQueryValue(v))
     }
   }
+  return fetchUrl
+}
 
-  const fetchUrl = new URL(url, globalThis.location?.origin ?? 'http://localhost:3000')
-
-  // Append query params (skip undefined values)
-  if (options && 'query' in options && options.query) {
-    for (const [k, v] of Object.entries(options.query as Record<string, unknown>)) {
-      if (v !== undefined) {
-        fetchUrl.searchParams.set(k, String(v))
-      }
-    }
+/**
+ * Normalize `HeadersInit` (Headers / `[string, string][]` / Record) into a
+ * single plain `Record<string, string>`. Plain-object output is required
+ * by callers that introspect headers via index access (test fixtures use
+ * `(init.headers as Record<string, string>)['Content-Type']`).
+ */
+function normalizeHeaders(input: HeadersInit | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!input) return out
+  if (input instanceof Headers) {
+    input.forEach((value, key) => {
+      out[key] = value
+    })
+    return out
   }
+  if (Array.isArray(input)) {
+    for (const [key, value] of input) out[key] = value
+    return out
+  }
+  for (const [key, value] of Object.entries(input)) {
+    out[key] = value
+  }
+  return out
+}
 
-  // Build fetch init
-  const { query: _q, body: _b, ...restOptions } = (options ?? {}) as Record<string, unknown>
-  const init: RequestInit = { ...(restOptions as RequestInit) }
+function buildRequestInit(opts: TheoFetchInternalOptions): RequestInit {
+  const init: RequestInit = {}
+  if (opts.method !== undefined) init.method = opts.method
+  if (opts.signal !== undefined) init.signal = opts.signal
 
-  if (options && 'body' in options && options.body !== undefined) {
-    init.body = JSON.stringify(options.body)
-    init.headers = {
-      ...(init.headers as Record<string, string> ?? {}),
-      'Content-Type': 'application/json',
-    }
+  const headers = normalizeHeaders(opts.headers)
+  init.headers = headers
+
+  if (opts.body !== undefined) {
+    init.body = JSON.stringify(opts.body)
+    headers['Content-Type'] = 'application/json'
   }
 
   // Phase 5 — Auto-attach `X-Theo-Action: 1` for state-mutating methods so
   // the framework's CSRF check passes when servers run in `strict` mode.
   // Safe methods (GET/HEAD/OPTIONS) skip the header to keep them cacheable.
-  const method = (init.method ?? 'GET').toUpperCase()
+  const method = (opts.method ?? 'GET').toUpperCase()
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    init.headers = {
-      ...(init.headers as Record<string, string> ?? {}),
-      'X-Theo-Action': '1',
-    }
+    headers['X-Theo-Action'] = '1'
+  }
+  return init
+}
+
+async function tryBatcher(
+  url: string,
+  options: TheoFetchInternalOptions,
+): Promise<{ matched: true; result: unknown } | { matched: false }> {
+  const batcher = getGlobalBatcher()
+  if (!batcher) return { matched: false }
+  try {
+    const result = await batcher.dispatch({
+      path: url,
+      method: options.method ?? 'GET',
+      query: options.query,
+      body: options.body,
+    })
+    return { matched: true, result }
+  } catch {
+    // Batcher failure: fall through to direct fetch (graceful degrade).
+    return { matched: false }
+  }
+}
+
+export async function theoFetch<T>(
+  url: string,
+  options?: TheoFetchOptions<T>,
+): Promise<InferResponse<T>> {
+  const internal = (options ?? {}) as unknown as TheoFetchInternalOptions
+
+  // T1.5 — Transparent batching when globalThis.__THEO_BATCHING__ is truthy.
+  const batchAttempt = await tryBatcher(url, internal)
+  if (batchAttempt.matched) {
+    return batchAttempt.result as InferResponse<T>
   }
 
+  const fetchUrl = buildFetchUrl(url, internal.query)
+  const init = buildRequestInit(internal)
   const response = await fetch(fetchUrl.toString(), init)
 
   if (!response.ok) {
@@ -186,7 +270,11 @@ export async function theoFetch<T>(
   const serverTransformerName = response.headers.get('x-theo-transformer')
   const clientTransformerName = resolveClientTransformerName()
   const text = await response.text()
-  return deserializeFetchResponse(text, serverTransformerName, clientTransformerName) as InferResponse<T>
+  return deserializeFetchResponse(
+    text,
+    serverTransformerName,
+    clientTransformerName,
+  ) as InferResponse<T>
 }
 
 /**

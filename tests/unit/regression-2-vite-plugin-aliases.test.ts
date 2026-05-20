@@ -30,10 +30,8 @@ function getAliasArray(): Array<{ find: string; replacement: string }> {
   const plugin = theoPlugin()
   // Vite plugin API: config() returns the config patch
   const hook = plugin.config as (this: unknown, ...args: unknown[]) => unknown
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cfg = hook.call({}, {} as any, {} as any) as
-    | { resolve?: { alias?: unknown } }
-    | undefined
+
+  const cfg = hook.call({}, {} as any, {} as any) as { resolve?: { alias?: unknown } } | undefined
   const alias = cfg?.resolve?.alias
   expect(Array.isArray(alias), 'expected alias array shape').toBe(true)
   return alias as Array<{ find: string; replacement: string }>
@@ -63,7 +61,9 @@ describe('T1.2 — Vite plugin emits all subpath aliases in correct order', () =
     const aliases = getAliasArray()
     const clientAlias = aliases.find((a) => a.find === 'theokit/client')
     expect(clientAlias).toBeDefined()
-    expect(existsSync(clientAlias!.replacement), `missing file: ${clientAlias!.replacement}`).toBe(true)
+    expect(existsSync(clientAlias!.replacement), `missing file: ${clientAlias!.replacement}`).toBe(
+      true,
+    )
   })
 
   it('each subpath alias resolves to a real file on disk', () => {
@@ -71,10 +71,9 @@ describe('T1.2 — Vite plugin emits all subpath aliases in correct order', () =
     for (const sub of EXPECTED_SUBPATHS) {
       const a = aliases.find((x) => x.find === sub)
       expect(a, `missing alias for ${sub}`).toBeDefined()
-      expect(
-        existsSync(a!.replacement),
-        `alias ${sub} → ${a!.replacement} does not exist`,
-      ).toBe(true)
+      expect(existsSync(a!.replacement), `alias ${sub} → ${a!.replacement} does not exist`).toBe(
+        true,
+      )
     }
   })
 })

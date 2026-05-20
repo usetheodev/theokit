@@ -6,10 +6,10 @@ const srcDir = path.resolve(import.meta.dirname, '../../packages/theo/src')
 
 function grepCount(pattern: string): number {
   try {
-    const result = execSync(
-      `grep -rn '${pattern}' ${srcDir} --include="*.ts" | wc -l`,
-      { encoding: 'utf-8' },
-    )
+    // eslint-disable-next-line sonarjs/os-command -- developer-local audit test running grep over the framework's own src tree
+    const result = execSync(`grep -rn '${pattern}' ${srcDir} --include="*.ts" | wc -l`, {
+      encoding: 'utf-8',
+    })
     return parseInt(result.trim(), 10)
   } catch {
     return 0

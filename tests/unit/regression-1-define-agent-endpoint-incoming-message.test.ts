@@ -42,8 +42,8 @@ function makeNodeRequest(opts: { aborted?: boolean } = {}): {
     req,
     triggerClose: () => {
       req.aborted = true
-      for (const cb of listeners['close'] ?? []) cb()
-      for (const cb of listeners['aborted'] ?? []) cb()
+      for (const cb of listeners.close ?? []) cb()
+      for (const cb of listeners.aborted ?? []) cb()
     },
   }
 }

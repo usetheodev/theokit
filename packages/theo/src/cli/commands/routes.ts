@@ -1,8 +1,9 @@
 import { resolve, relative } from 'node:path'
+
 import { loadConfig } from '../../config/load-config.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
-import { scanServerRoutes } from '../../server/scan.js'
 import { scanServerActions } from '../../server/action-scan.js'
+import { scanServerRoutes } from '../../server/scan.js'
 import { scanWebSocketRoutes } from '../../server/ws-scan.js'
 
 export async function routesCommand(): Promise<void> {

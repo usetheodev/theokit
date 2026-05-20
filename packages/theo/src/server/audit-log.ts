@@ -47,8 +47,10 @@ export class JsonStdoutSink implements AuditLogger {
       timestamp: event.timestamp ?? new Date().toISOString(),
     }
     try {
+      // eslint-disable-next-line no-console -- JsonStdoutSink IS the audit output
       console.log(JSON.stringify(enriched, jsonReplacer))
     } catch {
+      // eslint-disable-next-line no-console -- fallback when payload won't serialize
       console.log(
         `{"level":"audit","action":${JSON.stringify(event.action)},"timestamp":${JSON.stringify(enriched.timestamp)},"note":"payload could not be serialized"}`,
       )
@@ -91,8 +93,8 @@ export function safeAudit(logger: AuditLogger | undefined, event: AuditEvent): v
   try {
     const r = logger.log(event)
     // Discard the Promise — async sinks are fire-and-forget by design.
-    if (r && typeof (r as Promise<void>).then === 'function') {
-      (r as Promise<void>).catch(() => {
+    if (r && typeof r.then === 'function') {
+      r.catch(() => {
         // swallow async sink failures — audit must never crash the request
       })
     }

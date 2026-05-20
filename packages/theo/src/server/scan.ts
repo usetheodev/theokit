@@ -1,8 +1,13 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Build-time scanner: walks `serverDir/routes/` derived from cwd.
+ * No HTTP input ever reaches these fs calls.
+ */
 import { readdirSync, existsSync, statSync } from 'node:fs'
-import { join, resolve, relative, extname, basename } from 'node:path'
+import { join, resolve, relative, extname } from 'node:path'
+
 import { compilePattern, type ServerRouteNode } from './match.js'
 
-const ROUTE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx']
+const ROUTE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx'])
 
 function fileToRoutePath(filePath: string, routesDir: string): string {
   let rel = relative(routesDir, filePath)
@@ -17,9 +22,11 @@ function fileToRoutePath(filePath: string, routesDir: string): string {
   } else if (rel === 'index') {
     rel = ''
   }
-  // Replace [...param] with :...param (catch-all, before regular params)
+  // Replace [...param] with :...param (catch-all, before regular params).
+  // Replace [param] with :param. Inputs are file paths bounded by the
+  // OS filename limit; the bracket capture is bounded by `]`.
   rel = rel.replace(/\[\.\.\.([^\]]+)\]/g, ':...$1')
-  // Replace [param] with :param
+  // eslint-disable-next-line sonarjs/slow-regex -- bounded by `]`; input is a single filename
   rel = rel.replace(/\[([^\]]+)\]/g, ':$1')
   return `/api/${rel}`
 }
@@ -35,7 +42,7 @@ function scanDir(dir: string, routesDir: string, results: ServerRouteNode[]): vo
       }
     } else if (entry.isFile()) {
       const ext = extname(entry.name)
-      if (!ROUTE_EXTENSIONS.includes(ext)) continue
+      if (!ROUTE_EXTENSIONS.has(ext)) continue
 
       const routePath = fileToRoutePath(fullPath, routesDir)
       const { pattern, paramNames } = compilePattern(routePath)

@@ -7,7 +7,10 @@ import { tmpdir } from 'node:os'
 let serverDir: string
 
 beforeEach(() => {
-  const base = join(tmpdir(), `theo-action-scan-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const base = join(
+    tmpdir(),
+    `theo-action-scan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  )
   serverDir = join(base, 'server')
   mkdirSync(join(serverDir, 'actions'), { recursive: true })
 })

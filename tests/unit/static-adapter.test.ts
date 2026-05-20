@@ -6,7 +6,7 @@ import {
   StaticApiRoutesDetectedError,
 } from '../../packages/theo/src/adapters/static.js'
 import { VALID_TARGETS } from '../../packages/theo/src/adapters/types.js'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { TheoConfig } from '../../packages/theo/src/config/schema.js'
@@ -36,7 +36,7 @@ describe('detectApiRoutes', () => {
   }
 
   it('returns empty array when server/ does not exist', () => {
-    const result = detectApiRoutes(join(tmpdir(), 'theo-no-server-' + Date.now()))
+    const result = detectApiRoutes(join(tmpdir(), `theo-no-server-${Date.now()}`))
     expect(result).toEqual([])
   })
 
@@ -55,8 +55,8 @@ describe('detectApiRoutes', () => {
       'routes/posts.ts': 'export const GET = {}',
     })
     try {
-      const result = detectApiRoutes(dir)
-      expect(result.sort()).toEqual(['posts.ts', 'users.ts'])
+      const result = [...detectApiRoutes(dir)].sort((a, b) => a.localeCompare(b))
+      expect(result).toEqual(['posts.ts', 'users.ts'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -124,7 +124,7 @@ describe('buildStatic — orchestration', () => {
       scanAppRoutes: () => ({ segment: '', path: '/', children: [] }),
       loadStaticPaths: async () => null,
     })
-    expect(Object.keys(written).sort()).toEqual([
+    expect(Object.keys(written).sort((a, b) => a.localeCompare(b))).toEqual([
       '/fake/cwd/.theo/static/about.html',
       '/fake/cwd/.theo/static/index.html',
     ])

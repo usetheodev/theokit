@@ -1,7 +1,11 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Build-time scanner: walks `serverDir/ws/` derived from cwd.
+ * No HTTP input ever reaches these fs calls.
+ */
 import { readdirSync, existsSync, statSync } from 'node:fs'
 import { join, resolve, relative, extname } from 'node:path'
 
-const WS_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx']
+const WS_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx'])
 
 export interface WebSocketRouteNode {
   filePath: string
@@ -19,7 +23,7 @@ function scanDir(dir: string, wsDir: string, results: WebSocketRouteNode[]): voi
       }
     } else if (entry.isFile()) {
       const ext = extname(entry.name)
-      if (!WS_EXTENSIONS.includes(ext)) continue
+      if (!WS_EXTENSIONS.has(ext)) continue
 
       let rel = relative(wsDir, fullPath)
       rel = rel.replace(/\\/g, '/')

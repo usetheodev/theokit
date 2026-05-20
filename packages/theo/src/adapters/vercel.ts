@@ -1,8 +1,14 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Vercel deploy adapter. All paths derived from `cwd` and a fixed
+ * `.theo/vercel/` output layout. Build-time tool — no HTTP input.
+ */
 import { existsSync, mkdirSync, writeFileSync, cpSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+
 import { nodeAdapter } from './node.js'
+import type { DeployAdapter } from './types.js'
 
 /**
  * T2.2 — Vercel adapter rewritten to consume `theokit/adapters/web-shim`
@@ -136,10 +142,7 @@ export const vercelAdapter: DeployAdapter = {
     }
 
     // 4. Emit serverless function entry (now uses shared web-shim)
-    writeFileSync(
-      resolve(outputDir, 'functions/api.func/index.mjs'),
-      renderVercelFunctionEntry(),
-    )
+    writeFileSync(resolve(outputDir, 'functions/api.func/index.mjs'), renderVercelFunctionEntry())
 
     // 5. Emit .vc-config.json
     writeFileSync(
@@ -153,6 +156,7 @@ export const vercelAdapter: DeployAdapter = {
       JSON.stringify(renderVercelConfigJson(), null, 2),
     )
 
+    // eslint-disable-next-line no-console -- CLI build progress
     console.log('\n  ✓ Vercel output → .vercel/output/\n')
   },
 }

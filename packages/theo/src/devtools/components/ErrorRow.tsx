@@ -7,9 +7,10 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { useState } from 'react'
+
 import { useDevtoolsContext } from '../hooks/useDevtoolsContext.js'
-import { tokens } from '../styles/tokens.js'
 import type { ErrorRecord } from '../shared.js'
+import { tokens } from '../styles/tokens.js'
 
 export const STACK_DISPLAY_LIMIT = 4096
 
@@ -17,7 +18,10 @@ export const STACK_DISPLAY_LIMIT = 4096
  * EC-27 — pure helper: cap stack trace display at 4KB.
  * Exported for unit testing — 1MB+ stacks would freeze main thread on render.
  */
-export function truncateStackForDisplay(stack: string | undefined, limit = STACK_DISPLAY_LIMIT): string | null {
+export function truncateStackForDisplay(
+  stack: string | undefined,
+  limit = STACK_DISPLAY_LIMIT,
+): string | null {
   if (!stack) return null
   if (stack.length <= limit) return stack
   return `${stack.slice(0, limit)}\n…[truncated ${stack.length - limit} chars]`
@@ -51,7 +55,7 @@ interface ErrorRowProps {
   error: ErrorRecord
 }
 
-export function ErrorRow({ error }: ErrorRowProps) {
+export function ErrorRow({ error }: Readonly<ErrorRowProps>) {
   const [expanded, setExpanded] = useState(false)
   const { styles } = useDevtoolsContext()
 
@@ -110,14 +114,26 @@ export function ErrorRow({ error }: ErrorRowProps) {
       <button
         type="button"
         className={summaryClass}
-        onClick={() => setExpanded((e) => !e)}
+        onClick={() => {
+          setExpanded((e) => !e)
+        }}
         aria-expanded={expanded}
         title={error.message}
       >
-        <span className={iconClass} aria-hidden="true">{typeIcon(error.type)}</span>
+        <span className={iconClass} aria-hidden="true">
+          {typeIcon(error.type)}
+        </span>
         <span className={msgClass}>{error.message}</span>
         {error.code && (
-          <span style={{ color: tokens.colors.textMuted, fontFamily: tokens.font.mono, fontSize: tokens.font.sizeXs }}>{error.code}</span>
+          <span
+            style={{
+              color: tokens.colors.textMuted,
+              fontFamily: tokens.font.mono,
+              fontSize: tokens.font.sizeXs,
+            }}
+          >
+            {error.code}
+          </span>
         )}
       </button>
       {expanded && (
@@ -135,19 +151,21 @@ export function ErrorRow({ error }: ErrorRowProps) {
             </div>
           )}
           {displayedStack && (
-            <pre style={{
-              margin: 0,
-              padding: tokens.spacing.sm,
-              background: tokens.colors.bgPanel,
-              color: tokens.colors.textMuted,
-              fontFamily: tokens.font.mono,
-              fontSize: tokens.font.sizeXs,
-              borderRadius: tokens.radius.sm,
-              overflow: 'auto',
-              maxHeight: '200px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-            }}>
+            <pre
+              style={{
+                margin: 0,
+                padding: tokens.spacing.sm,
+                background: tokens.colors.bgPanel,
+                color: tokens.colors.textMuted,
+                fontFamily: tokens.font.mono,
+                fontSize: tokens.font.sizeXs,
+                borderRadius: tokens.radius.sm,
+                overflow: 'auto',
+                maxHeight: '200px',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+              }}
+            >
               {displayedStack}
             </pre>
           )}

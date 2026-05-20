@@ -26,7 +26,7 @@ class MemoryStorage implements Storage {
     return this.store.get(key) ?? null
   }
   setItem(key: string, value: string) {
-    this.store.set(key, String(value))
+    this.store.set(key, value)
   }
   removeItem(key: string) {
     this.store.delete(key)

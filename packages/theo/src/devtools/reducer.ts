@@ -35,7 +35,8 @@ export function devtoolsReducer(state: DevtoolsState, action: DevtoolsAction): D
       return { ...state, errors: appendCapped(state.errors, action.error) }
     case 'CSRF_WARN': {
       const errorRecord: ErrorRecord = {
-        id: `csrf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        // eslint-disable-next-line sonarjs/pseudo-random -- non-secret correlation id for devtools UI
+        id: `csrf-${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`,
         type: 'csrf.warn',
         message: `CSRF warn: ${action.payload.method} ${action.payload.path} — ${action.payload.reason}`,
         code: action.payload.code,

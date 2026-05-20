@@ -13,7 +13,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { devtoolsReducer, initialState } from '../../packages/theo/src/devtools/reducer.js'
-import { RING_BUFFER_CAP, MAX_QUEUE_SIZE, STORAGE_VERSION } from '../../packages/theo/src/devtools/shared.js'
+import {
+  RING_BUFFER_CAP,
+  MAX_QUEUE_SIZE,
+  STORAGE_VERSION,
+} from '../../packages/theo/src/devtools/shared.js'
 
 describe('devtools — shared invariants', () => {
   it('RING_BUFFER_CAP = 50', () => {
@@ -109,13 +113,28 @@ describe('devtools reducer — Phase 1 minimum', () => {
   })
 
   it('MANIFEST_UPDATED replaces routeManifest', () => {
-    const manifest = { routes: [{ path: '/', absoluteFilePath: '/abs/app/page.tsx', layoutChain: [], hasLoading: false, hasError: false, hasNotFound: false }] }
+    const manifest = {
+      routes: [
+        {
+          path: '/',
+          absoluteFilePath: '/abs/app/page.tsx',
+          layoutChain: [],
+          hasLoading: false,
+          hasError: false,
+          hasNotFound: false,
+        },
+      ],
+    }
     const s = devtoolsReducer(initialState, { type: 'MANIFEST_UPDATED', manifest })
     expect(s.routeManifest).toEqual(manifest)
   })
 
   it('ROUTE_MATCHED sets activeRoutePath + chain', () => {
-    const s = devtoolsReducer(initialState, { type: 'ROUTE_MATCHED', path: '/blog', chain: ['/layout.tsx', '/blog/page.tsx'] })
+    const s = devtoolsReducer(initialState, {
+      type: 'ROUTE_MATCHED',
+      path: '/blog',
+      chain: ['/layout.tsx', '/blog/page.tsx'],
+    })
     expect(s.activeRoutePath).toBe('/blog')
     expect(s.activeChain).toEqual(['/layout.tsx', '/blog/page.tsx'])
   })
@@ -123,7 +142,15 @@ describe('devtools reducer — Phase 1 minimum', () => {
   it('RESET_REQUESTS clears requests', () => {
     let s = devtoolsReducer(initialState, {
       type: 'REQUEST_ADD',
-      request: { id: 'r1', traceId: 't1', method: 'GET', path: '/', status: 200, durationMs: 1, startedAt: 0 },
+      request: {
+        id: 'r1',
+        traceId: 't1',
+        method: 'GET',
+        path: '/',
+        status: 200,
+        durationMs: 1,
+        startedAt: 0,
+      },
     })
     expect(s.requests.length).toBe(1)
     s = devtoolsReducer(s, { type: 'RESET_REQUESTS' })

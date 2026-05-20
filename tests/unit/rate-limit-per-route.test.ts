@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { IncomingMessage } from 'node:http'
-import { createRouteRateLimiter, deriveKey, matchRoutePattern } from '../../packages/theo/src/server/rate-limit-per-route.js'
-import { InMemoryStore } from '../../packages/theo/src/server/rate-limit-store.js'
+import {
+  createRouteRateLimiter,
+  deriveKey,
+  matchRoutePattern,
+} from '../../packages/theo/src/server/rate-limit-per-route.js'
 
 /**
  * T2.2 — Per-route + per-user rate limiting.
@@ -88,7 +91,11 @@ describe('T2.2 — keyBy variants', () => {
   })
 
   it("keyBy='session' hashes cookie (not raw value)", () => {
-    const key = deriveKey(mockReq({ cookie: 'theo_session=secret-token' }), 'session', 'theo_session')
+    const key = deriveKey(
+      mockReq({ cookie: 'theo_session=secret-token' }),
+      'session',
+      'theo_session',
+    )
     expect(key).toMatch(/^session:[A-Za-z0-9_-]+$/) // base64url-ish prefix
     expect(key).not.toContain('secret-token') // raw token NEVER leaks
   })
@@ -96,7 +103,11 @@ describe('T2.2 — keyBy variants', () => {
   it("EC-6: keyBy='session' reads configured cookie name (not hardcoded)", () => {
     const key = deriveKey(mockReq({ cookie: 'app_session=token123' }), 'session', 'app_session')
     expect(key).toMatch(/^session:/)
-    const fallback = deriveKey(mockReq({ cookie: 'app_session=token123' }), 'session', 'theo_session')
+    const fallback = deriveKey(
+      mockReq({ cookie: 'app_session=token123' }),
+      'session',
+      'theo_session',
+    )
     expect(fallback).toMatch(/^ip:/) // wrong cookie name → fall back to IP
   })
 

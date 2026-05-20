@@ -14,18 +14,28 @@ function makeReq(opts: { contentType: string; body: string }): IncomingMessage {
   const stream = Readable.from([Buffer.from(opts.body)])
   ;(stream as unknown as { method?: string }).method = 'POST'
   ;(stream as unknown as { url?: string }).url = CSP_REPORT_PATH
-  ;(stream as unknown as { headers?: Record<string, string> }).headers = { 'content-type': opts.contentType }
+  ;(stream as unknown as { headers?: Record<string, string> }).headers = {
+    'content-type': opts.contentType,
+  }
   return stream as unknown as IncomingMessage
 }
 function makeRes(): ServerResponse {
   let statusCode = 200
   let ended = false
   return {
-    get statusCode() { return statusCode },
-    set statusCode(v: number) { statusCode = v },
+    get statusCode() {
+      return statusCode
+    },
+    set statusCode(v: number) {
+      statusCode = v
+    },
     setHeader: () => undefined,
-    end: () => { ended = true },
-    get ended() { return ended },
+    end: () => {
+      ended = true
+    },
+    get ended() {
+      return ended
+    },
   } as unknown as ServerResponse
 }
 
@@ -57,8 +67,16 @@ describe('T5.1 — CSP report pipeline (end-to-end)', () => {
   it('reports+json with multiple entries forwards each', async () => {
     const audit = vi.fn()
     const body = JSON.stringify([
-      { type: 'csp-violation', url: 'https://x', body: { blockedURL: 'a', documentURL: 'b', violatedDirective: 'vd' } },
-      { type: 'csp-violation', url: 'https://x', body: { blockedURL: 'c', documentURL: 'd', violatedDirective: 've' } },
+      {
+        type: 'csp-violation',
+        url: 'https://x',
+        body: { blockedURL: 'a', documentURL: 'b', violatedDirective: 'vd' },
+      },
+      {
+        type: 'csp-violation',
+        url: 'https://x',
+        body: { blockedURL: 'c', documentURL: 'd', violatedDirective: 've' },
+      },
     ])
     const req = makeReq({ contentType: 'application/reports+json', body })
     const res = makeRes()
@@ -70,7 +88,11 @@ describe('T5.1 — CSP report pipeline (end-to-end)', () => {
     const audit = vi.fn()
     const body = JSON.stringify([
       { type: 'csp-violation', url: 'https://x' /* no body */ },
-      { type: 'csp-violation', url: 'https://y', body: { blockedURL: 'a', documentURL: 'b', violatedDirective: 'vd' } },
+      {
+        type: 'csp-violation',
+        url: 'https://y',
+        body: { blockedURL: 'a', documentURL: 'b', violatedDirective: 'vd' },
+      },
     ])
     const req = makeReq({ contentType: 'application/reports+json', body })
     const res = makeRes()

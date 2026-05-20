@@ -1,5 +1,6 @@
-import type { ViteDevServer } from 'vite'
 import { pathToFileURL } from 'node:url'
+
+import type { ViteDevServer } from 'vite'
 
 export type LoadModule = (path: string) => Promise<Record<string, unknown>>
 

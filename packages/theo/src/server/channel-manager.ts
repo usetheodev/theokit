@@ -5,11 +5,19 @@ export class ChannelManager {
   private wsRooms = new Map<WebSocketLike, Set<string>>()
 
   subscribe(ws: WebSocketLike, room: string): void {
-    if (!this.rooms.has(room)) this.rooms.set(room, new Set())
-    this.rooms.get(room)!.add(ws)
+    let roomSet = this.rooms.get(room)
+    if (!roomSet) {
+      roomSet = new Set()
+      this.rooms.set(room, roomSet)
+    }
+    roomSet.add(ws)
 
-    if (!this.wsRooms.has(ws)) this.wsRooms.set(ws, new Set())
-    this.wsRooms.get(ws)!.add(room)
+    let wsSet = this.wsRooms.get(ws)
+    if (!wsSet) {
+      wsSet = new Set()
+      this.wsRooms.set(ws, wsSet)
+    }
+    wsSet.add(room)
   }
 
   unsubscribe(ws: WebSocketLike, room: string): void {

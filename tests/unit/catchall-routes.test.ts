@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { compilePattern, matchRoute, type ServerRouteNode } from '../../packages/theo/src/server/match.js'
+import {
+  compilePattern,
+  matchRoute,
+  type ServerRouteNode,
+} from '../../packages/theo/src/server/match.js'
 import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
 
 describe('compilePattern catch-all', () => {

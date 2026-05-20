@@ -1,8 +1,13 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Bun deploy adapter. Writes to `cwd/.theo/bun/`. Build-time.
+ */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+
 import { nodeAdapter } from './node.js'
+import type { DeployAdapter } from './types.js'
 
 export interface BunBuildDeps {
   runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
@@ -125,10 +130,15 @@ export async function buildBun(
   const ensureDir = deps.ensureDir ?? ((p: string) => mkdirSync(p, { recursive: true }))
   ensureDir(outputDir)
 
-  const entry = renderBunEntry(config.port, { ssrStreaming: config.ssrStreaming === true })
-  const write = deps.writeEntry ?? ((p, c) => writeFileSync(p, c))
+  const entry = renderBunEntry(config.port, { ssrStreaming: config.ssrStreaming })
+  const write =
+    deps.writeEntry ??
+    ((p, c) => {
+      writeFileSync(p, c)
+    })
   write(resolve(outputDir, 'server.mjs'), entry)
 
+  // eslint-disable-next-line no-console -- CLI build progress
   console.log('\n  ✓ Bun output → .theo/bun/server.mjs\n')
 }
 

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { encrypt, decrypt } from './crypto.js'
+
 import { getCookie, setCookie, deleteCookie } from './cookies.js'
+import { encrypt, decrypt } from './crypto.js'
 
 export interface SessionConfig {
   /**
@@ -92,7 +93,7 @@ export function createSessionManager<TSession>(config: SessionConfig): SessionMa
     return encrypt(envelope, secrets[0]) // newest
   }
 
-  async function writeCookie(res: ServerResponse, token: string): Promise<void> {
+  function writeCookie(res: ServerResponse, token: string): void {
     setCookie(res, cookieName, token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -101,10 +102,24 @@ export function createSessionManager<TSession>(config: SessionConfig): SessionMa
     })
   }
 
-  async function decryptWithFallback(raw: string): Promise<{ envelope: SessionEnvelope<TSession>; index: number } | null> {
-    for (let i = 0; i < secrets.length; i++) {
-      const env = await decrypt<SessionEnvelope<TSession>>(raw, secrets[i])
-      if (env) return { envelope: env, index: i }
+  async function decryptWithFallback(
+    raw: string,
+  ): Promise<{ envelope: SessionEnvelope<TSession>; index: number } | null> {
+    // CR-002 constant-time: try EVERY rotation entry, then pick the newest
+    // match. Sequential early-exit leaked rotation position via timing
+    // (success on entry 0 returned in ~3 ms; success on entry 4 in ~15 ms).
+    // Running in parallel binds wall-clock to the slowest single attempt,
+    // independent of which entry actually matched. With derived-key cache
+    // (CR-002 in crypto.ts), the CPU multiplier per request is ~0 after
+    // the first request per secret.
+    const results = await Promise.all(
+      secrets.map(async (secret, i) => {
+        const env = await decrypt<SessionEnvelope<TSession>>(raw, secret)
+        return env ? { envelope: env, index: i } : null
+      }),
+    )
+    for (const result of results) {
+      if (result) return result
     }
     return null
   }
@@ -131,7 +146,7 @@ export function createSessionManager<TSession>(config: SessionConfig): SessionMa
 
     async createSession(res, data) {
       const token = await encryptEnvelope(data)
-      await writeCookie(res, token)
+      writeCookie(res, token)
     },
 
     destroySession(res) {
@@ -144,7 +159,7 @@ export function createSessionManager<TSession>(config: SessionConfig): SessionMa
       // Fresh IV per encrypt call (Web Crypto guarantee — see crypto.ts)
       // + refreshed expiry. Last write wins for the cookie value.
       const token = await encryptEnvelope(data)
-      await writeCookie(res, token)
+      writeCookie(res, token)
       return data
     },
   }

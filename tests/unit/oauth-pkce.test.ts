@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { generatePkceChallenge, pkceChallengeFromVerifier } from '../../packages/theo/src/server/oauth-pkce.js'
+import {
+  generatePkceChallenge,
+  pkceChallengeFromVerifier,
+} from '../../packages/theo/src/server/oauth-pkce.js'
 
 /**
  * T7.3 — RFC 7636 PKCE (Proof Key for Code Exchange).
@@ -64,8 +67,8 @@ describe('T7.3 — generatePkceChallenge', () => {
     // The TypeScript type for codeChallengeMethod is the literal 'S256'
     // (not a union with 'plain'). This compile-time guarantee complements
     // the runtime assertion.
-    const _typecheck: 'S256' = c.codeChallengeMethod
-    void _typecheck
+    const typecheck: 'S256' = c.codeChallengeMethod
+    expect(typecheck).toBe('S256')
   })
 
   /**

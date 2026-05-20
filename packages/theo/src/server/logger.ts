@@ -34,6 +34,7 @@ function shouldLog(msgLevel: string, configLevel: string): boolean {
 // --- Default output ---
 
 function defaultOutput(log: StructuredLog): void {
+  // eslint-disable-next-line no-console -- structured logger output IS the contract here
   console.log(JSON.stringify(log))
 }
 
@@ -68,10 +69,18 @@ export function createLogger(options?: {
   }
 
   return {
-    debug: (msg, ctx) => log('debug', msg, ctx),
-    info: (msg, ctx) => log('info', msg, ctx),
-    warn: (msg, ctx) => log('warn', msg, ctx),
-    error: (msg, ctx) => log('error', msg, ctx),
+    debug: (msg, ctx) => {
+      log('debug', msg, ctx)
+    },
+    info: (msg, ctx) => {
+      log('info', msg, ctx)
+    },
+    warn: (msg, ctx) => {
+      log('warn', msg, ctx)
+    },
+    error: (msg, ctx) => {
+      log('error', msg, ctx)
+    },
     child(ctx) {
       return createLogger({
         level,
@@ -85,11 +94,17 @@ export function createLogger(options?: {
 // --- warnOnce (T2.1) ---
 
 /**
- * Per-key dedup state. Module-scoped Set; reset per-process at boot.
- * For long-running prod with thousands of unique keys, document the
- * trade-off; future enhancement could be a TTL'd Map.
+ * Per-key dedup state. Module-scoped — reset per-process at boot.
+ *
+ * CR-011 fix: previous implementation used an unbounded `Set` which grew
+ * forever in long-running prod processes with high-cardinality keys
+ * (e.g. dynamic path segments). The bound below uses LRU-by-insertion:
+ * when the Set hits `MAX_SEEN`, the OLDEST key is evicted. Subsequent
+ * occurrences of that key will warn ONCE more — acceptable in exchange
+ * for bounded memory.
  */
 const _warnOnceSeen = new Set<string>()
+const MAX_SEEN = 1024
 
 /**
  * Reset internal state. Test-only export — do not call from production.
@@ -110,6 +125,11 @@ export function _resetWarnOnceForTests(): void {
  */
 export function warnOnce(key: string, payload: Record<string, unknown>): void {
   if (_warnOnceSeen.has(key)) return
+  // CR-011: bounded LRU. Evict oldest insertion when at capacity.
+  if (_warnOnceSeen.size >= MAX_SEEN) {
+    const oldest = _warnOnceSeen.values().next().value
+    if (oldest !== undefined) _warnOnceSeen.delete(oldest)
+  }
   _warnOnceSeen.add(key)
 
   let line: string
@@ -137,33 +157,48 @@ export function warnOnce(key: string, payload: Record<string, unknown>): void {
  *  - globalThis.__theoViteHotServer is undefined (prod / no dev server)
  *  - any error occurs (default-deny via broadcastToDevtools' try/catch)
  */
+function payloadField(payload: Record<string, unknown>, key: string, fallback = ''): string {
+  const value = payload[key]
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return fallback
+}
+
+function randomDevtoolsId(): string {
+  // eslint-disable-next-line sonarjs/pseudo-random -- non-secret correlation id for devtools UI
+  return `warn-${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 function broadcastWarnOnceToDevtools(key: string, payload: Record<string, unknown>): void {
-  try {
-    // Lazy require to avoid pulling devtools chunks into non-dev builds.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    void key
-    void import('../devtools/server-side/broadcast.js').then(({ broadcastCsrfWarn, broadcastError }) => {
-      if (payload.event === 'csrf.warn' && typeof payload.code === 'string' && typeof payload.docsUrl === 'string') {
+  // CR-021: removed dead `void key` statement.
+  // T2.1 forwarder. Errors here must not propagate (default-deny).
+  void import('../devtools/server-side/broadcast.js')
+    .then(({ broadcastCsrfWarn, broadcastError }) => {
+      if (
+        payload.event === 'csrf.warn' &&
+        typeof payload.code === 'string' &&
+        typeof payload.docsUrl === 'string'
+      ) {
         broadcastCsrfWarn({
           event: 'csrf.warn',
           code: payload.code,
           docsUrl: payload.docsUrl,
-          method: String(payload.method ?? ''),
-          path: String(payload.path ?? ''),
-          reason: String(payload.reason ?? ''),
+          method: payloadField(payload, 'method'),
+          path: payloadField(payload, 'path'),
+          reason: payloadField(payload, 'reason'),
         })
       } else {
         broadcastError({
-          id: `warn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          id: randomDevtoolsId(),
           type: 'console',
-          message: String(payload.event ?? key),
+          message: payloadField(payload, 'event', key),
           timestamp: Date.now(),
         })
       }
-    }).catch(() => {})
-  } catch {
-    /* default-deny */
-  }
+    })
+    .catch(() => {
+      // No-op: devtools forwarding is best-effort.
+    })
 }
 
 // --- Backward compat ---
@@ -181,6 +216,7 @@ export interface RequestLog {
 export type LoggerFn = (log: RequestLog) => void
 
 const defaultLoggerFn: LoggerFn = (log) => {
+  // eslint-disable-next-line no-console -- request-log default output IS the contract
   console.log(JSON.stringify(log))
 }
 
@@ -204,11 +240,17 @@ export function logRequest(
  * logger.ts dep-free for prod; broadcast.ts internally guards on
  * globalThis.__theoViteHotServer.
  */
+function randomRequestId(): string {
+  // eslint-disable-next-line sonarjs/pseudo-random -- non-secret correlation id for devtools UI
+  return `req-${String(Date.now())}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 function broadcastRequestToDevtools(info: Omit<RequestLog, 'level' | 'timestamp'>): void {
-  try {
-    void import('../devtools/server-side/broadcast.js').then(({ broadcastRequest }) => {
+  // T2.1 forwarder. Errors here must not propagate.
+  void import('../devtools/server-side/broadcast.js')
+    .then(({ broadcastRequest }) => {
       broadcastRequest({
-        id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: randomRequestId(),
         traceId: info.requestId,
         method: info.method,
         path: info.url,
@@ -216,8 +258,8 @@ function broadcastRequestToDevtools(info: Omit<RequestLog, 'level' | 'timestamp'
         durationMs: info.duration,
         startedAt: Date.now() - info.duration,
       })
-    }).catch(() => {})
-  } catch {
-    /* default-deny */
-  }
+    })
+    .catch(() => {
+      // No-op: devtools forwarding is best-effort.
+    })
 }

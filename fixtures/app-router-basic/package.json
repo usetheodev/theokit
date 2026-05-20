@@ -1,1 +1,5 @@
-{ "name": "app-router-basic", "private": true, "type": "module" }
+{
+  "name": "app-router-basic",
+  "private": true,
+  "type": "module"
+}

@@ -198,6 +198,8 @@ describe('Phase 4 — backward compatibility', () => {
 
   it('Layouts still wrap with children: <Outlet /> (regression — black page fix from 2026-05-18)', () => {
     const out = generateRouteManifest(singlePageTree())
-    expect(out).toMatch(/createElement\(\s*\w*Layout\w*\s*,\s*\{\s*children:\s*React\.createElement\(Outlet\)\s*\}\s*\)/)
+    expect(out).toMatch(
+      /createElement\(\s*\w*Layout\w*\s*,\s*\{\s*children:\s*React\.createElement\(Outlet\)\s*\}\s*\)/,
+    )
   })
 })

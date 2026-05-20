@@ -5,13 +5,61 @@ describe('createWebShim — request side', () => {
   it('exposes method, pathname, and headers', () => {
     const request = new Request('https://example.com/api/users?q=alice', {
       method: 'GET',
-      headers: { 'x-forwarded-for': '1.2.3.4', accept: 'application/json' },
+      headers: { 'cf-connecting-ip': '1.2.3.4', accept: 'application/json' },
     })
     const { req } = createWebShim(request)
     expect(req.method).toBe('GET')
     expect(req.url).toBe('/api/users?q=alice')
     expect(req.headers.accept).toBe('application/json')
+    // Platform-injected headers (cf-connecting-ip) are trusted by default.
     expect(req.socket.remoteAddress).toBe('1.2.3.4')
+  })
+
+  it('CR-018 — default policy IGNORES x-forwarded-for (client-spoofable)', () => {
+    // Client can set x-forwarded-for to anything; the default policy
+    // (`platform`) must not honor it, so an attacker cannot bypass
+    // IP-based rate limits.
+    const request = new Request('https://example.com/api', {
+      method: 'GET',
+      headers: { 'x-forwarded-for': '1.2.3.4' },
+    })
+    const { req } = createWebShim(request)
+    expect(req.socket.remoteAddress).toBe('0.0.0.0')
+  })
+
+  it('CR-018 — trusted-proxy policy reads the RIGHTMOST x-forwarded-for entry', () => {
+    // Rightmost entry is what a trusted proxy appended; entries to the
+    // left may have been forged by the client.
+    const request = new Request('https://example.com/api', {
+      method: 'GET',
+      headers: { 'x-forwarded-for': '198.51.100.1, 203.0.113.5, 192.0.2.7' },
+    })
+    const { req } = createWebShim(request, { trustedProxy: 'trusted-proxy' })
+    expect(req.socket.remoteAddress).toBe('192.0.2.7')
+  })
+
+  it('CR-018 — trusted-proxy policy still prefers cf-connecting-ip when present', () => {
+    const request = new Request('https://example.com/api', {
+      method: 'GET',
+      headers: {
+        'cf-connecting-ip': '8.8.8.8',
+        'x-forwarded-for': '1.2.3.4, 5.6.7.8',
+      },
+    })
+    const { req } = createWebShim(request, { trustedProxy: 'trusted-proxy' })
+    expect(req.socket.remoteAddress).toBe('8.8.8.8')
+  })
+
+  it('CR-018 — "none" policy always reports 0.0.0.0', () => {
+    const request = new Request('https://example.com/api', {
+      method: 'GET',
+      headers: {
+        'cf-connecting-ip': '8.8.8.8',
+        'x-forwarded-for': '1.2.3.4',
+      },
+    })
+    const { req } = createWebShim(request, { trustedProxy: 'none' })
+    expect(req.socket.remoteAddress).toBe('0.0.0.0')
   })
 
   it('emits data + end events when a listener attaches', async () => {

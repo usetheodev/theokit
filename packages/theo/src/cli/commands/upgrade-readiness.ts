@@ -1,3 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI lint scanner. Reads user source files under `projectRoot` (CLI
+ * argument resolved to absolute). Read-only; never writes. No HTTP input.
+ */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { resolve, relative, sep } from 'node:path'
 
@@ -98,8 +102,7 @@ function isLikelyCommentOrString(rawLine: string, matchIndex: number): boolean {
   const before = rawLine.slice(0, matchIndex)
   const doubleQuotes = (before.match(/(?<!\\)"/g) ?? []).length
   const singleQuotes = (before.match(/(?<!\\)'/g) ?? []).length
-  if (doubleQuotes % 2 === 1 || singleQuotes % 2 === 1) return true
-  return false
+  return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1
 }
 
 // `fetch(` followed (within ~200 chars, same call site) by a method:
@@ -150,7 +153,8 @@ function scanSourceFile(file: string, rel: string, content: string, out: Violati
       file: rel,
       line: i + 1,
       rule: 'dangerously-set-inline-script',
-      message: 'dangerouslySetInnerHTML payload contains <script> — blocked under 0.3.0 enforce CSP',
+      message:
+        'dangerouslySetInnerHTML payload contains <script> — blocked under 0.3.0 enforce CSP',
       fix: 'Move the script into a real module loaded via <script src="...">, or thread ctx.nonce',
     })
   }
@@ -169,12 +173,14 @@ function scanHtmlFile(file: string, rel: string, content: string, out: Violation
       file: rel,
       line,
       rule: 'inline-script',
-      message: 'Inline <script> without src — blocked under 0.3.0 enforce CSP without unsafe-inline',
+      message:
+        'Inline <script> without src — blocked under 0.3.0 enforce CSP without unsafe-inline',
       fix: "Move into a real script file (e.g. /main.js) and load with <script src='/main.js'>, or thread ctx.nonce",
     })
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- async surface for future fs.promises migration
 export async function scanUpgradeReadiness(options: ScanOptions): Promise<UpgradeReadinessReport> {
   const cwd = options.cwd
   const allowWarnings = options.allowWarnings === true

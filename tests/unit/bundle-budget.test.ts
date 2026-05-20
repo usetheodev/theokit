@@ -27,6 +27,7 @@ const BUDGET_BYTES = 350 * 1024
 describe('Bundle budget — template-default <= 350 KB gzipped', () => {
   beforeAll(() => {
     // Fresh production build to ensure measurement reflects current code.
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local test running the project's own build CLI
     execSync('pnpm exec theokit build', { cwd: FIXTURE, stdio: 'pipe' })
   }, 180_000)
 
@@ -47,7 +48,9 @@ describe('Bundle budget — template-default <= 350 KB gzipped', () => {
     const raw = readFileSync(join(assets, bundlePath))
     const gzipped = gzipSync(raw, { level: 9 })
 
-    console.log(`[bundle-budget] ${bundlePath}  raw=${raw.length}B  gzip=${gzipped.length}B  budget=${BUDGET_BYTES}B`)
+    console.log(
+      `[bundle-budget] ${bundlePath}  raw=${raw.length}B  gzip=${gzipped.length}B  budget=${BUDGET_BYTES}B`,
+    )
     expect(gzipped.length).toBeLessThanOrEqual(BUDGET_BYTES)
   })
 
@@ -68,7 +71,9 @@ describe('Bundle budget — template-default <= 350 KB gzipped', () => {
     const bundleText = jsFiles.map((f) => readFileSync(join(assets, f), 'utf8')).join('\n')
 
     for (const name of SERVER_ONLY_NAMES) {
-      expect(bundleText, `Server-only symbol "${name}" leaked into client bundle`).not.toContain(name)
+      expect(bundleText, `Server-only symbol "${name}" leaked into client bundle`).not.toContain(
+        name,
+      )
     }
   })
 })

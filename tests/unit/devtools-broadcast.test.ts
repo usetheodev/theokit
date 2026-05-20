@@ -18,7 +18,10 @@ import {
   broadcastToDevtools,
 } from '../../packages/theo/src/devtools/server-side/broadcast.js'
 
-type CapturedSend = { event: string; data: unknown }
+interface CapturedSend {
+  event: string
+  data: unknown
+}
 
 function installFakeServer(): {
   sends: CapturedSend[]

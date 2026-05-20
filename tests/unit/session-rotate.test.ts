@@ -20,7 +20,9 @@ function createMockRes(): ServerResponse {
   const headers: Record<string, string | string[]> = {}
   return {
     getHeader: (name: string) => headers[name.toLowerCase()],
-    setHeader: (name: string, value: string | string[]) => { headers[name.toLowerCase()] = value },
+    setHeader: (name: string, value: string | string[]) => {
+      headers[name.toLowerCase()] = value
+    },
   } as unknown as ServerResponse
 }
 

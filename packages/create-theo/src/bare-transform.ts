@@ -1,3 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Scaffold transform. Mutates files inside the freshly-created target
+ * directory whose absolute path is the function input. No HTTP input.
+ */
 /**
  * T4.1 — `--bare` transformation.
  *
@@ -23,10 +27,7 @@ export interface BareTransformOptions {
   _testForceError?: string
 }
 
-export function applyBareTransform(
-  targetDir: string,
-  options: BareTransformOptions = {},
-): void {
+export function applyBareTransform(targetDir: string, options: BareTransformOptions = {}): void {
   if (options._testForceError) {
     throw new Error(`Forced transform failure: ${options._testForceError}`)
   }
@@ -34,11 +35,15 @@ export function applyBareTransform(
   // 1. Remove @usetheo/ui from package.json deps
   const pkgPath = join(targetDir, 'package.json')
   if (existsSync(pkgPath)) {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    interface PartialPackageJson {
+      dependencies?: Record<string, string>
+      [key: string]: unknown
+    }
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as PartialPackageJson
     if (pkg.dependencies && '@usetheo/ui' in pkg.dependencies) {
       delete pkg.dependencies['@usetheo/ui']
     }
-    writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
   }
 
   // 2. Replace app/page.tsx with Hello Theo

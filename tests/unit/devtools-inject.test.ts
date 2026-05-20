@@ -4,7 +4,10 @@
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
 import { describe, expect, it } from 'vitest'
-import { injectDevtoolsScript, DEVTOOLS_VIRTUAL_ID } from '../../packages/theo/src/vite-plugin/inject-devtools.js'
+import {
+  injectDevtoolsScript,
+  DEVTOOLS_VIRTUAL_ID,
+} from '../../packages/theo/src/vite-plugin/inject-devtools.js'
 
 const HTML_WITH_HEAD = `<!doctype html>
 <html>

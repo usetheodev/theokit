@@ -41,7 +41,9 @@ export function SettingsTab() {
               name="theo-devtools-position"
               value={p}
               checked={state.position === p}
-              onChange={() => dispatch({ type: 'SET_POSITION', position: p })}
+              onChange={() => {
+                dispatch({ type: 'SET_POSITION', position: p })
+              }}
             />
             <span>{p}</span>
           </label>
@@ -57,7 +59,9 @@ export function SettingsTab() {
               name="theo-devtools-theme"
               value={t}
               checked={state.theme === t}
-              onChange={() => dispatch({ type: 'SET_THEME', theme: t })}
+              onChange={() => {
+                dispatch({ type: 'SET_THEME', theme: t })
+              }}
             />
             <span>{t}</span>
           </label>

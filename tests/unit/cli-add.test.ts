@@ -105,7 +105,7 @@ describe('runAdd', () => {
       cwd: '/cwd',
       existsSync: (p: string) => p.endsWith('pnpm-lock.yaml'),
       spawnPm: async (cmd, args, opts) => {
-        spawnCall = { cmd, args, useShell: opts.shell === true }
+        spawnCall = { cmd, args, useShell: opts.shell }
         return { ok: true, code: 0 }
       },
       registry: {
@@ -126,9 +126,9 @@ describe('runAdd', () => {
         existsSync: () => false,
         spawnPm: async () => ({ ok: false, code: 1 }),
         registry: {
-        ...KNOWN_PACKAGES,
-        bun: { kind: 'external', npm: 'theokit-adapter-bun', usage: 'theokit add bun' },
-      },
+          ...KNOWN_PACKAGES,
+          bun: { kind: 'external', npm: 'theokit-adapter-bun', usage: 'theokit add bun' },
+        },
       }),
     ).rejects.toThrow(/exit code 1/)
   })
@@ -163,9 +163,9 @@ describe('runAdd', () => {
           return { ok: true, code: 0 }
         },
         registry: {
-        ...KNOWN_PACKAGES,
-        bun: { kind: 'external', npm: 'theokit-adapter-bun', usage: 'theokit add bun' },
-      },
+          ...KNOWN_PACKAGES,
+          bun: { kind: 'external', npm: 'theokit-adapter-bun', usage: 'theokit add bun' },
+        },
       }),
     ).rejects.toThrow(InvalidPackageNameError)
     expect(spawned).toBe(false)

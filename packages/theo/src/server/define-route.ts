@@ -39,6 +39,8 @@ export function defineRoute<
   TParams extends z.ZodType = z.ZodUndefined,
   TCtx = unknown,
   TResponse = unknown,
->(config: RouteConfig<TQuery, TBody, TParams, TCtx, TResponse>): RouteConfig<TQuery, TBody, TParams, TCtx, TResponse> {
+>(
+  config: RouteConfig<TQuery, TBody, TParams, TCtx, TResponse>,
+): RouteConfig<TQuery, TBody, TParams, TCtx, TResponse> {
   return config
 }

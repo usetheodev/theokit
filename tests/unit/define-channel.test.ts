@@ -60,9 +60,10 @@ describe('defineChannel', () => {
     }
 
     const handler = defineChannel<ChatMessage>({
-      onMessage: (_ws, _room, data) => {
-        // Type inference: data should be ChatMessage
-        void data
+      onMessage: (_ws, _room, data: ChatMessage) => {
+        // Type inference: `data` is ChatMessage at the call site (verified
+        // by the parameter annotation above; runtime body is a no-op).
+        expect(typeof data.text).toBe('string')
       },
     })
 

@@ -1,5 +1,6 @@
-import type { IncomingMessage } from 'node:http'
 import { createHash } from 'node:crypto'
+import type { IncomingMessage } from 'node:http'
+
 import { InMemoryStore, type RateLimitStore } from './rate-limit-store.js'
 import type { RateLimitConfig, RateLimitResult } from './rate-limit.js'
 
@@ -23,7 +24,7 @@ export interface RouteRateLimitConfig {
   /** Map of path pattern → config. Exact-string keys (RegExp via API). */
   routes?: Record<string, RateLimitConfig>
   /** Same as `routes` but each entry is a [pattern, config] tuple, RegExp allowed. */
-  routePatterns?: ReadonlyArray<[string | RegExp, RateLimitConfig]>
+  routePatterns?: readonly [string | RegExp, RateLimitConfig][]
   /** Bucket identifier strategy. Default 'ip'. */
   keyBy?: KeyByMode
   /** Cookie name used by keyBy='session'. Defaults to 'theo_session'. */
@@ -91,6 +92,10 @@ function readCookie(req: IncomingMessage, name: string): string | undefined {
  */
 export function deriveKey(req: IncomingMessage, keyBy: KeyByMode, cookieName: string): string {
   if (typeof keyBy === 'function') return keyBy(req)
+  // `req.socket` is typed as always-present in Node typings, but in test
+  // doubles (object literals without `socket`) it can be missing — the
+  // optional chain keeps the fallback path reachable.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- defensive for test doubles
   const ip = req.socket?.remoteAddress ?? 'unknown'
   switch (keyBy) {
     case 'session': {
@@ -114,21 +119,29 @@ export function deriveKey(req: IncomingMessage, keyBy: KeyByMode, cookieName: st
  * Backwards-compatibility (ADR D2): a flat `{ windowMs, max }` config is
  * accepted and treated as `default` (no per-route variants).
  */
-export function createRouteRateLimiter(
-  config: RouteRateLimitConfig | RateLimitConfig,
-) {
+export function createRouteRateLimiter(config: RouteRateLimitConfig | RateLimitConfig) {
   // Detect legacy flat shape
-  const isFlat = 'windowMs' in config && 'max' in config && !('default' in config) && !('routes' in config)
-  const cfg: RouteRateLimitConfig = isFlat
-    ? { default: config as RateLimitConfig }
-    : (config as RouteRateLimitConfig)
+  const isFlat =
+    'windowMs' in config && 'max' in config && !('default' in config) && !('routes' in config)
+  const cfg: RouteRateLimitConfig = isFlat ? { default: config } : config
 
   const store = cfg.store ?? new InMemoryStore()
+  // CR-005: validate store shape ONCE at construction. The previous
+  // implementation ran `instanceof InMemoryStore` on every request and
+  // threw at request-time if a non-InMemoryStore was passed — which
+  // turned a clear config error into a runtime 500 on the first request.
+  if (!(store instanceof InMemoryStore)) {
+    throw new Error(
+      'createRouteRateLimiter: async RateLimitStore implementations require a dedicated async middleware path. ' +
+        'Use the InMemoryStore default for the sync façade.',
+    )
+  }
+  const inMemoryStore = store
   const keyBy = cfg.keyBy ?? 'ip'
   const cookieName = cfg.cookieName ?? 'theo_session'
 
   // Build a pre-compiled list of (pattern, config) tuples for matching.
-  const patternList: Array<[string | RegExp, RateLimitConfig]> = []
+  const patternList: [string | RegExp, RateLimitConfig][] = []
   if (cfg.routes) {
     for (const [pattern, c] of Object.entries(cfg.routes)) patternList.push([pattern, c])
   }
@@ -151,18 +164,11 @@ export function createRouteRateLimiter(
       return { limited: false, headers: {} }
     }
 
-    if (!(store instanceof InMemoryStore)) {
-      throw new Error(
-        'createRouteRateLimiter: async RateLimitStore implementations require a dedicated async middleware path. ' +
-          'Use the InMemoryStore default for the sync façade.',
-      )
-    }
-
     // Bucket key includes normalized path so /api/login and /api/login/
     // collapse to the same bucket (EC-5).
     const bucketSuffix = typeof matched === 'undefined' ? '*default*' : normalizePath(url)
     const key = `${deriveKey(req, keyBy, cookieName)}|${bucketSuffix}`
-    const state = (store as InMemoryStore).incrSync(key, effective.windowMs)
+    const state = inMemoryStore.incrSync(key, effective.windowMs)
 
     if (state.count > effective.max) {
       const retryAfter = Math.ceil((state.resetAt - Date.now()) / 1000)

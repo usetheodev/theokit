@@ -32,7 +32,9 @@ const REDACTED_QUERY_KEYS = new Set([
 const REDACTED_VALUE = '[REDACTED]'
 const REDACTED_QUERY_VALUE = '%5BREDACTED%5D' // URL-encoded form
 
-export function redactHeaders(h: Record<string, string | string[] | undefined>): Record<string, string> {
+export function redactHeaders(
+  h: Record<string, string | string[] | undefined>,
+): Record<string, string> {
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(h)) {
     if (v === undefined) continue
@@ -101,17 +103,19 @@ export function redactQueryString(path: string): string {
  *    will likely silently drop them via JSON.stringify default behavior).
  *  - Cycles → would loop forever; defensive seen-set caps recursion.
  */
-export function serializeSafely(value: unknown, seen: WeakSet<object> = new WeakSet()): unknown {
+export function serializeSafely(value: unknown, seen = new WeakSet()): unknown {
   if (typeof value === 'bigint') return `${value.toString()}n`
   if (value === null || value === undefined) return value
   if (typeof value !== 'object') return value
-  if (seen.has(value as object)) return '[Circular]'
-  seen.add(value as object)
+  if (seen.has(value)) return '[Circular]'
+  seen.add(value)
   if (Array.isArray(value)) {
     return value.map((v) => serializeSafely(v, seen))
   }
-  // Treat plain objects only — class instances pass through unchanged
-  const proto = Object.getPrototypeOf(value)
+  // Treat plain objects only — class instances pass through unchanged.
+  // `getPrototypeOf` returns `unknown` under strict typing; we only need
+  // the identity check against `Object.prototype`.
+  const proto: unknown = Object.getPrototypeOf(value)
   if (proto !== null && proto !== Object.prototype) return value
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {

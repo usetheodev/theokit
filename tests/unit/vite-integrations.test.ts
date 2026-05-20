@@ -37,16 +37,16 @@ describe('IntegrationRegistry — virtual modules (EC-6)', () => {
 
   it('rejects a virtual module ID without the integration prefix (EC-6)', () => {
     const reg = createIntegrationRegistry({ existingRoutes: [] })
-    expect(() =>
-      reg.addVirtualModule('foo', '/@theo/manifest', 'whatever'),
-    ).toThrow(IntegrationVirtualModulePrefixError)
+    expect(() => reg.addVirtualModule('foo', '/@theo/manifest', 'whatever')).toThrow(
+      IntegrationVirtualModulePrefixError,
+    )
   })
 
   it('rejects a virtual module ID with the wrong integration name (EC-6)', () => {
     const reg = createIntegrationRegistry({ existingRoutes: [] })
-    expect(() =>
-      reg.addVirtualModule('foo', 'virtual:integration:bar/x', 'wat'),
-    ).toThrow(IntegrationVirtualModulePrefixError)
+    expect(() => reg.addVirtualModule('foo', 'virtual:integration:bar/x', 'wat')).toThrow(
+      IntegrationVirtualModulePrefixError,
+    )
   })
 
   it('lists registered virtual modules', () => {
@@ -71,17 +71,17 @@ describe('IntegrationRegistry — route collisions (EC-5)', () => {
     const reg = createIntegrationRegistry({
       existingRoutes: ['/api/users', '/metrics'],
     })
-    expect(() =>
-      reg.addRoute('observability', '/metrics', async () => new Response('ok')),
-    ).toThrow(IntegrationRouteCollisionError)
+    expect(() => reg.addRoute('observability', '/metrics', async () => new Response('ok'))).toThrow(
+      IntegrationRouteCollisionError,
+    )
   })
 
   it('rejects a route that conflicts with another integration', () => {
     const reg = createIntegrationRegistry({ existingRoutes: [] })
     reg.addRoute('a', '/metrics', async () => new Response('a'))
-    expect(() =>
-      reg.addRoute('b', '/metrics', async () => new Response('b')),
-    ).toThrow(IntegrationRouteCollisionError)
+    expect(() => reg.addRoute('b', '/metrics', async () => new Response('b'))).toThrow(
+      IntegrationRouteCollisionError,
+    )
   })
 })
 
@@ -115,8 +115,7 @@ describe('IntegrationRegistry — hook firing order', () => {
 
   it('does not crash when no integrations declare a hook', async () => {
     const reg = createIntegrationRegistry({ existingRoutes: [] })
-    await reg.fire('theo:build:done', {})
-    // No assertion — just must not throw
+    await expect(reg.fire('theo:build:done', {})).resolves.toBeUndefined()
   })
 
   it('propagates hook errors with the offending integration name', async () => {

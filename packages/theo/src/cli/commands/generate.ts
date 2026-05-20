@@ -1,3 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI `theo generate`. Writes scaffolded files under `cwd` + a generator
+ * name from CLI args. Build-time tool. No HTTP input.
+ */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 
@@ -11,7 +15,7 @@ function toKebabCase(name: string): boolean {
 function toPascalCase(name: string): string {
   return name
     .split(/[-/]/)
-    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join('')
 }
 
@@ -52,15 +56,12 @@ function generateActionTemplate(name: string): string {
 
 function generatePageTemplate(name: string): string {
   const pascal = toPascalCase(name)
-  return [
-    `export default function ${pascal}Page() {`,
-    `  return <h1>${pascal}</h1>`,
-    `}`,
-    ``,
-  ].join('\n')
+  return [`export default function ${pascal}Page() {`, `  return <h1>${pascal}</h1>`, `}`, ``].join(
+    '\n',
+  )
 }
 
-function generateWsTemplate(name: string): string {
+function generateWsTemplate(_name: string): string {
   return [
     `import { defineWebSocket } from 'theokit/server'`,
     ``,
@@ -73,6 +74,7 @@ function generateWsTemplate(name: string): string {
   ].join('\n')
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- CLI surface contract; sync today is implementation detail
 export async function generateCommand(type: string, name: string): Promise<void> {
   const cwd = process.cwd()
 

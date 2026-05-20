@@ -18,6 +18,7 @@ function installFakeHot(): { handlers: HotHandlers; restore: () => void } {
       handlers[event] = cb
     },
     off(event: string, _cb: (data: unknown) => void) {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- handlers is a fixture map keyed by event name; deletion is the test's whole job
       delete handlers[event]
     },
   }

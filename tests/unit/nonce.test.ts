@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { generateNonce } from '../../packages/theo/src/server/nonce.js'
 
 /**
@@ -47,5 +47,22 @@ describe('generateNonce — runtime portability', () => {
     expect(typeof globalThis.crypto?.getRandomValues).toBe('function')
     const nonce = generateNonce()
     expect(nonce).toMatch(/^[A-Za-z0-9+/=]{22,24}$/)
+  })
+
+  // Coverage for the btoa fallback path (lines 27-34 in nonce.ts):
+  // edge runtimes without a global Buffer hit this branch. We swap Buffer
+  // out only around the call we want to inspect — replacing it for too
+  // long breaks Node internals that vitest depends on.
+  it('Given Buffer is unavailable, Then generator uses btoa fallback', () => {
+    const originalBuffer = (globalThis as { Buffer?: typeof Buffer }).Buffer
+    Object.defineProperty(globalThis, 'Buffer', { value: undefined, configurable: true })
+    let nonce: string
+    try {
+      nonce = generateNonce()
+    } finally {
+      Object.defineProperty(globalThis, 'Buffer', { value: originalBuffer, configurable: true })
+    }
+    expect(nonce).toMatch(/^[A-Za-z0-9+/=]{22,24}$/)
+    expect(Buffer.from(nonce, 'base64').byteLength).toBe(16)
   })
 })

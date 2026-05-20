@@ -1,8 +1,4 @@
-import {
-  assertProductionSecret,
-  createSessionManager,
-  type SessionManager,
-} from 'theokit/server'
+import { assertProductionSecret, createSessionManager, type SessionManager } from 'theokit/server'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { db } from '../db/index.js'
 

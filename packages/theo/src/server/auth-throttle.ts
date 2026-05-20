@@ -47,7 +47,6 @@ export interface ThrottleState {
 }
 
 const DEFAULT_MAX_ATTEMPTS = 5
-const DEFAULT_WINDOW_MS = 15 * 60_000
 const DEFAULT_LOCKOUT_MS = 60 * 60_000
 
 /**
@@ -84,7 +83,10 @@ export async function checkThrottle(opts: ThrottleOptions): Promise<ThrottleStat
  * in tests or for soft lockouts — the entry auto-expires and the next
  * attempt starts fresh.
  */
-export async function recordAttempt(opts: ThrottleOptions, success: boolean): Promise<ThrottleState> {
+export async function recordAttempt(
+  opts: ThrottleOptions,
+  success: boolean,
+): Promise<ThrottleState> {
   const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
   if (success) {
     await opts.store.reset(opts.identifier)

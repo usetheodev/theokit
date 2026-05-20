@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { discoverOidcProvider, clearOidcCache } from '../../packages/theo/src/server/oidc-discovery.js'
+import {
+  discoverOidcProvider,
+  clearOidcCache,
+} from '../../packages/theo/src/server/oidc-discovery.js'
 
 /**
  * T7.4 — OIDC Discovery 1.0 fetcher.
@@ -15,7 +18,6 @@ const mockMetadata = {
 }
 
 describe('T7.4 — discoverOidcProvider', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let fetchSpy: any
 
   beforeEach(() => {
@@ -37,7 +39,9 @@ describe('T7.4 — discoverOidcProvider', () => {
     const m = await discoverOidcProvider('https://provider.example')
     expect(m.authorization_endpoint).toBe('https://provider.example/authorize')
     expect(fetchSpy).toHaveBeenCalledTimes(1)
-    expect((fetchSpy.mock.calls[0][0] as string | URL).toString()).toContain('.well-known/openid-configuration')
+    expect((fetchSpy.mock.calls[0][0] as string | URL).toString()).toContain(
+      '.well-known/openid-configuration',
+    )
   })
 
   it('caches the result — second call does not refetch', async () => {

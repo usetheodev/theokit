@@ -26,10 +26,7 @@ function makeProject(opts: { devtoolsConfig?: string }): string {
   <body><div id="root"></div></body>
 </html>`,
   )
-  writeFileSync(
-    join(root, 'theo.config.ts'),
-    `export default ${opts.devtoolsConfig ?? '{}'}`,
-  )
+  writeFileSync(join(root, 'theo.config.ts'), `export default ${opts.devtoolsConfig ?? '{}'}`)
   writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'tmp', type: 'module' }))
   mkdirSync(join(root, 'app'), { recursive: true })
   writeFileSync(

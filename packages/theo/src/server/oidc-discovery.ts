@@ -60,7 +60,10 @@ export async function discoverOidcProvider(issuer: string | URL): Promise<OidcMe
   if (cached) return cached
 
   const promise = (async () => {
-    const wellKnown = new URL('.well-known/openid-configuration', issuerStr.endsWith('/') ? issuerStr : issuerStr + '/')
+    const wellKnown = new URL(
+      '.well-known/openid-configuration',
+      issuerStr.endsWith('/') ? issuerStr : issuerStr + '/',
+    )
     const res = await fetch(wellKnown)
     if (!res.ok) {
       throw new Error(`OIDC discovery failed: ${res.status} ${res.statusText} at ${wellKnown}`)

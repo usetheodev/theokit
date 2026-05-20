@@ -36,10 +36,15 @@ export async function createPluginRunnerFromConfig(
   if (plugins.length === 0) return undefined
 
   const runner = new PluginRunner()
-  for (let i = 0; i < plugins.length; i++) {
-    const candidate = plugins[i]
-    isPlugin(candidate, i) // throws if invalid
-    await runner.register(candidate as TheoPlugin)
+  const pluginsArray: unknown[] = plugins
+  for (let i = 0; i < pluginsArray.length; i++) {
+    const candidate: unknown = pluginsArray[i]
+    if (!isPlugin(candidate, i)) {
+      // Unreachable in practice — `isPlugin` throws on invalid input.
+      // The branch exists to narrow `candidate` to TheoPlugin below.
+      continue
+    }
+    await runner.register(candidate)
   }
   return runner
 }

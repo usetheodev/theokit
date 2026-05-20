@@ -9,10 +9,7 @@ describe('Onda 5 — Middleware + Context', () => {
   let port: number
 
   beforeAll(async () => {
-    server = await startDevServer(
-      path.join(FIXTURES, 'middleware-context'),
-      { port: 0 },
-    )
+    server = await startDevServer(path.join(FIXTURES, 'middleware-context'), { port: 0 })
     const address = server.httpServer!.address()
     port = typeof address === 'object' && address ? address.port : 0
   }, 15000)

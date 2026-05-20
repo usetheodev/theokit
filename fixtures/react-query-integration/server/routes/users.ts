@@ -15,8 +15,6 @@ export const GET = defineRoute({
   query: z.object({ search: z.string().optional() }),
   handler: ({ query }): User[] => {
     if (!query.search) return db
-    return db.filter((u) =>
-      u.name.toLowerCase().includes(query.search!.toLowerCase()),
-    )
+    return db.filter((u) => u.name.toLowerCase().includes(query.search!.toLowerCase()))
   },
 })

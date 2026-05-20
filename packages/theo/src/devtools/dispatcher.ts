@@ -27,7 +27,9 @@ type QueuedItem = (d: Dispatch) => void
 let _dispatch: Dispatch | null = null
 const _queue: QueuedItem[] = []
 
-function queuable<Args extends unknown[]>(fn: (d: Dispatch, ...args: Args) => void): (...args: Args) => void {
+function queuable<Args extends unknown[]>(
+  fn: (d: Dispatch, ...args: Args) => void,
+): (...args: Args) => void {
   return (...args: Args) => {
     if (_dispatch) {
       try {
@@ -36,13 +38,15 @@ function queuable<Args extends unknown[]>(fn: (d: Dispatch, ...args: Args) => vo
         // EC-25: an error inside reducer-bound dispatch path MUST NOT bubble
         // to the original event source (e.g. logger / HMR callback / global
         // error handler). Log and continue.
-        // eslint-disable-next-line no-console
+
         console.error('[theo devtools] dispatch failed', err)
       }
     } else {
       // EC-23: cap queue, FIFO-evict if full
       if (_queue.length >= MAX_QUEUE_SIZE) _queue.shift()
-      _queue.push((d) => fn(d, ...args))
+      _queue.push((d) => {
+        fn(d, ...args)
+      })
     }
   }
 }
@@ -54,28 +58,27 @@ function flushQueue(): void {
     try {
       fn(_dispatch)
     } catch (err) {
-      // eslint-disable-next-line no-console
       console.error('[theo devtools] queued event failed', err)
     }
   }
 }
 
 export const dispatcher = {
-  onRequest: queuable((d: Dispatch, req: RequestRecord) =>
-    d({ type: 'REQUEST_ADD', request: req }),
-  ),
-  onError: queuable((d: Dispatch, err: ErrorRecord) =>
-    d({ type: 'ERROR_ADD', error: err }),
-  ),
-  onCsrfWarn: queuable((d: Dispatch, payload: CsrfWarnPayload) =>
-    d({ type: 'CSRF_WARN', payload }),
-  ),
-  onManifestUpdated: queuable((d: Dispatch, manifest: RouteManifest) =>
-    d({ type: 'MANIFEST_UPDATED', manifest }),
-  ),
-  onRouteMatched: queuable((d: Dispatch, path: string, chain: string[]) =>
-    d({ type: 'ROUTE_MATCHED', path, chain }),
-  ),
+  onRequest: queuable((d: Dispatch, req: RequestRecord) => {
+    d({ type: 'REQUEST_ADD', request: req })
+  }),
+  onError: queuable((d: Dispatch, err: ErrorRecord) => {
+    d({ type: 'ERROR_ADD', error: err })
+  }),
+  onCsrfWarn: queuable((d: Dispatch, payload: CsrfWarnPayload) => {
+    d({ type: 'CSRF_WARN', payload })
+  }),
+  onManifestUpdated: queuable((d: Dispatch, manifest: RouteManifest) => {
+    d({ type: 'MANIFEST_UPDATED', manifest })
+  }),
+  onRouteMatched: queuable((d: Dispatch, path: string, chain: string[]) => {
+    d({ type: 'ROUTE_MATCHED', path, chain })
+  }),
 
   /**
    * Wire React's dispatch function in. Idempotent (EC-24): only the

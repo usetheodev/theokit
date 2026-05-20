@@ -1,1 +1,4 @@
-{ "name": "websocket-basic", "private": true }
+{
+  "name": "websocket-basic",
+  "private": true
+}

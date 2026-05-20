@@ -10,8 +10,9 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
-import { createRoot } from 'react-dom/client'
 import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+
 import { Overlay } from './Overlay.js'
 
 declare global {
@@ -25,10 +26,7 @@ const PORTAL_TAG = 'theo-devtools-portal'
 function definePortalElement(): void {
   if (typeof customElements === 'undefined') return
   if (customElements.get(PORTAL_TAG)) return
-  customElements.define(
-    PORTAL_TAG,
-    class TheoDevtoolsPortal extends HTMLElement {},
-  )
+  customElements.define(PORTAL_TAG, class TheoDevtoolsPortal extends HTMLElement {})
 }
 
 function mount(): void {

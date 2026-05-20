@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: {
-    'cli': 'src/cli.ts',
+    cli: 'src/cli.ts',
   },
   format: ['esm'],
   dts: false,
@@ -12,7 +12,5 @@ export default defineConfig({
   banner: {
     js: '#!/usr/bin/env node',
   },
-  external: [
-    'cross-spawn',
-  ],
+  external: ['cross-spawn'],
 })

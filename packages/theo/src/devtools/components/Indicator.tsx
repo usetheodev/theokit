@@ -9,6 +9,7 @@
 import { useDevtoolsContext } from '../hooks/useDevtoolsContext.js'
 import { useDrag } from '../hooks/useDrag.js'
 import { tokens } from '../styles/tokens.js'
+
 import { TheoLogo } from './TheoLogo.js'
 
 export function Indicator() {
@@ -18,12 +19,17 @@ export function Indicator() {
     disabled: state.open, // chip not draggable while panel is open
     position: state.position,
     padding: tokens.panel.chipPadding,
-    onChange: (position) => dispatch({ type: 'SET_POSITION', position }),
+    onChange: (position) => {
+      dispatch({ type: 'SET_POSITION', position })
+    },
   })
 
   if (!state.visible) return null
 
-  const [vertical, horizontal] = state.position.split('-', 2) as ['top' | 'bottom', 'left' | 'right']
+  const [vertical, horizontal] = state.position.split('-', 2) as [
+    'top' | 'bottom',
+    'left' | 'right',
+  ]
 
   // Logo-only chip — compact circular button. Logo at 35px.
   const buttonClass = styles.css`
@@ -59,7 +65,9 @@ export function Indicator() {
       title="Theo Devtools"
       className={buttonClass}
       onPointerDown={drag.onPointerDown}
-      onClick={() => dispatch({ type: 'TOGGLE_PANEL' })}
+      onClick={() => {
+        dispatch({ type: 'TOGGLE_PANEL' })
+      }}
     >
       <TheoLogo size={35} />
     </button>

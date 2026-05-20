@@ -8,7 +8,13 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
-import { type DevtoolsPosition, type DevtoolsState, type DevtoolsTab, type DevtoolsTheme, STORAGE_VERSION } from './shared.js'
+import {
+  type DevtoolsPosition,
+  type DevtoolsState,
+  type DevtoolsTab,
+  type DevtoolsTheme,
+  STORAGE_VERSION,
+} from './shared.js'
 
 export const STORAGE_KEYS = {
   version: 'theo-devtools-storage-version',
@@ -69,7 +75,9 @@ const VALID_THEMES = new Set<DevtoolsTheme>(['light', 'dark', 'system'])
 const VALID_TABS = new Set<DevtoolsTab>(['requests', 'routes', 'errors', 'settings'])
 
 function asPosition(v: unknown): DevtoolsPosition | null {
-  return typeof v === 'string' && VALID_POSITIONS.has(v as DevtoolsPosition) ? (v as DevtoolsPosition) : null
+  return typeof v === 'string' && VALID_POSITIONS.has(v as DevtoolsPosition)
+    ? (v as DevtoolsPosition)
+    : null
 }
 function asTheme(v: unknown): DevtoolsTheme | null {
   return typeof v === 'string' && VALID_THEMES.has(v as DevtoolsTheme) ? (v as DevtoolsTheme) : null

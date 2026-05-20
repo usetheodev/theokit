@@ -1,31 +1,44 @@
-import type { Plugin } from 'vite'
-import { resolve, basename, dirname } from 'node:path'
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Vite plugin entry. Reads `package.json` + checks for ts vs js source
+ * layout under `theoSrcDir` (build-time literal). No HTTP input.
+ */
 import { existsSync, readFileSync } from 'node:fs'
+import type { IncomingMessage } from 'node:http'
+import { resolve, basename, dirname } from 'node:path'
+import type { Duplex } from 'node:stream'
 import { fileURLToPath } from 'node:url'
-import { scanRoutes } from '../router/scan.js'
-import { generateRouteManifest } from '../router/generate.js'
-import { generateEntryClient } from '../router/entry.js'
-import { generateEntryServer } from '../router/entry-server.js'
-import { isRouteFile } from '../router/types.js'
-import { createApiMiddleware } from './api-middleware.js'
-import { createActionMiddleware } from './action-middleware.js'
-import { scanWebSocketRoutes } from '../server/ws-scan.js'
-import type { RateLimitConfig } from '../server/rate-limit.js'
-import { createPluginRunnerFromConfig } from '../server/load-plugins.js'
-import type { PluginRunner } from '../server/plugin-runner.js'
+
+import type { Plugin } from 'vite'
+
 import { loadConfig } from '../config/load-config.js'
+import { broadcastRouteManifest } from '../devtools/server-side/route-manifest.js'
+import { generateEntryServer } from '../router/entry-server.js'
+import { generateEntryClient } from '../router/entry.js'
+import { generateRouteManifest } from '../router/generate.js'
+import { scanRoutes } from '../router/scan.js'
+import { isRouteFile } from '../router/types.js'
+import type { AuditLogger } from '../server/audit-log.js'
+import type { CorsConfig } from '../server/cors.js'
+import type { DisallowedConfig } from '../server/csrf.js'
+import { createPluginRunnerFromConfig } from '../server/load-plugins.js'
+import { generateNonce } from '../server/nonce.js'
+import type { PluginRunner } from '../server/plugin-runner.js'
+import type { RateLimitConfig } from '../server/rate-limit.js'
+import { applySecurityHeaders } from '../server/security-headers.js'
+import type { SecurityHeadersConfig } from '../server/security-headers.js'
 import { resolveTransformer, type TheoTransformer } from '../server/transformer.js'
-import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
-import { resolveTheoRootDir } from './resolve-theo-root.js'
-import { injectEntryClient } from './inject-entry-client.js'
+import { scanWebSocketRoutes } from '../server/ws-scan.js'
+
+import { createActionMiddleware } from './action-middleware.js'
+import { createApiMiddleware } from './api-middleware.js'
 import {
   DEVTOOLS_RESOLVED_ID,
   DEVTOOLS_VIRTUAL_ID,
   injectDevtoolsScript,
 } from './inject-devtools.js'
-import { generateNonce } from '../server/nonce.js'
-import { applySecurityHeaders } from '../server/security-headers.js'
-import { broadcastRouteManifest } from '../devtools/server-side/route-manifest.js'
+import { injectEntryClient } from './inject-entry-client.js'
+import { resolveTheoRootDir } from './resolve-theo-root.js'
+import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
 
 export {
   defineTheoIntegration,
@@ -60,8 +73,10 @@ export interface TheoPluginOptions {
   ssrStreaming?: boolean
 }
 
+// eslint-disable-next-line max-lines-per-function -- Vite plugin factory: state setup + hooks live together by Vite convention
 export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
-  const options = typeof rootOrOptions === 'string' ? { root: rootOrOptions } : (rootOrOptions ?? {})
+  const options =
+    typeof rootOrOptions === 'string' ? { root: rootOrOptions } : (rootOrOptions ?? {})
   const projectRoot = options.root ?? process.cwd()
   const appDir = resolve(projectRoot, 'app')
   const ssrEnabled = options.ssr ?? false
@@ -79,12 +94,12 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
   let resolvedBatching: { max?: number } | undefined
   let theoUi: TheoUiDetectResult | undefined
   let csrfMode: 'off' | 'warn' | 'strict' = 'strict'
-  let securityHeaders: import('../server/security-headers.js').SecurityHeadersConfig | undefined
-  let disallowed: import('../server/csrf.js').DisallowedConfig | undefined
+  let securityHeaders: SecurityHeadersConfig | undefined
+  let disallowed: DisallowedConfig | undefined
   // T1.2 — CORS config resolved from theo.config.ts; passed to api-middleware.
-  let cors: import('../server/cors.js').CorsConfig | undefined
+  let cors: CorsConfig | undefined
   // T4.1 — Audit logger from theo.config.ts.audit.logger
-  let auditLogger: import('../server/audit-log.js').AuditLogger | undefined
+  let auditLogger: AuditLogger | undefined
   // T1.2 — devtools opt-out. `false` skips injection; anything else enables (dev only).
   let devtoolsEnabled = true
   // Dev mode flag set in configureServer. transformIndexHtml runs in both
@@ -103,37 +118,34 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         pluginRunner = await createPluginRunnerFromConfig(userConfig.plugins)
         // T1.2 — resolve transformer once from config.serialization
         transformer = resolveTransformer(userConfig.serialization)
-        // T1.4 — extract batching config
+        // T1.4 — extract batching config. The Zod schema admits
+        // `boolean | { max?: number }`; we normalize both to an object.
         if (userConfig.batching === true) {
           resolvedBatching = {}
-        } else if (
-          typeof userConfig.batching === 'object' &&
-          userConfig.batching !== null
-        ) {
-          resolvedBatching = userConfig.batching as { max?: number }
+        } else if (typeof userConfig.batching === 'object') {
+          resolvedBatching = userConfig.batching
         }
         // T2.1 — detect TheoUI presence + resolve config
-        theoUi = detectTheoUi(projectRoot, userConfig.ui as never)
+        theoUi = detectTheoUi(projectRoot, userConfig.ui)
         // Phase 5 — CSRF warn-first (EC-1)
         // T6.1 — default flipped from 'warn' to 'strict' for 0.3.0.
-        csrfMode = (userConfig.security?.csrf ?? 'strict') as 'off' | 'warn' | 'strict'
+        csrfMode = userConfig.security?.csrf ?? 'strict'
         // Phase 6 — Default security headers (D4 / EC-2)
-        securityHeaders = userConfig.security?.headers as never
+        securityHeaders = userConfig.security?.headers
         // T5.1 — disallowedRoutes per-route escalation
-        disallowed = userConfig.security?.disallowed as never
+        disallowed = userConfig.security?.disallowed
         // T1.2 — CORS config
-        cors = userConfig.security?.cors as never
+        cors = userConfig.security?.cors
         // T4.1 — Audit logger (when user provides one). Validate duck shape lazily.
         const maybeLogger = (userConfig as { audit?: { logger?: unknown } }).audit?.logger
         if (maybeLogger && typeof (maybeLogger as { log?: unknown }).log === 'function') {
-          auditLogger = maybeLogger as import('../server/audit-log.js').AuditLogger
+          auditLogger = maybeLogger as AuditLogger
         }
         // T1.2 — devtools opt-out
         devtoolsEnabled = userConfig.devtools !== false
-      } catch (err) {
+      } catch {
         // Config load errors are surfaced elsewhere (validate-structure).
         // Plugin runner remains undefined; middlewares run without hooks.
-        void err
       }
     },
 
@@ -148,10 +160,22 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
             // get matched by the bare `theokit` alias.
             { find: 'theokit/server', replacement: resolve(theoSrcDir, `server/index${ext}`) },
             { find: 'theokit/client', replacement: resolve(theoSrcDir, `client/index${ext}`) },
-            { find: 'theokit/react-query', replacement: resolve(theoSrcDir, `react-query/index${ext}`) },
-            { find: 'theokit/vite-plugin', replacement: resolve(theoSrcDir, `vite-plugin/index${ext}`) },
-            { find: 'theokit/adapters/web-shim', replacement: resolve(theoSrcDir, `adapters/web-shim${ext}`) },
-            { find: 'theokit/adapters/ws-shim', replacement: resolve(theoSrcDir, `adapters/ws-shim${ext}`) },
+            {
+              find: 'theokit/react-query',
+              replacement: resolve(theoSrcDir, `react-query/index${ext}`),
+            },
+            {
+              find: 'theokit/vite-plugin',
+              replacement: resolve(theoSrcDir, `vite-plugin/index${ext}`),
+            },
+            {
+              find: 'theokit/adapters/web-shim',
+              replacement: resolve(theoSrcDir, `adapters/web-shim${ext}`),
+            },
+            {
+              find: 'theokit/adapters/ws-shim',
+              replacement: resolve(theoSrcDir, `adapters/ws-shim${ext}`),
+            },
             // T1.2 — devtools entry (DEV only; tree-shaken in build because
             // the script tag is never injected by inject-devtools.ts in build mode)
             {
@@ -221,9 +245,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         // render — onClick handlers never get attached.
         return generateEntryServer({
           streaming: options.ssrStreaming === true,
-          theoUi: theoUi?.enabled
-            ? { theme: theoUi.config.theme }
-            : undefined,
+          theoUi: theoUi?.enabled ? { theme: theoUi.config.theme } : undefined,
         })
       }
       if (id === RESOLVED_RUNTIME_CONFIG_ID) {
@@ -247,6 +269,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
       }
     },
 
+    // eslint-disable-next-line max-lines-per-function -- Vite `configureServer` is the conventional place to wire middlewares + watchers + WS upgrades; co-located by design
     configureServer(server) {
       // T1.2 — mark dev mode so transformIndexHtml injects devtools script
       // and resolveId/load serve the virtual module. Build mode never calls
@@ -274,7 +297,9 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
 
       // Server middleware (action before API — more specific prefix first)
       const serverDir = resolve(projectRoot, 'server')
-      server.middlewares.use(createActionMiddleware(server, serverDir, { pluginRunner }))
+      server.middlewares.use(
+        createActionMiddleware(server, serverDir, { pluginRunner, csrfMode, disallowed }),
+      )
       server.middlewares.use(
         createApiMiddleware(server, serverDir, {
           rateLimitConfig: options.rateLimit,
@@ -302,62 +327,82 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
 
       // SSR dev middleware
       if (ssrEnabled) {
-        server.middlewares.use(async (req, res, next) => {
-          const url = req.url ?? '/'
-          // Skip API, static, and HMR requests
-          if (url.startsWith('/api/') || url.startsWith('/@') || url.startsWith('/node_modules/') || url.includes('.')) {
-            return next()
-          }
-
-          try {
-            const indexPath = resolve(projectRoot, 'index.html')
-            let template = readFileSync(indexPath, 'utf-8')
-            template = await server.transformIndexHtml(url, template)
-
-            // T4.1 — Generate a per-request nonce and apply security
-            // headers BEFORE we render. The same nonce flows into React's
-            // `renderToPipeableStream({ nonce })` so every emitted
-            // <script> carries it AND into the CSP script-src directive.
-            // EC-3: applySecurityHeaders also forces Cache-Control:
-            // private, no-store so CDNs don't reserve the HTML with a
-            // stale nonce.
-            const nonce = generateNonce()
-            applySecurityHeaders(
-              res,
-              securityHeaders ?? {},
-              { production: process.env.NODE_ENV === 'production' },
-              { nonce },
-            )
-
-            const mod = await server.ssrLoadModule(VIRTUAL_ENTRY_SERVER_ID)
-            const result = await mod.render(url, { nonce })
-
-            if (result && typeof result === 'object' && 'redirect' in result) {
-              res.writeHead(302, { Location: (result.redirect as Response).headers.get('location') ?? '/' })
-              res.end()
+        // Connect-style middleware expects a sync next(); we delegate to
+        // an async handler via void-wrapped IIFE so the returned Promise
+        // does not satisfy a callback that should return void.
+        server.middlewares.use((req, res, next) => {
+          void (async () => {
+            const url = req.url ?? '/'
+            // Skip API, static, and HMR requests
+            if (
+              url.startsWith('/api/') ||
+              url.startsWith('/@') ||
+              url.startsWith('/node_modules/') ||
+              url.includes('.')
+            ) {
+              next()
               return
             }
 
-            // render() returns HTML string — inject into template
-            const ssrHtml = result as string
-            const rootDivMatch = template.match(/<div id=["']root["'][^>]*>/)
-            if (!rootDivMatch) {
+            try {
+              const indexPath = resolve(projectRoot, 'index.html')
+              let template = readFileSync(indexPath, 'utf-8')
+              template = await server.transformIndexHtml(url, template)
+
+              // T4.1 — Generate a per-request nonce and apply security
+              // headers BEFORE we render. The same nonce flows into React's
+              // `renderToPipeableStream({ nonce })` so every emitted
+              // <script> carries it AND into the CSP script-src directive.
+              // EC-3: applySecurityHeaders also forces Cache-Control:
+              // private, no-store so CDNs don't reserve the HTML with a
+              // stale nonce.
+              const nonce = generateNonce()
+              applySecurityHeaders(
+                res,
+                securityHeaders ?? {},
+                { production: process.env.NODE_ENV === 'production' },
+                { nonce },
+              )
+
+              interface SsrEntryServer {
+                render: (
+                  url: string,
+                  opts: { nonce: string },
+                ) => Promise<string | { redirect: Response }>
+              }
+              const mod = (await server.ssrLoadModule(VIRTUAL_ENTRY_SERVER_ID)) as SsrEntryServer
+              const result = await mod.render(url, { nonce })
+
+              if (typeof result === 'object' && 'redirect' in result) {
+                res.writeHead(302, {
+                  Location: result.redirect.headers.get('location') ?? '/',
+                })
+                res.end()
+                return
+              }
+
+              // render() returns HTML string — inject into template
+              const ssrHtml = result
+              const rootDivMatch = /<div id=["']root["'][^>]*>/.exec(template)
+              if (!rootDivMatch) {
+                res.writeHead(200, { 'Content-Type': 'text/html' })
+                res.end(template)
+                return
+              }
+
+              const splitIdx = template.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
+              const html = template.slice(0, splitIdx) + ssrHtml + template.slice(splitIdx)
+
               res.writeHead(200, { 'Content-Type': 'text/html' })
-              res.end(template)
+              res.end(html)
+            } catch (err) {
+              server.ssrFixStacktrace(err as Error)
+              console.error('[SSR Dev Error]', err)
+              // Fallback to CSR
+              next()
               return
             }
-
-            const splitIdx = template.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
-            const html = template.slice(0, splitIdx) + ssrHtml + template.slice(splitIdx)
-
-            res.writeHead(200, { 'Content-Type': 'text/html' })
-            res.end(html)
-          } catch (err) {
-            server.ssrFixStacktrace(err as Error)
-            console.error('[SSR Dev Error]', err)
-            // Fallback to CSR
-            return next()
-          }
+          })()
         })
       }
 
@@ -378,35 +423,59 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
 
       // WebSocket upgrade handler (dev mode)
       const wsRoutes = scanWebSocketRoutes(resolve(projectRoot, 'server'))
-      if (wsRoutes.length > 0 && server.httpServer) {
-        import('ws').then(({ WebSocketServer }) => {
-          const wss = new WebSocketServer({ noServer: true })
+      const wsHttpServer = server.httpServer
+      if (wsRoutes.length > 0 && wsHttpServer) {
+        // Lazy-import `ws` so non-WS apps don't pay the cost.
+        void import('ws')
+          .then(({ WebSocketServer }) => {
+            const wss = new WebSocketServer({ noServer: true })
 
-          server.httpServer!.on('upgrade', async (request, socket, head) => {
-            const url = request.url ?? '/'
-            if (!url.startsWith('/ws/')) return // Let Vite handle HMR etc.
-
-            const wsPath = url.split('?')[0]
-            const match = wsRoutes.find(r => r.wsPath === wsPath)
-            if (!match) { socket.destroy(); return }
-
-            try {
-              const mod = await server.ssrLoadModule(match.filePath)
-              const handler = mod.default ?? mod
-
-              wss.handleUpgrade(request, socket, head, (ws) => {
-                handler.onOpen?.(ws, request)
-                ws.on('message', (data: Buffer) => handler.onMessage?.(ws, data.toString()))
-                ws.on('close', (code: number, reason: Buffer) => handler.onClose?.(ws, code, reason))
-                ws.on('error', (err: Error) => handler.onError?.(ws, err))
-              })
-            } catch {
-              socket.destroy()
+            interface WsHandler {
+              onOpen?: (ws: unknown, request: unknown) => void | Promise<void>
+              onMessage?: (ws: unknown, data: string) => void | Promise<void>
+              onClose?: (ws: unknown, code: number, reason: Buffer) => void | Promise<void>
+              onError?: (ws: unknown, err: Error) => void | Promise<void>
             }
+
+            wsHttpServer.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+              void (async () => {
+                const url = request.url ?? '/'
+                if (!url.startsWith('/ws/')) return // Let Vite handle HMR etc.
+
+                const wsPath = url.split('?')[0]
+                const match = wsRoutes.find((r) => r.wsPath === wsPath)
+                if (!match) {
+                  socket.destroy()
+                  return
+                }
+
+                try {
+                  const mod = await server.ssrLoadModule(match.filePath)
+                  const handler = ((mod as { default?: unknown }).default ?? mod) as WsHandler
+
+                  wss.handleUpgrade(request, socket, head, (ws) => {
+                    void handler.onOpen?.(ws, request)
+                    ws.on('message', (data: Buffer) => {
+                      void handler.onMessage?.(ws, data.toString())
+                    })
+                    ws.on('close', (code: number, reason: Buffer) => {
+                      void handler.onClose?.(ws, code, reason)
+                    })
+                    ws.on('error', (err: Error) => {
+                      void handler.onError?.(ws, err)
+                    })
+                  })
+                } catch {
+                  socket.destroy()
+                }
+              })()
+            })
           })
-        }).catch(() => {
-          console.warn('[Theo] WebSocket routes found but "ws" package not installed. Run: npm install ws')
-        })
+          .catch(() => {
+            console.warn(
+              '[Theo] WebSocket routes found but "ws" package not installed. Run: npm install ws',
+            )
+          })
       }
 
       // T2.4 — clear devtools WS reference on shutdown

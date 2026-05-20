@@ -32,7 +32,9 @@ describe('Onda 7 — Type Safety End-to-End', () => {
       handler: () => ({ id: '1', name: 'test' }),
     })
     // Return type is inferred — TResponse generic captures the actual return
-    expectTypeOf(route.handler).returns.toEqualTypeOf<{ id: string; name: string } | Promise<{ id: string; name: string }>>()
+    expectTypeOf(route.handler).returns.toEqualTypeOf<
+      { id: string; name: string } | Promise<{ id: string; name: string }>
+    >()
   })
 
   // Teste 3 — Params inferidos
@@ -105,11 +107,11 @@ describe('Onda 7 — Type Safety End-to-End', () => {
   // Existing handlers without ctx still compile
   it('handler without ctx destructuring still compiles', () => {
     defineRoute({
-      handler: ({ query }) => ({ ok: true }),
+      handler: ({ query: _query }) => ({ ok: true }),
     })
     defineAction({
       input: z.object({ v: z.string() }),
-      handler: ({ input }) => ({ ok: true }),
+      handler: ({ input: _input }) => ({ ok: true }),
     })
   })
 })

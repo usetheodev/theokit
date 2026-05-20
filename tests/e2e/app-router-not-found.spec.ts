@@ -1,9 +1,13 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
-async function gotoWithRetry(page: import('@playwright/test').Page, url: string) {
+async function gotoWithRetry(page: Page, url: string) {
   await page.goto(url, { waitUntil: 'networkidle' })
   // Vite dep optimization may cause a reload on first visit — retry if page is blank
-  const hasContent = await page.locator('#root *').first().isVisible().catch(() => false)
+  const hasContent = await page
+    .locator('#root *')
+    .first()
+    .isVisible()
+    .catch(() => false)
   if (!hasContent) {
     await page.waitForTimeout(2000)
     await page.reload({ waitUntil: 'networkidle' })

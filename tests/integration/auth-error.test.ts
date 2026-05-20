@@ -17,9 +17,13 @@ function createMockRes() {
   let status = 0
   let body = ''
   return {
-    writeHead: vi.fn((s: number) => { status = s }),
+    writeHead: vi.fn((s: number) => {
+      status = s
+    }),
     write: vi.fn(),
-    end: vi.fn((b?: string) => { if (b) body = b }),
+    end: vi.fn((b?: string) => {
+      if (b) body = b
+    }),
     headersSent: false,
     writableEnded: false,
     statusCode: 200,
@@ -38,7 +42,11 @@ describe('Auth Error Handling in executeRoute', () => {
   it('should return 401 with AUTH_REQUIRED when handler throws requireAuth(null)', async () => {
     const res = createMockRes()
     const loader = async () => ({
-      GET: { handler: () => { requireAuth(null) } },
+      GET: {
+        handler: () => {
+          requireAuth(null)
+        },
+      },
     })
 
     await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-123')
@@ -52,7 +60,11 @@ describe('Auth Error Handling in executeRoute', () => {
   it('should include requestId in 401 response', async () => {
     const res = createMockRes()
     const loader = async () => ({
-      GET: { handler: () => { requireAuth(null) } },
+      GET: {
+        handler: () => {
+          requireAuth(null)
+        },
+      },
     })
 
     await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-456')
@@ -64,7 +76,11 @@ describe('Auth Error Handling in executeRoute', () => {
   it('should still return 500 for non-auth errors (backward compat)', async () => {
     const res = createMockRes()
     const loader = async () => ({
-      GET: { handler: () => { throw new Error('Something broke') } },
+      GET: {
+        handler: () => {
+          throw new Error('Something broke')
+        },
+      },
     })
 
     await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-789')

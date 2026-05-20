@@ -21,6 +21,7 @@ let port: number
 
 beforeAll(async () => {
   // Build using CLI
+  // eslint-disable-next-line sonarjs/os-command -- developer-local integration test running the framework's own CLI via npx tsx
   execSync(
     `npx tsx ${resolve(import.meta.dirname, '../../packages/theo/src/cli/index.ts')} build`,
     { cwd: fixtureDir, stdio: 'pipe' },
@@ -36,7 +37,10 @@ beforeAll(async () => {
       if (url.startsWith('/api/')) {
         const routes = scanServerRoutes(serverDir)
         const match = matchRoute(url, routes)
-        if (!match) { sendError(res, 'NOT_FOUND', 'Not found', 404); return }
+        if (!match) {
+          sendError(res, 'NOT_FOUND', 'Not found', 404)
+          return
+        }
         const method = (req.method ?? 'GET').toUpperCase()
         await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir)
         return

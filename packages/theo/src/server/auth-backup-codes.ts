@@ -49,6 +49,26 @@ export async function generateBackupCodes(opts: BackupCodeOptions = {}): Promise
   const separator = opts.separator === undefined ? '-' : opts.separator
   const alphabet = opts.alphabet ?? DEFAULT_ALPHABET
 
+  // CR-022 fix: bound count and length explicitly. Pathological inputs
+  // (count=Infinity, length=0) would cause an infinite loop or wasteful
+  // resource usage. Bounds are generous (count ≤ 1000, length ∈ [4, 64])
+  // — well above any realistic 2FA backup-codes use case.
+  if (!Number.isInteger(count) || count <= 0 || count > 1000) {
+    throw new RangeError(
+      `generateBackupCodes: count must be an integer in [1, 1000] (got ${String(count)})`,
+    )
+  }
+  if (!Number.isInteger(length) || length < 4 || length > 64) {
+    throw new RangeError(
+      `generateBackupCodes: length must be an integer in [4, 64] (got ${String(length)})`,
+    )
+  }
+  if (alphabet.length < 8) {
+    throw new RangeError(
+      `generateBackupCodes: alphabet must contain at least 8 distinct chars (got ${alphabet.length})`,
+    )
+  }
+
   const codes: BackupCode[] = []
   const seen = new Set<string>()
   while (codes.length < count) {
@@ -70,7 +90,10 @@ export async function generateBackupCodes(opts: BackupCodeOptions = {}): Promise
  * `matchedHash` is the EXACT string the caller stored, ready to be passed
  * to a `DELETE FROM backup_codes WHERE hash = ?` query.
  */
-export async function verifyBackupCode(code: string, hashes: ReadonlyArray<string>): Promise<{ valid: boolean; matchedHash?: string }> {
+export async function verifyBackupCode(
+  code: string,
+  hashes: readonly string[],
+): Promise<{ valid: boolean; matchedHash?: string }> {
   const candidate = await sha256Hex(normalizeCode(code))
   let matchedHash: string | undefined
   // Constant-time iteration over hashes: never short-circuit.
@@ -109,7 +132,7 @@ function randomFromAlphabet(length: number, alphabet: string): string {
 
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input)
-  const hash = await crypto.subtle.digest('SHA-256', bytes as BufferSource)
+  const hash = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')

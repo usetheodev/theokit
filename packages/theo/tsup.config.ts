@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig([
   {
     entry: {
-      'index': 'src/index.ts',
+      index: 'src/index.ts',
       'server/index': 'src/server/index.ts',
       'vite-plugin/index': 'src/vite-plugin/index.ts',
       'client/index': 'src/client/index.ts',

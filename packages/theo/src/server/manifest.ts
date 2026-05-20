@@ -1,11 +1,16 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Build-time manifest emitter / loader. All paths derived from `distDir`
+ * + `serverDir`, themselves resolved from `process.cwd()`. No HTTP input.
+ */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve, relative } from 'node:path'
-import { scanServerRoutes } from './scan.js'
+
 import { scanServerActions } from './action-scan.js'
-import { scanWebSocketRoutes } from './ws-scan.js'
+import type { ActionNode } from './action-scan.js'
 import { compilePattern } from './match.js'
 import type { ServerRouteNode } from './match.js'
-import type { ActionNode } from './action-scan.js'
+import { scanServerRoutes } from './scan.js'
+import { scanWebSocketRoutes } from './ws-scan.js'
 import type { WebSocketRouteNode } from './ws-scan.js'
 
 // --- Manifest Types ---
@@ -80,9 +85,7 @@ export function loadManifest(distDir: string, serverDir: string): LoadedManifest
   const manifestPath = join(distDir, 'manifest.json')
 
   if (!existsSync(manifestPath)) {
-    throw new Error(
-      `No manifest found at ${manifestPath}. Run "theo build" first.`,
-    )
+    throw new Error(`No manifest found at ${manifestPath}. Run "theo build" first.`)
   }
 
   const raw = JSON.parse(readFileSync(manifestPath, 'utf-8')) as TheoManifest

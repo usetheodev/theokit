@@ -128,7 +128,7 @@ describe('scanUpgradeReadiness — EC-7 (skip comments + string literals)', () =
     return dir
   }
 
-  it('Given source contains `// fetch(\'/api/x\', { method: \'POST\' })`, Then NO violation (line comment skipped)', async () => {
+  it("Given source contains `// fetch('/api/x', { method: 'POST' })`, Then NO violation (line comment skipped)", async () => {
     const dir = makeTmpProject({
       'app/page.tsx':
         "export default function Page() {\n  // const x = fetch('/api/x', { method: 'POST' })\n  return null\n}\n",

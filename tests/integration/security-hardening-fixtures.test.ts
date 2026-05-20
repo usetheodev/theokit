@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { securitySchema, rateLimitSchema, theoConfigSchema } from '../../packages/theo/src/config/schema.js'
+import {
+  securitySchema,
+  rateLimitSchema,
+  theoConfigSchema,
+} from '../../packages/theo/src/config/schema.js'
 
 /**
  * Security-hardening fixtures sanity check.

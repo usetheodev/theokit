@@ -14,11 +14,6 @@ interface ImportEntry {
   importPath: string
 }
 
-interface PreloadEntry {
-  routePath: string
-  importPath: string
-}
-
 /**
  * Build the absolute route path for a node by accumulating segments from
  * the root. Used to key the preload map exactly as react-router's
@@ -29,73 +24,65 @@ function buildRoutePath(parents: string[], segment: string): string {
   return '/' + joined
 }
 
+interface WalkAccumulator {
+  staticImports: ImportEntry[]
+  lazyPages: { varName: string; importPath: string; routePath: string }[]
+  layoutState: { found: boolean }
+}
+
+function pushIf(staticImports: ImportEntry[], filePath: string | undefined, varName: string): void {
+  if (filePath !== undefined) {
+    staticImports.push({ varName, importPath: normalizePath(filePath) })
+  }
+}
+
+function walkRouteTree(node: RouteNode, parents: string[], acc: WalkAccumulator): void {
+  const seg = node.segment || 'root'
+  const routePath = buildRoutePath(parents, node.segment)
+
+  if (node.page !== undefined) {
+    acc.lazyPages.push({
+      varName: safeVarName(seg, 'Page'),
+      importPath: normalizePath(node.page),
+      routePath,
+    })
+  }
+  if (node.layout !== undefined) acc.layoutState.found = true
+  pushIf(acc.staticImports, node.layout, safeVarName(seg, 'Layout'))
+  pushIf(acc.staticImports, node.error, safeVarName(seg, 'Error'))
+  pushIf(acc.staticImports, node.loading, safeVarName(seg, 'Loading'))
+  pushIf(acc.staticImports, node.notFound, safeVarName(seg, 'NotFound'))
+  for (const child of node.children) {
+    const nextParents = node.segment ? [...parents, node.segment] : parents
+    walkRouteTree(child, nextParents, acc)
+  }
+}
+
 export function generateRouteManifest(tree: RouteNode): string {
   // Static imports (always-needed at boot): layouts, errors, loading, not-found.
-  const staticImports: ImportEntry[] = []
   // Lazy-loaded pages — tracked separately so we emit React.lazy() and
   // build the preload map.
-  const lazyPages: { varName: string; importPath: string; routePath: string }[] = []
-  let hasLayout = false
-
-  function walk(node: RouteNode, parents: string[]): void {
-    const seg = node.segment || 'root'
-    const routePath = buildRoutePath(parents, node.segment)
-
-    if (node.page) {
-      lazyPages.push({
-        varName: safeVarName(seg, 'Page'),
-        importPath: normalizePath(node.page),
-        routePath,
-      })
-    }
-    if (node.layout) {
-      hasLayout = true
-      staticImports.push({
-        varName: safeVarName(seg, 'Layout'),
-        importPath: normalizePath(node.layout),
-      })
-    }
-    if (node.error) {
-      staticImports.push({
-        varName: safeVarName(seg, 'Error'),
-        importPath: normalizePath(node.error),
-      })
-    }
-    if (node.loading) {
-      staticImports.push({
-        varName: safeVarName(seg, 'Loading'),
-        importPath: normalizePath(node.loading),
-      })
-    }
-    if (node.notFound) {
-      staticImports.push({
-        varName: safeVarName(seg, 'NotFound'),
-        importPath: normalizePath(node.notFound),
-      })
-    }
-    for (const child of node.children) {
-      const nextParents = node.segment ? [...parents, node.segment] : parents
-      walk(child, nextParents)
-    }
+  const acc: WalkAccumulator = {
+    staticImports: [],
+    lazyPages: [],
+    layoutState: { found: false },
   }
-
-  walk(tree, [])
+  walkRouteTree(tree, [], acc)
+  const staticImports = acc.staticImports
+  const lazyPages = acc.lazyPages
+  const layoutState = acc.layoutState
 
   // Phase 4 — Code-splitting + matchRoutes safeguard (EC-3).
-  //
   // PAGES are lazy. LAYOUTS / ERROR / LOADING / NOT-FOUND stay static
   // because they're always needed at boot regardless of route.
-  //
   // The preload map exposes the same `import()` calls keyed by absolute
   // route path. The entry-client re-matches `routes` against
   // `location.pathname` and awaits the matched entries BEFORE
   // `hydrateRoot`, so React.lazy modules resolve from cache and no
   // Suspense fallback fires during hydration.
-  const lines: string[] = [
-    `import React, { Suspense } from 'react'`,
-  ]
+  const lines: string[] = [`import React, { Suspense } from 'react'`]
 
-  if (hasLayout) {
+  if (layoutState.found) {
     lines.push(`import { Outlet } from 'react-router'`)
   }
 
@@ -123,12 +110,11 @@ export function generateRouteManifest(tree: RouteNode): string {
   // and Rollup rejects type annotations in production builds.
   lines.push('export const __theoPreloadMap = {')
   for (const e of preloadEntries) lines.push(e)
-  lines.push('}')
-  lines.push('')
+  lines.push('}', '')
 
-  // Generate route config
-  function genRouteConfig(node: RouteNode, isRoot: boolean): string {
-    const seg = node.segment || 'root'
+  // Build the children-array string for one node, separately from the
+  // wrapping logic — keeps `genRouteConfig` under the complexity ceiling.
+  function buildChildrenArray(node: RouteNode, seg: string): string {
     const childConfigs: string[] = []
 
     // Index route for this node's page — wrap in Suspense (the lazy module
@@ -151,24 +137,26 @@ export function generateRouteManifest(tree: RouteNode): string {
     // Not-found wildcard (only at this level)
     if (node.notFound) {
       const nfVar = safeVarName(seg, 'NotFound')
-      childConfigs.push(
-        `{ path: '*', element: React.createElement(${nfVar}) }`,
-      )
+      childConfigs.push(`{ path: '*', element: React.createElement(${nfVar}) }`)
     }
 
-    // Wrap children in error boundary (pathless wrapper) if error exists
-    let childrenArray = `[${childConfigs.join(', ')}]`
+    let arr = `[${childConfigs.join(', ')}]`
     if (node.error) {
       const errVar = safeVarName(seg, 'Error')
-      childrenArray = `[{ errorElement: React.createElement(${errVar}), children: ${childrenArray} }]`
+      arr = `[{ errorElement: React.createElement(${errVar}), children: ${arr} }]`
     }
+    return arr
+  }
+
+  // Generate route config
+  function genRouteConfig(node: RouteNode, isRoot: boolean): string {
+    const seg = node.segment || 'root'
+    const childrenArray = buildChildrenArray(node, seg)
 
     // Build route object
     if (node.layout) {
       const layoutVar = safeVarName(seg, 'Layout')
-      const pathPart = isRoot
-        ? `path: '/'`
-        : `path: '${node.segment}'`
+      const pathPart = isRoot ? `path: '/'` : `path: '${node.segment}'`
       // Layout receives `<Outlet />` as `children` prop. This supports BOTH
       // conventions: Next.js-style layouts that render `{children}` AND
       // layouts that call `<Outlet />` directly (the prop is the same element,
@@ -179,7 +167,7 @@ export function generateRouteManifest(tree: RouteNode): string {
 
     // No layout — if root, wrap in path '/'
     if (isRoot) {
-      if (childConfigs.length === 0 && !node.page) {
+      if (node.children.length === 0 && !node.page && !node.notFound && !node.error) {
         return `{ path: '/', children: [] }`
       }
       // Root without layout: children are direct routes

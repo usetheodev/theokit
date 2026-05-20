@@ -1,5 +1,6 @@
+import path from 'node:path'
+
 import { defineConfig } from '@playwright/test'
-import path from 'path'
 
 const rootDir = path.dirname(new URL(import.meta.url).pathname)
 const cliPath = path.resolve(rootDir, 'packages/theo/src/cli/index.ts')
@@ -12,7 +13,7 @@ export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 30000,
   expect: { timeout: 10000 },
-  workers: 1,  // Sequential — 4 dev servers compete for resources in parallel
+  workers: 1, // Sequential — 4 dev servers compete for resources in parallel
   projects: [
     {
       name: 'onda1',
