@@ -175,3 +175,76 @@ describe('scanUpgradeReadiness — EC-8 (empty project exits gracefully)', () =>
     }
   })
 })
+
+/**
+ * EC-3: a directory that has `app/` (e.g. a Next.js project) but no `theokit`
+ * in package.json should be detected as "not a TheoKit project" and produce
+ * `status==="not-a-theokit-project"`, exit 1. This prevents the scanner from
+ * generating dozens of false positives against Next.js / Remix / Astro apps.
+ */
+describe('scanUpgradeReadiness — EC-3 (non-TheoKit project detection)', () => {
+  it('Given app/ exists but package.json lacks theokit, Then status==="not-a-theokit-project" and exitCode===1', async () => {
+    const dir = resolve(tmpdir(), `not-theokit-${Date.now()}-${Math.random()}`)
+    mkdirSync(resolve(dir, 'app'), { recursive: true })
+    writeFileSync(resolve(dir, 'app', 'page.tsx'), 'export default function Home() { return null }')
+    writeFileSync(
+      resolve(dir, 'package.json'),
+      JSON.stringify({ name: 'next-app', dependencies: { next: '15.0.0' } }),
+    )
+    try {
+      const report = await scanUpgradeReadiness({ cwd: dir })
+      expect(report.status).toBe('not-a-theokit-project')
+      expect(report.exitCode).toBe(1)
+      expect(report.violations).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('Given theokit in dependencies, Then scan proceeds normally (regression check)', async () => {
+    const dir = resolve(tmpdir(), `is-theokit-${Date.now()}-${Math.random()}`)
+    mkdirSync(resolve(dir, 'app'), { recursive: true })
+    writeFileSync(resolve(dir, 'app', 'page.tsx'), 'export default function Home() { return null }')
+    writeFileSync(
+      resolve(dir, 'package.json'),
+      JSON.stringify({ name: 'theokit-app', dependencies: { theokit: '^0.2.0' } }),
+    )
+    try {
+      const report = await scanUpgradeReadiness({ cwd: dir })
+      expect(['ready', 'has-violations']).toContain(report.status)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('Given theokit in devDependencies only, Then scan still proceeds (devDep is valid)', async () => {
+    const dir = resolve(tmpdir(), `is-theokit-dev-${Date.now()}-${Math.random()}`)
+    mkdirSync(resolve(dir, 'app'), { recursive: true })
+    writeFileSync(resolve(dir, 'app', 'page.tsx'), 'export default function Home() { return null }')
+    writeFileSync(
+      resolve(dir, 'package.json'),
+      JSON.stringify({ name: 'theokit-dev', devDependencies: { theokit: '^0.2.0' } }),
+    )
+    try {
+      const report = await scanUpgradeReadiness({ cwd: dir })
+      expect(['ready', 'has-violations']).toContain(report.status)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('Given malformed package.json, Then scan does NOT crash; exits gracefully', async () => {
+    const dir = resolve(tmpdir(), `bad-pkg-${Date.now()}-${Math.random()}`)
+    mkdirSync(resolve(dir, 'app'), { recursive: true })
+    writeFileSync(resolve(dir, 'app', 'page.tsx'), 'export default function Home() { return null }')
+    writeFileSync(resolve(dir, 'package.json'), '{ this is not json')
+    try {
+      const report = await scanUpgradeReadiness({ cwd: dir })
+      // Treated as "no readable package.json" → behave like the EC-8 case.
+      expect(report.exitCode).toBe(1)
+      expect(report.status).toBe('not-a-theokit-project')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

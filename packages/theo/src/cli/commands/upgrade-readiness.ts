@@ -40,7 +40,11 @@ export interface Violation {
   fix: string
 }
 
-export type ReadinessStatus = 'ready' | 'has-violations' | 'no-project-detected'
+export type ReadinessStatus =
+  | 'ready'
+  | 'has-violations'
+  | 'no-project-detected'
+  | 'not-a-theokit-project'
 
 export interface UpgradeReadinessReport {
   status: ReadinessStatus
@@ -180,6 +184,35 @@ function scanHtmlFile(file: string, rel: string, content: string, out: Violation
   }
 }
 
+/**
+ * EC-3: a directory may have an `app/` directory (Next.js, Remix, etc.) but
+ * not actually be a TheoKit project. Run our 3 rules against such a project
+ * would generate many false positives. The strict guard checks for `theokit`
+ * in dependencies OR devDependencies of the cwd's package.json. Returns
+ * `null` when the project IS a TheoKit project, or a non-TheoKit report
+ * otherwise.
+ */
+function detectNonTheokitProject(cwd: string): UpgradeReadinessReport | null {
+  const pkgPath = resolve(cwd, 'package.json')
+  if (!existsSync(pkgPath)) {
+    // No package.json — let the existing app/server detection handle it.
+    return null
+  }
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as typeof pkg
+  } catch {
+    // Malformed package.json — treat as "not a TheoKit project we can verify".
+    return { status: 'not-a-theokit-project', exitCode: 1, violations: [] }
+  }
+  const deps = pkg.dependencies ?? {}
+  const devDeps = pkg.devDependencies ?? {}
+  if (!Object.hasOwn(deps, 'theokit') && !Object.hasOwn(devDeps, 'theokit')) {
+    return { status: 'not-a-theokit-project', exitCode: 1, violations: [] }
+  }
+  return null
+}
+
 // eslint-disable-next-line @typescript-eslint/require-await -- async surface for future fs.promises migration
 export async function scanUpgradeReadiness(options: ScanOptions): Promise<UpgradeReadinessReport> {
   const cwd = options.cwd
@@ -195,6 +228,10 @@ export async function scanUpgradeReadiness(options: ScanOptions): Promise<Upgrad
   if (!hasApp && !hasServer) {
     return { status: 'no-project-detected', exitCode: 0, violations: [] }
   }
+
+  // EC-3: refuse to scan non-TheoKit projects (avoid FP avalanche).
+  const nonTheokit = detectNonTheokitProject(cwd)
+  if (nonTheokit) return nonTheokit
 
   const files: string[] = []
   if (hasApp) walkFiles(appDir, cwd, files)
@@ -246,6 +283,12 @@ export async function upgradeReadinessCommand(opts: {
   console.log('')
   if (report.status === 'no-project-detected') {
     console.log("  · No theokit project detected here (no 'app/' or 'server/' dir).")
+    console.log('')
+    process.exit(report.exitCode)
+  }
+  if (report.status === 'not-a-theokit-project') {
+    console.log('  ✗ Not a TheoKit project (theokit not in package.json).')
+    console.log('    Run this command from a TheoKit project root.')
     console.log('')
     process.exit(report.exitCode)
   }

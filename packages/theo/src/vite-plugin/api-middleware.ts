@@ -10,6 +10,8 @@ import {
   handleCspReport,
   type CspReportHandlerOptions,
 } from '../server/csp-report.js'
+import { handleCsrfReadiness } from '../server/csrf-readiness-endpoint.js'
+import type { CsrfReadinessStore } from '../server/csrf-readiness-store.js'
 import type { DisallowedConfig } from '../server/csrf.js'
 import { executeRoute, sendError } from '../server/execute.js'
 import { logRequest } from '../server/logger.js'
@@ -43,6 +45,13 @@ export interface ApiMiddlewareOptions {
   auditLogger?: AuditLogger
   /** T5.1 — Optional CSP violation hook (forwarded to Sentry / custom sink). */
   onCspViolation?: CspReportHandlerOptions['onViolation']
+  /**
+   * T2.2 — Optional CSRF readiness store. When provided, the
+   * `/__theo/csrf-readiness` endpoint is mounted and warn events are
+   * recorded into the store. Dev-mode middleware wires this automatically;
+   * production hosts opt in via config.security.csrfTelemetry.exposeReadinessEndpoint.
+   */
+  csrfReadinessStore?: CsrfReadinessStore
 }
 
 async function handleCspReportIfMatch(
@@ -184,6 +193,7 @@ export function createApiMiddleware(
   const corsHandler = opts.cors ? createCorsHandler(opts.cors) : null
   const auditLogger = opts.auditLogger
   const onCspViolation = opts.onCspViolation
+  const csrfReadinessStore = opts.csrfReadinessStore
 
   return (req, res, next) => {
     void (async () => {
@@ -193,6 +203,12 @@ export function createApiMiddleware(
       // so the path lives outside the user's route namespace. Endpoint is
       // CSRF-exempt (browsers don't send X-Theo-Action on report POSTs).
       if (await handleCspReportIfMatch(req, res, url, { auditLogger, onCspViolation })) {
+        return
+      }
+
+      // T2.2 — CSRF readiness endpoint. Only mounted when a store is wired
+      // (dev-mode wires it automatically; prod opt-in via config).
+      if (csrfReadinessStore && (await handleCsrfReadiness(req, res, csrfReadinessStore))) {
         return
       }
 

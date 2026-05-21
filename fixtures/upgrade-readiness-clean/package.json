@@ -1,4 +1,7 @@
 {
   "name": "upgrade-readiness-clean",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "theokit": "*"
+  }
 }
