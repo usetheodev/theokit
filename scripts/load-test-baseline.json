@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-05-21T12:55:48.923Z",
+  "target": "examples/devtools-demo",
+  "connections": 50,
+  "durationSec": 5,
+  "p99LatencyMs": 39,
+  "p50LatencyMs": 14,
+  "requestsPerSec": 2839.2,
+  "errors": 0,
+  "timeouts": 0,
+  "heapDeltaMB": 1.07
+}

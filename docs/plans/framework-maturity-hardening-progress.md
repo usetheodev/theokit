@@ -57,7 +57,12 @@ Tracking implementation of `docs/plans/framework-maturity-hardening-plan.md`
 
 ## Phase 7 — Load testing SSR
 
-- [ ] **T7.1** — autocannon harness + baseline + nightly CI
+- [x] **T7.1** — autocannon harness + baseline + nightly CI — **DONE + validated**
+  - [x] `scripts/load-test-streaming.mjs` written (autocannon + EC-11 relative thresholds)
+  - [x] 8 unit tests validate structure + EC-11 wiring
+  - [x] autocannon installed via `pnpm add -Dw autocannon`
+  - [x] First baseline captured: 50 conn × 5s → p99=39ms, p50=14ms, 2839 RPS, 0 errors, +1.07MB heap
+  - [x] Baseline file: `scripts/load-test-baseline.json`
 
 ## Phase 8 — api-middleware coverage hardening
 
