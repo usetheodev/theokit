@@ -130,7 +130,7 @@ What ships in this version is everything the `nextjs-maturity` plan closed. The 
 - [x] Playwright spec for the default template (8 scenarios in real Chromium)
 - [x] Production build bundle: **193.90 KB gzipped** (45% under the 350 KB budget)
 - [ ] **Open: publish `theokit@0.2.0` to npm under `latest` tag** (release engineer)
-- [ ] **Open: migration guide** for the two opt-in cutovers (CSRF warn→strict, CSP report-only→enforce)
+- [x] **Migration guide** for the two opt-in cutovers (CSRF warn→strict, CSP report-only→enforce) — shipped at [`docs/migration/0.2-to-0.3.md`](docs/migration/0.2-to-0.3.md), recipes auto-tested in `tests/integration/migration-guide-recipes.test.ts`
 - [ ] **Open: README banner** announcing 0.2.0 with the bundle / security baseline / agent-surface story
 
 ### 0.3.0 — Enforcement cutover (HIGH RISK — most dangerous release on the roadmap)

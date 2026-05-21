@@ -75,7 +75,7 @@ cli
   .command('check', 'Run typecheck + scan + (optional) eslint')
   .option(
     '--upgrade-readiness <version>',
-    'Scan source for anticipated breakage under a future TheoKit version (currently supports 0.3)',
+    'Scan source for anticipated breakage under a future TheoKit version (currently supports 0.3). See docs/migration/0.2-to-0.3.md',
   )
   .option('--json', 'Emit machine-readable JSON (only with --upgrade-readiness)')
   .option(
