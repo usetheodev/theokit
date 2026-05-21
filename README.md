@@ -205,6 +205,7 @@ theokit build --target=aws-lambda         # Build for AWS Lambda (API Gateway v2
 theokit build --target=static             # Pre-render to static HTML
 theokit start                            # Production server (Node)
 theokit check                            # Run typecheck + scan + (optional) eslint
+theokit check --upgrade-readiness 0.3    # Static scan for 0.3.0 breakage (CSRF, CSP)
 theokit add bun                          # Install a known adapter/plugin (whitelist)
 theokit info                             # Print runtime + project diagnostic
 theokit generate route users             # Scaffold API route
