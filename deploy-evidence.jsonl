@@ -1,0 +1,2 @@
+{"timestamp":"2026-05-21T12:56:44Z","adapter":"vercel","url":"http://localhost:3471","durationSec":0,"status":"fail","commit":"7d1d89c","mode":"local"}
+{"timestamp":"2026-05-21T12:58:38Z","adapter":"vercel","url":"http://localhost:3475","durationSec":1,"status":"pass","commit":"7d1d89c","mode":"local"}

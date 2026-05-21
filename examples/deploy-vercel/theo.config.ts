@@ -2,7 +2,9 @@ import { defineConfig } from 'theokit'
 
 /**
  * T4.1 — Minimal example deployable to Vercel for the deploy adapter
- * end-to-end smoke. The actual adapter wiring is read by the framework
- * based on the build target; this file is the user-facing config surface.
+ * end-to-end smoke. SSR enabled so the smoke script can assert page
+ * content via curl (no JS execution).
  */
-export default defineConfig({})
+export default defineConfig({
+  ssr: true,
+})
