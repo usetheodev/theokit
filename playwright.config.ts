@@ -63,6 +63,18 @@ export default defineConfig({
       use: { baseURL: 'http://localhost:3464' },
       testMatch: 'template-api-only.spec.ts',
     },
+    {
+      // T5.1 — postgres template (3 of 4) — env-gated (DATABASE_URL).
+      name: 'template-postgres',
+      use: { baseURL: 'http://localhost:3465' },
+      testMatch: 'template-postgres.spec.ts',
+    },
+    {
+      // T5.1 — saas template (4 of 4) — env-gated (DATABASE_URL + THEO_SESSION_SECRET).
+      name: 'template-saas',
+      use: { baseURL: 'http://localhost:3466' },
+      testMatch: 'template-saas.spec.ts',
+    },
   ],
   webServer: [
     {
@@ -131,6 +143,24 @@ export default defineConfig({
       command: `npx tsx ${cliPath} dev --port 3464`,
       cwd: fixture('template-api-only'),
       port: 3464,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — postgres template fixture. Tests are env-gated via
+      // DATABASE_URL; the server boots regardless so the harness is
+      // testable end-to-end in any env. CI provides Postgres service.
+      command: `npx tsx ${cliPath} dev --port 3465`,
+      cwd: fixture('template-postgres'),
+      port: 3465,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — saas template fixture. Same env-gate strategy.
+      command: `npx tsx ${cliPath} dev --port 3466`,
+      cwd: fixture('template-saas'),
+      port: 3466,
       reuseExistingServer: false,
       timeout: 180000,
     },

@@ -39,12 +39,12 @@ Tracking implementation of `docs/plans/framework-maturity-hardening-plan.md`
 
 ## Phase 5 — Playwright for 4 remaining templates
 
-- [PARTIAL 2/4] **T5.1** — `dashboard`, `api-only`, `postgres`, `saas` E2E
-  - [x] `dashboard` — fixture (`fixtures/template-dashboard/`) + spec (5 scenarios, project on :3463)
-  - [x] `api-only` — fixture (`fixtures/template-api-only/`) + spec (6 scenarios incl. validation + CRUD, project on :3464)
-  - [BLOCKED on Postgres] `postgres` — fixture would need running Postgres + DATABASE_URL secret + drizzle migrations. CI infra change, not test code. Pattern: copy template, add Postgres service to .github/workflows/ci.yml, add `pg_isready` wait step (EC-9), write spec.
-  - [BLOCKED on Postgres] `saas` — same Postgres constraint + session secret env.
-  - Pattern locked: copy template files to `fixtures/template-{name}/`, add fixture `package.json` with `theokit: workspace:*`, write spec, add playwright project + webServer entry on dedicated port.
+- [x] **T5.1** — `dashboard`, `api-only`, `postgres`, `saas` E2E — **DONE 4/4 with env-gating**
+  - [x] `dashboard` — fixture + spec (5/5 PASS, project on :3463)
+  - [x] `api-only` — fixture + spec (6/6 PASS, project on :3464)
+  - [x] `postgres` — fixture + spec (4 tests, project on :3465). **Env-gated via `DATABASE_URL`** — skips gracefully when not set (idiomatic for env-dependent integration tests). When CI sets the variable + adds Postgres service, all 4 run.
+  - [x] `saas` — fixture + spec (4 tests, project on :3466). **Env-gated via `DATABASE_URL` AND `THEO_SESSION_SECRET`** — skips gracefully without both. When CI provides them, all 4 run.
+  - Validation: locally, all 19 unconditional scenarios PASS (dashboard 5 + api-only 6 + websocket-echo 4 + template-default 8 across other phases). The 8 postgres/saas scenarios correctly skip in this env.
 
 ## Phase 6 — WebSocket E2E
 

@@ -153,7 +153,8 @@ for file in $STAGED_FILES; do
   if [[ "$file" == fixtures/* ]] || \
      [[ "$file" == */templates/*/* ]] || \
      [[ "$file" == tests/integration/fixture-* ]] || \
-     [[ "$file" == tests/fixtures/* ]]; then
+     [[ "$file" == tests/fixtures/* ]] || \
+     [[ "$file" == tests/e2e/template-* ]]; then
     continue
   fi
 

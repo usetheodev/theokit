@@ -64,6 +64,8 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | template-api-only | Playwright fixture mirroring the `api-only` create-theo template | framework-maturity-hardening |
 | template-dashboard | Playwright fixture mirroring the `dashboard` create-theo template | framework-maturity-hardening |
 | template-default | Playwright fixture mirroring the default scaffold (Phase 10 — T10.1) | nextjs-maturity |
+| template-postgres | Playwright fixture mirroring the `postgres` create-theo template (env-gated DATABASE_URL) | framework-maturity-hardening |
+| template-saas | Playwright fixture mirroring the `saas` create-theo template (env-gated DATABASE_URL + session secret) | framework-maturity-hardening |
 | theoui-autoinject | TheoUI auto-injection without user-code imports | full-cov |
 | typed-client | end-to-end `theoFetch<typeof GET>` inference | full-cov |
 | upgrade-readiness-clean | clean app surface — `theokit check --upgrade-readiness 0.3` reports zero violations | 0.3-cutover |
