@@ -39,10 +39,12 @@ Tracking implementation of `docs/plans/framework-maturity-hardening-plan.md`
 
 ## Phase 5 — Playwright for 4 remaining templates
 
-- [DEFERRED] **T5.1** — `dashboard`, `api-only`, `postgres`, `saas` E2E
-  - Reason: each template requires a fixture clone + manual package.json + npm-installable deps + Playwright project + webServer entry. The `postgres` and `saas` variants ALSO require a Postgres CI service container. Total scope is multi-hour engineering work.
-  - Pattern documented: `fixtures/websocket-basic/` + `tests/e2e/websocket-echo.spec.ts` show the per-fixture E2E shape.
-  - Recommendation: schedule as a dedicated release item — not a single-iteration task.
+- [PARTIAL 2/4] **T5.1** — `dashboard`, `api-only`, `postgres`, `saas` E2E
+  - [x] `dashboard` — fixture (`fixtures/template-dashboard/`) + spec (5 scenarios, project on :3463)
+  - [x] `api-only` — fixture (`fixtures/template-api-only/`) + spec (6 scenarios incl. validation + CRUD, project on :3464)
+  - [BLOCKED on Postgres] `postgres` — fixture would need running Postgres + DATABASE_URL secret + drizzle migrations. CI infra change, not test code. Pattern: copy template, add Postgres service to .github/workflows/ci.yml, add `pg_isready` wait step (EC-9), write spec.
+  - [BLOCKED on Postgres] `saas` — same Postgres constraint + session secret env.
+  - Pattern locked: copy template files to `fixtures/template-{name}/`, add fixture `package.json` with `theokit: workspace:*`, write spec, add playwright project + webServer entry on dedicated port.
 
 ## Phase 6 — WebSocket E2E
 

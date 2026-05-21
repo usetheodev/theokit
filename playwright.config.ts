@@ -51,6 +51,18 @@ export default defineConfig({
       use: { baseURL: 'http://localhost:3462' },
       testMatch: 'websocket-echo.spec.ts',
     },
+    {
+      // T5.1 — dashboard template (1 of 4)
+      name: 'template-dashboard',
+      use: { baseURL: 'http://localhost:3463' },
+      testMatch: 'template-dashboard.spec.ts',
+    },
+    {
+      // T5.1 — api-only template (2 of 4)
+      name: 'template-api-only',
+      use: { baseURL: 'http://localhost:3464' },
+      testMatch: 'template-api-only.spec.ts',
+    },
   ],
   webServer: [
     {
@@ -103,6 +115,22 @@ export default defineConfig({
       command: `npx tsx ${cliPath} dev --port 3462`,
       cwd: fixture('websocket-basic'),
       port: 3462,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — dashboard template fixture.
+      command: `npx tsx ${cliPath} dev --port 3463`,
+      cwd: fixture('template-dashboard'),
+      port: 3463,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — api-only template fixture.
+      command: `npx tsx ${cliPath} dev --port 3464`,
+      cwd: fixture('template-api-only'),
+      port: 3464,
       reuseExistingServer: false,
       timeout: 180000,
     },
