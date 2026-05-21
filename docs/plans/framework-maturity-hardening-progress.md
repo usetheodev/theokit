@@ -39,7 +39,10 @@ Tracking implementation of `docs/plans/framework-maturity-hardening-plan.md`
 
 ## Phase 5 — Playwright for 4 remaining templates
 
-- [ ] **T5.1** — `dashboard`, `api-only`, `postgres`, `saas` E2E
+- [DEFERRED] **T5.1** — `dashboard`, `api-only`, `postgres`, `saas` E2E
+  - Reason: each template requires a fixture clone + manual package.json + npm-installable deps + Playwright project + webServer entry. The `postgres` and `saas` variants ALSO require a Postgres CI service container. Total scope is multi-hour engineering work.
+  - Pattern documented: `fixtures/websocket-basic/` + `tests/e2e/websocket-echo.spec.ts` show the per-fixture E2E shape.
+  - Recommendation: schedule as a dedicated release item — not a single-iteration task.
 
 ## Phase 6 — WebSocket E2E
 

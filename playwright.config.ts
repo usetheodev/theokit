@@ -45,6 +45,12 @@ export default defineConfig({
       use: { baseURL: 'http://localhost:3461' },
       testMatch: 'devtools.spec.ts',
     },
+    {
+      // T6.1 — WebSocket E2E
+      name: 'websocket-echo',
+      use: { baseURL: 'http://localhost:3462' },
+      testMatch: 'websocket-echo.spec.ts',
+    },
   ],
   webServer: [
     {
@@ -90,6 +96,15 @@ export default defineConfig({
       port: 3461,
       reuseExistingServer: false,
       timeout: 60000,
+    },
+    {
+      // T6.1 — WebSocket echo fixture for the WS E2E spec.
+      // EC-8: webServer timeout 180s for scaffold + first-run install.
+      command: `npx tsx ${cliPath} dev --port 3462`,
+      cwd: fixture('websocket-basic'),
+      port: 3462,
+      reuseExistingServer: false,
+      timeout: 180000,
     },
   ],
 })
