@@ -48,11 +48,12 @@ Tracking implementation of `docs/plans/framework-maturity-hardening-plan.md`
 
 ## Phase 6 — WebSocket E2E
 
-- [PARTIAL] **T6.1** — Chromium WS upgrade + bidi + reconnect
+- [x] **T6.1** — Chromium WS upgrade + bidi + reconnect — **DONE 4/4 scenarios GREEN**
   - [x] Playwright spec written (`tests/e2e/websocket-echo.spec.ts`, 4 scenarios)
   - [x] Fixture page.tsx rewritten with real WS client
+  - [x] Fixture index.html + tsconfig.json added (root cause of original GET 404)
   - [x] Playwright config wired (project + webServer on :3462)
-  - [BLOCKED on fixture install] Real validation: spec runs but the fixture's WS server doesn't accept the upgrade. Investigation needed in `fixtures/websocket-basic/` setup (likely missing devDependencies that theokit dev server needs to bootstrap the `ws` package transitively). Pattern is correct; fixture needs full pnpm install or different node_modules wiring than the `theokit:` symlink alone provides.
+  - [x] Validated: 4/4 PASS in 13.0s (Chromium upgrade + echo + empty message + reconnect)
 
 ## Phase 7 — Load testing SSR
 
