@@ -5,7 +5,7 @@
  */
 
 export type DevtoolsPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-export type DevtoolsTab = 'requests' | 'routes' | 'errors' | 'settings'
+export type DevtoolsTab = 'requests' | 'routes' | 'errors' | 'csrf-readiness' | 'settings'
 export type DevtoolsTheme = 'light' | 'dark' | 'system'
 
 export interface RequestRecord {

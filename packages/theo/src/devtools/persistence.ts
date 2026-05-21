@@ -72,7 +72,13 @@ const VALID_POSITIONS = new Set<DevtoolsPosition>([
   'bottom-right',
 ])
 const VALID_THEMES = new Set<DevtoolsTheme>(['light', 'dark', 'system'])
-const VALID_TABS = new Set<DevtoolsTab>(['requests', 'routes', 'errors', 'settings'])
+const VALID_TABS = new Set<DevtoolsTab>([
+  'requests',
+  'routes',
+  'errors',
+  'csrf-readiness',
+  'settings',
+])
 
 function asPosition(v: unknown): DevtoolsPosition | null {
   return typeof v === 'string' && VALID_POSITIONS.has(v as DevtoolsPosition)

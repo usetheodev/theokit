@@ -51,7 +51,9 @@ test.describe('T1.3 — Devtools shell (Phase 1)', () => {
     expect(panelVisible).toBe(true)
   })
 
-  test('panel has 4 tab buttons (Requests, Routes, Errors, Settings)', async ({ page }) => {
+  test('panel has 5 tab buttons (Requests, Routes, Errors, CSRF Readiness, Settings)', async ({
+    page,
+  }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
     const chip = page.locator('theo-devtools-portal >>> button[aria-label="Open devtools"]')
     await expect(chip).toBeVisible({ timeout: 2000 })
@@ -62,7 +64,8 @@ test.describe('T1.3 — Devtools shell (Phase 1)', () => {
       if (!host?.shadowRoot) return 0
       return host.shadowRoot.querySelectorAll('[role="tab"]').length
     })
-    expect(tabCount).toBe(4)
+    // T2.2 — 5th tab added: csrf-readiness
+    expect(tabCount).toBe(5)
   })
 
   test('wrapper script has position: absolute (EC-1)', async ({ page }) => {
