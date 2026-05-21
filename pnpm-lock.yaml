@@ -137,6 +137,12 @@ importers:
 
   examples/deploy-vercel:
     dependencies:
+      '@usetheo/ui':
+        specifier: ^0.1.0-next.0
+        version: 0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+      lucide-react:
+        specifier: ^0.469.0
+        version: 0.469.0(react@19.2.6)
       react:
         specifier: ^19.0.0
         version: 19.2.6
@@ -152,9 +158,28 @@ importers:
       zod:
         specifier: ^3.24.0
         version: 3.25.76
+    devDependencies:
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.5.0(postcss@8.5.14)
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.14
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.4)
+      tailwindcss-animate:
+        specifier: ^1.0.7
+        version: 1.0.7(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
 
   examples/devtools-demo:
     dependencies:
+      '@usetheo/ui':
+        specifier: ^0.1.0-next.0
+        version: 0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+      lucide-react:
+        specifier: ^0.469.0
+        version: 0.469.0(react@19.2.6)
       react:
         specifier: ^19.0.0
         version: 19.2.6
@@ -170,6 +195,19 @@ importers:
       zod:
         specifier: ^3.24.0
         version: 3.25.76
+    devDependencies:
+      autoprefixer:
+        specifier: ^10.4.0
+        version: 10.5.0(postcss@8.5.14)
+      postcss:
+        specifier: ^8.4.0
+        version: 8.5.14
+      tailwindcss:
+        specifier: ^3.4.0
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.4)
+      tailwindcss-animate:
+        specifier: ^1.0.7
+        version: 1.0.7(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
 
   fixtures/template-default:
     dependencies:
@@ -227,7 +265,7 @@ importers:
         version: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       theokit:
         specifier: ^0.1.0-alpha.4
-        version: 0.1.0-alpha.5(@types/node@25.6.2)(jiti@1.21.7)(react-dom@19.2.6(react@19.2.6))(react-router@7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)(ws@8.20.1)(yaml@2.8.4)(zod@3.25.76)
+        version: 0.1.0-alpha.5(@types/node@25.6.2)(jiti@2.7.0)(react-dom@19.2.6(react@19.2.6))(react-router@7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)(ws@8.20.1)(yaml@2.8.4)(zod@3.25.76)
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -6154,18 +6192,6 @@ snapshots:
       - '@types/react-dom'
       - tailwindcss
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.2(@types/node@25.6.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.4))':
-    dependencies:
-      '@babel/core': 7.29.0
-      '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.29.0)
-      '@babel/plugin-transform-react-jsx-source': 7.27.1(@babel/core@7.29.0)
-      '@rolldown/pluginutils': 1.0.0-beta.27
-      '@types/babel__core': 7.20.5
-      react-refresh: 0.17.0
-      vite: 6.4.2(@types/node@25.6.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.4)
-    transitivePeerDependencies:
-      - supports-color
-
   '@vitejs/plugin-react@4.7.0(vite@6.4.2(@types/node@25.6.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.8.4))':
     dependencies:
       '@babel/core': 7.29.0
@@ -8696,9 +8722,9 @@ snapshots:
     dependencies:
       any-promise: 1.3.0
 
-  theokit@0.1.0-alpha.5(@types/node@25.6.2)(jiti@1.21.7)(react-dom@19.2.6(react@19.2.6))(react-router@7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)(ws@8.20.1)(yaml@2.8.4)(zod@3.25.76):
+  theokit@0.1.0-alpha.5(@types/node@25.6.2)(jiti@2.7.0)(react-dom@19.2.6(react@19.2.6))(react-router@7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)(ws@8.20.1)(yaml@2.8.4)(zod@3.25.76):
     dependencies:
-      '@vitejs/plugin-react': 4.7.0(vite@6.4.2(@types/node@25.6.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.4))
+      '@vitejs/plugin-react': 4.7.0(vite@6.4.2(@types/node@25.6.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.8.4))
       busboy: 1.6.0
       cac: 6.7.14
       react: 19.2.6
@@ -8706,7 +8732,7 @@ snapshots:
       react-router: 7.15.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       superjson: 2.2.6
       tsx: 4.21.0
-      vite: 6.4.2(@types/node@25.6.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.4)
+      vite: 6.4.2(@types/node@25.6.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.8.4)
       zod: 3.25.76
     optionalDependencies:
       ws: 8.20.1
@@ -8963,21 +8989,6 @@ snapshots:
       - terser
       - tsx
       - yaml
-
-  vite@6.4.2(@types/node@25.6.2)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.8.4):
-    dependencies:
-      esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.14
-      rollup: 4.60.3
-      tinyglobby: 0.2.16
-    optionalDependencies:
-      '@types/node': 25.6.2
-      fsevents: 2.3.3
-      jiti: 1.21.7
-      tsx: 4.21.0
-      yaml: 2.8.4
 
   vite@6.4.2(@types/node@25.6.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.8.4):
     dependencies:
