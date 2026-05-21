@@ -6,6 +6,97 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Framework Maturity Hardening — close operational safety-net gaps, 2026-05-21)
+
+Implements `docs/plans/framework-maturity-hardening-plan.md` against the
+2026-05-21 honest maturity audit. Adds operational safety nets for the
+0.3.0 strict cutover (structured telemetry + static analyzer + migration
+guide), Playwright E2E across all 4 templates (2 unconditional + 2
+env-gated), real-Chromium WebSocket E2E, load-test harness with baseline,
+and CI workflows for deploy + atomic multi-package publish.
+
+- **T1.1 EC-3 guard for `theokit check --upgrade-readiness 0.3`** —
+  refuses to scan non-TheoKit projects (reads `package.json`, requires
+  `theokit` in deps or devDeps). 4 new BDD scenarios. New status
+  `'not-a-theokit-project'`.
+- **T2.2 `/__theo/csrf-readiness` endpoint + bounded store** —
+  `csrf-readiness-store.ts` (1000-entry LRU) + `csrf-readiness-endpoint.ts`
+  (GET summary; POST `/reset` enforces CSRF + Origin per EC-15) +
+  Vite middleware mount. 13 unit tests.
+- **T3.1 Migration guide 0.2 → 0.3** — `docs/migration/0.2-to-0.3.md`
+  with jq + Node-only recipes (EC-6 portable to Windows/Alpine) +
+  auto-tested against JSONL fixture so the guide can't rot. 7 tests.
+- **T4.1 Vercel adapter end-to-end validation** —
+  `examples/deploy-vercel/` SSR-enabled minimal app +
+  `scripts/deploy-smoke-vercel.sh` (5-min timeout per EC-7) +
+  `.github/workflows/deploy-vercel-smoke.yml` (path-gated CI).
+  Local smoke PASS recorded in `deploy-evidence.jsonl`. 9 tests.
+- **T5.1 Playwright E2E for 4 templates** — `dashboard` (5 scenarios),
+  `api-only` (6 scenarios incl. CRUD + validation), `postgres`
+  (4 env-gated scenarios), `saas` (4 env-gated scenarios). Postgres +
+  saas use `test.skip()` when `DATABASE_URL` is absent.
+- **T6.1 WebSocket E2E** — `tests/e2e/websocket-echo.spec.ts` validates
+  real Chromium WS upgrade + echo + reconnect against
+  `fixtures/websocket-basic/`. 4/4 scenarios PASS in 13s.
+- **T7.1 Load-test harness** — `scripts/load-test-streaming.mjs`
+  (autocannon) + RELATIVE thresholds (EC-11). First baseline:
+  50 conn × 5s → p99=39ms, RPS=2839, 0 errors. 8 tests.
+- **T8.1 api-middleware integration tests** —
+  `tests/integration/api-middleware-coverage.test.ts` covers
+  uncovered branches (rate-limit 429, batch endpoint, suggestion,
+  pass-through). Minimal `ViteLike` mock (only `ssrLoadModule`).
+- **T9.1 Atomic multi-package publish** —
+  `scripts/publish-coordinated.sh` (dry-run all → publish all →
+  rollback on partial failure per EC-12). 7 tests +
+  `.github/workflows/release-coordinated.yml` (manual dispatch).
+- **Dogfood report** — `docs/audit/dogfood-2026-05-21.md` documents
+  health 78/100 across critical phases (above 70 ship threshold).
+
+### Changed (Framework Maturity Hardening, 2026-05-21)
+
+- **CSRF telemetry plan T2.1 documented as DONE via existing infra** —
+  the `AuditLogger` interface + `safeAudit` fire-and-forget wrapper
+  (from 2026-05-19 security release) already satisfy EC-4 + EC-5.
+- **`fixtures/websocket-basic/`** — added `index.html` + `tsconfig.json`
+  so the dev server can serve the SSR page (was previously a
+  compile-only fixture).
+- **Pre-commit secret scanner allowlist** — extended to include
+  `tests/e2e/template-*.spec.ts` (env-gated specs document demo creds
+  + connection strings as part of the migration recipe).
+
+### Documentation
+
+- `docs/plans/framework-maturity-hardening-plan.md` — 14-task plan
+- `docs/plans/framework-maturity-hardening-progress.md` — live tracker
+- `docs/reviews/edge-case/framework-maturity-hardening-2026-05-21.md` — 24 edge cases (12 MUST FIX incorporated)
+- `docs/audit/dogfood-2026-05-21.md` — dogfood report
+
+### Out of scope / blocked
+
+- **T1.2 (`--fix` mode for `theokit check`)** — deferred per existing
+  ADR D1 in `upgrade-readiness.ts:12` ("NEVER writes user files —
+  lint-only").
+- **T4.1 live Vercel deploy** — workflow committed; unlocks when
+  `VERCEL_TOKEN` CI secret is configured.
+- **T9.1 live npm publish** — workflow committed; unlocks when
+  `NPM_TOKEN` CI secret is configured.
+- **T5.1 postgres + saas execution** — fixtures + specs are env-gated;
+  unlock when CI adds a Postgres service container + `DATABASE_URL` +
+  `THEO_SESSION_SECRET`.
+
+### Validation (2026-05-21 snapshot)
+
+- typecheck (`tsc --noEmit`) ........... PASS
+- lint (`eslint --max-warnings=0`) ..... PASS — 0 errors, 0 warnings
+- format (`prettier --check`) .......... PASS
+- tests ................................ 1774 / 1774
+- Playwright ........................... 49 PASS + 8 skipped (env-gated)
+- publint .............................. All good (both packages)
+- audit (`--prod --audit-level=high`) .. 0 vulnerabilities
+- licenses ............................. 214 packages, all permissive
+- knip ................................. 0 unused
+- Dogfood .............................. 78/100 (above 70 ship threshold)
+
 ### Added (Security hardening — close 9 enterprise gaps, 2026-05-19)
 
 This release closes the nine identified gaps that separated TheoKit from "production-OK for indie/startup" to "enterprise-ready / SOC2-pending". All ten of the original-audit gaps (9 explicit + 1 adjacent OWASP A07 session fixation) are now covered. Zero new npm dependencies — everything composes from Web Crypto + native fetch + the existing hash-wasm path.
