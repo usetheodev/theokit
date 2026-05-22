@@ -4,6 +4,11 @@ export type { RouteConfig } from './define-route.js'
 export { defineAgentEndpoint } from './define-agent-endpoint.js'
 export type { AgentEndpointConfig, AgentEndpointHandlerArgs } from './define-agent-endpoint.js'
 
+export { defineAgentTool } from './define-agent-tool.js'
+export type { DefineAgentToolSpec, CustomTool } from './define-agent-tool.js'
+
+export { streamAgentRun } from './stream-agent-run.js'
+
 export { defineAction } from './define-action.js'
 export type { ActionConfig } from './define-action.js'
 

@@ -21,6 +21,92 @@ Want a polyglot project (Go, Python, Rust, Java, Ruby, PHP, Node)? Use **TheoCre
 npm create theo@latest
 ```
 
+## Your first agent in 5 minutes
+
+Goal: from `npx` to a chat thread powered by your own LLM API key.
+
+### Step 1 — Scaffold (30 s)
+
+```bash
+npx create-theokit my-app
+cd my-app
+```
+
+The default scaffold already ships an **agent surface**: a `ChatThread` rendered with [`@usetheo/ui`](https://npmjs.com/package/@usetheo/ui), an `/api/chat` endpoint, and `useAgentStream` wired to it. With Node ≥ 22 installed, you can boot it now (`pnpm dev`) — the mock at `server/routes/chat.ts` will echo your messages.
+
+### Step 2 — Install the agent SDK (15 s)
+
+```bash
+pnpm add @usetheo/sdk
+```
+
+The SDK ships `Agent.prompt` / `Agent.send` / `defineTool` and routes to providers by model id (`claude-*` for Anthropic, `gpt-*` for other providers via the SDK, `ollama/*` for local). It is the canonical way TheoKit talks to LLMs.
+
+### Step 3 — Add your API key (15 s)
+
+```bash
+echo "ANTHROPIC_API_KEY=sk-ant-..." >> .env
+```
+
+(Get a key at https://console.anthropic.com/settings/keys.)
+
+### Step 4 — Replace the mock (2 min)
+
+Open `server/routes/chat.ts` and swap the body of the handler for this **6-line essence**:
+
+```typescript
+import { Agent } from '@usetheo/sdk'
+import { defineAgentEndpoint, type AgentEvent } from 'theokit/server'
+
+export const POST = defineAgentEndpoint({
+  async *handler({ body }): AsyncGenerator<AgentEvent> {
+    const { message = '' } = (body ?? {}) as { message?: string }
+    try {
+      const result = await Agent.prompt(message, {
+        apiKey: process.env.ANTHROPIC_API_KEY!,
+        model: { id: 'claude-sonnet-4-5-20250929' },
+        throwOnError: true,
+      })
+      yield { type: 'message', content: result.result ?? '' }
+    } catch (err) {
+      yield { type: 'error', message: err instanceof Error ? err.message : String(err) }
+    }
+  },
+})
+```
+
+Five things to notice:
+- `Agent.prompt(message, options)` is the SDK's one-shot helper — create → send → wait → dispose under the hood.
+- The model id (`claude-sonnet-4-5-20250929`) picks the provider via the SDK. Use a `gpt-*` id for other providers, `ollama/llama3.2:3b` for local — full matrix in [`@usetheo/sdk` docs](https://www.npmjs.com/package/@usetheo/sdk).
+- **`throwOnError: true`** turns provider rejections (401, rate limit, etc.) into thrown `AgentRunError` — caught in one place, surfaced via `yield { type: 'error' }`. No silent error swallowing.
+- `yield { type: 'error', ... }` surfaces in the chat thread as a red `AgentErrorCard` (already wired by the default scaffold).
+- `useAgentStream` on the client already attaches `X-Theo-Action: 1` so the framework's CSRF gate accepts your POST.
+
+### Step 5 — Run it (30 s)
+
+```bash
+pnpm dev
+```
+
+Open http://localhost:3000, type a message, hit Send. The chat thread renders the SDK's reply in real time. If you see the error card with "Anthropic API error: auth_failed", your `.env` key is wrong — fix it, restart `pnpm dev`.
+
+### What you just got, mapped
+
+| Capability | Where it lives |
+|---|---|
+| File-based routing → `app/page.tsx` is `/` | TheoKit (`app/**`) |
+| Chat UI (`ChatThread`, `ChatMessage`, `ChatComposer`, `AgentErrorCard`) | `@usetheo/ui` |
+| Agent endpoint primitive (`defineAgentEndpoint`, SSE wire) | TheoKit (`theokit/server`) |
+| Client hook (`useAgentStream`) with auto CSRF + cleanup | TheoKit (`theokit/client`) |
+| LLM call (`Agent.prompt`, provider routing, error model) | `@usetheo/sdk` |
+| Secure session, deploy adapters, type-safe routes | TheoKit (all-in-one) |
+
+### Next steps
+
+- **Streaming tokens** — `Agent.prompt` returns the full answer at once. For token-by-token streaming, use `Agent.create` + `agent.send(...)` + iterate `run.stream()`. The TheoKit-side `defineAgentTool` + token-streaming helper are on the roadmap.
+- **Tool calling** — pass `tools: [defineTool({...})]` to `Agent.create` and the agent can call your functions. The TheoKit `defineAgentTool` wrapper (roadmap) collapses the `tool_call → execute → tool_result` SSE plumbing into a single declaration.
+- **Conversation memory** — switch from `Agent.prompt` (one-shot) to `Agent.getOrCreate(sessionId)` so the conversation persists across requests. The TheoKit `createConversationHistory` primitive (roadmap) bridges this with the framework's session cookie.
+
 ## What You Get
 
 - **Routes are just files** — `app/page.tsx` → `/`. Layouts, errors, loading, not-found — no config.

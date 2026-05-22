@@ -127,9 +127,12 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
     expect(chat).toMatch(/export const POST/)
   })
 
-  it('server/routes/chat.ts has clear "replace with real LLM" comment (EC-11)', () => {
+  it('server/routes/chat.ts has clear documentation as the canonical agent endpoint (EC-11, updated for item #3)', () => {
+    // Updated 2026-05-22 (item #3): chat.ts is no longer a mock with
+    // "replace with X" comments — it's the canonical SDK wiring. Comment now
+    // explains the SDK-shaped contract (Agent.prompt, throwOnError, providers).
     const chat = read('server/routes/chat.ts')
-    expect(chat).toMatch(/replace|substitua|TODO|LLM/i)
+    expect(chat).toMatch(/agent|@usetheo\/sdk|Agent\.prompt|throwOnError/i)
   })
 
   it('T1.1: chat.ts uses defineAgentEndpoint helper (not manual SSE)', () => {

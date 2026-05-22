@@ -161,7 +161,7 @@ export default function Page() {
       return
     }
     const action = QUICK_ACTIONS.find((a) => a.id === id)
-    if (action) handleSubmit(action.label)
+    if (action) handleSubmit(typeof action.label === 'string' ? action.label : action.id)
   }
 
   const isStreaming = status === 'streaming'
@@ -224,9 +224,9 @@ export default function Page() {
                 return (
                   <AgentErrorCard
                     key={item.id}
-                    kind="model"
+                    kind="generic"
                     title="Agent error"
-                    description={item.message}
+                    detail={item.message}
                   />
                 )
               })}
@@ -243,8 +243,8 @@ export default function Page() {
               <AgentErrorCard
                 kind="network"
                 title="Stream ended with an error"
-                description="The connection to the agent endpoint was interrupted. Reset to try again."
-                action={
+                detail="The connection to the agent endpoint was interrupted. Reset to try again."
+                actions={
                   <Button variant="ghost" size="sm" onClick={() => reset()}>
                     Reset
                   </Button>

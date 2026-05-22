@@ -3,3 +3,7 @@ packages:
   - 'my-test'
   - 'examples/*'
   - 'fixtures/template-default'
+  # @usetheo/sdk via sibling checkout (workspace protocol) — required by the
+  # canonical chat.ts wired in fixtures/template-default. pnpm tolerates
+  # missing sibling for contributors without the checkout.
+  - '../theokit-sdk/packages/sdk'

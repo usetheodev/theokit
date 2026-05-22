@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "theokit": "workspace:*",
+    "@usetheo/sdk": "workspace:*",
     "@usetheo/ui": "^0.1.0-next.0",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",

@@ -1,47 +1,66 @@
-import { defineAgentEndpoint, type AgentEvent } from 'theokit/server'
+import { Agent } from '@usetheo/sdk'
+import { z } from 'zod'
+import {
+  defineAgentEndpoint,
+  defineAgentTool,
+  streamAgentRun,
+  type AgentEvent,
+} from 'theokit/server'
 
 /**
- * MOCK AGENT ENDPOINT — REPLACE WITH YOUR REAL LLM PROVIDER.
+ * Chat agent endpoint — powered by `@usetheo/sdk` with one example tool.
  *
- * What this is:
- *   A demo that yields 3 hardcoded events so the default scaffold has
- *   something to render from the first `theokit dev`.
+ * defineAgentTool → Zod 3 in, LLM-facing JSON Schema + parsed handler out.
+ * yield* streamAgentRun → adapts SDK Run lifecycle to AgentEvent SSE wire.
+ * try/catch around dispose → never mask the original SDK error.
  *
- * What to do here:
- *   Substitua este mock pelo seu LLM provider (OpenAI/Anthropic/local).
- *   O shape de AgentEvent é o contrato — qualquer provider que produza
- *   events compatíveis (`message`, `tool_call`, `tool_result`, `error`)
- *   funciona. Para token streaming, prefira UM evento `message` com
- *   content acumulado em vez de um evento por token (evita SSE backpressure).
- *
- * Example real handler:
- *   import { OpenAI } from 'openai'
- *   export const POST = defineAgentEndpoint({
- *     async *handler({ body }) {
- *       const { message } = body as { message: string }
- *       const stream = await openai.chat.completions.create({ stream: true, ... })
- *       let acc = ''
- *       for await (const chunk of stream) {
- *         acc += chunk.choices[0].delta.content ?? ''
- *         yield { type: 'message', content: acc }
- *       }
- *     },
- *   })
- *
- * The `body` is already parsed by the framework (JSON / multipart). Use
- * `body` instead of `request.json()` — `request` is the underlying Node
- * `IncomingMessage` and does not expose a Web-Fetch `.json()` method.
- *
- * The wire format is Server-Sent Events (text/event-stream), produced
- * automatically by `defineAgentEndpoint`:
- *   data: {"type":"message","content":"..."}\n\n
- *   data: {"type":"tool_call","name":"...","args":{...}}\n\n
+ * Provider: prefers OPENROUTER_API_KEY (gateway to many models). Falls back
+ * to ANTHROPIC_API_KEY for direct Anthropic. The SDK parses the model id —
+ * `openrouter/...` routes via OpenRouter; bare `claude-*` ids route direct.
  */
+
+const currentTime = defineAgentTool({
+  name: 'current_time',
+  description: 'Get the current ISO timestamp on the server.',
+  inputSchema: z.object({}),
+  handler: () => new Date().toISOString(),
+})
+
 export const POST = defineAgentEndpoint({
   async *handler({ body }): AsyncGenerator<AgentEvent> {
-    const { message = '' } = (body ?? {}) as { message?: string }
-    yield { type: 'message', content: `Recebi: "${message}"` }
-    yield { type: 'tool_call', name: 'search', args: { q: message } }
-    yield { type: 'message', content: 'Pronto. (Este é um mock — conecte seu LLM aqui.)' }
+    const safeBody =
+      body !== null && typeof body === 'object' && !Array.isArray(body)
+        ? (body as { message?: string })
+        : {}
+    const { message = '' } = safeBody
+    const orKey = process.env.OPENROUTER_API_KEY
+    const anKey = process.env.ANTHROPIC_API_KEY
+    const apiKey = orKey !== undefined && orKey.length > 0 ? orKey : anKey
+    const modelId =
+      orKey !== undefined && orKey.length > 0
+        ? 'openrouter/anthropic/claude-3.5-sonnet'
+        : 'claude-sonnet-4-5-20250929'
+    if (apiKey === undefined || apiKey.length === 0) {
+      yield {
+        type: 'error',
+        message: 'Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY in your .env to enable the agent.',
+      }
+      return
+    }
+    const agent = await Agent.create({
+      apiKey,
+      model: { id: modelId },
+      tools: [currentTime],
+    })
+    try {
+      const run = await agent.send(message)
+      yield* streamAgentRun(run)
+    } finally {
+      try {
+        await agent.dispose()
+      } catch (e) {
+        console.warn('[chat] agent.dispose() failed:', e)
+      }
+    }
   },
 })

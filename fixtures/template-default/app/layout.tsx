@@ -31,9 +31,7 @@ export default function RootLayout() {
             <span className="inline-flex items-center gap-2">
               <Bot className="size-5 text-primary" aria-hidden />
               <span className="font-semibold text-sm tracking-tight">Theo Agent</span>
-              <Badge variant="outline" size="sm">
-                v0.1
-              </Badge>
+              <Badge variant="outline">v0.1</Badge>
             </span>
           </Tooltip>
         </TopNav.Left>

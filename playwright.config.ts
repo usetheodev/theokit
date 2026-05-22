@@ -41,6 +41,14 @@ export default defineConfig({
       testMatch: 'template-default.spec.ts',
     },
     {
+      // T2.2 — Canonical chat.ts via @usetheo/sdk Agent.prompt + throwOnError.
+      // Reuses template-default fixture on a separate port; fake ANTHROPIC_API_KEY
+      // makes Anthropic return 401 → SDK throws AgentRunError → SSE error event.
+      name: 'template-default-canonical-chat',
+      use: { baseURL: 'http://localhost:3470' },
+      testMatch: 'template-default-canonical-chat.spec.ts',
+    },
+    {
       name: 'devtools',
       use: { baseURL: 'http://localhost:3461' },
       testMatch: 'devtools.spec.ts',
@@ -118,6 +126,17 @@ export default defineConfig({
       command: `npx tsx ${cliPath} dev --port 3461`,
       cwd: fixture('template-default'),
       port: 3461,
+      reuseExistingServer: false,
+      timeout: 60000,
+    },
+    {
+      // T2.2 — Canonical chat.ts spec. Same fixture, separate port. No API
+      // key set — the fixture yields a friendly "Set OPENROUTER_API_KEY or
+      // ANTHROPIC_API_KEY in your .env" error event, which the spec asserts.
+      // Avoids committing any fake-looking secrets that trip secret scanners.
+      command: `npx tsx ${cliPath} dev --port 3470`,
+      cwd: fixture('template-default'),
+      port: 3470,
       reuseExistingServer: false,
       timeout: 60000,
     },

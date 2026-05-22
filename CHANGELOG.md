@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (Macro Roadmap item #4 — `defineAgentTool` + `streamAgentRun`, 2026-05-22)
+
+**Tool calling stops being manual wiring.** Adding a tool to a TheoKit agent route went from ~40 LOC of `for await (msg of run.stream())` plumbing to **one line: `yield* streamAgentRun(run)`**. Default scaffold now ships a `current_time` tool example proving the wire end-to-end.
+
+- **`defineAgentTool({ name, description, inputSchema, handler })`** in `packages/theo/src/server/define-agent-tool.ts`. Builds a `@usetheo/sdk` `CustomTool` from a Zod 3 schema. Uses `zod-to-json-schema` to convert the schema (bypassing SDK's `defineTool` which requires Zod 4 — see ADR D1 in plan). Inline runtime parse via the Zod schema; bad LLM-supplied input throws `ZodError` which the SDK converts to `tool_result(isError)`. Validates tool name regex `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$`, rejects non-`ZodObject` root schemas, warns (not throws) on empty descriptions. Strips top-level `$schema` so Anthropic accepts the JSON Schema.
+- **`streamAgentRun(run)`** in `packages/theo/src/server/stream-agent-run.ts`. Async generator that consumes the SDK `Run.stream()` (`SDKMessage` discriminated union) and yields `AgentEvent`s for the SSE wire. Maps `assistant.text` → `message`; `tool_call(running)` → `tool_call`; `tool_call(completed)` → `tool_result`; `tool_call(error)` → `error`; terminal `run.wait()` `status=error` → final `error` event. Cancel runs do NOT yield error (cancel ≠ error). EC-1 hardened: `safeJsonStringify` coerces non-JSON-serializable tool results (bigint, circular refs) to `'[Unserializable]'` instead of crashing `encodeSSE`. EC-3 hardened: `safeArgs` type-guard before narrowing `unknown` to `Record<string, unknown>` (no bare `as` cast).
+- **Default scaffold ships a tool example.** Both `fixtures/template-default/server/routes/chat.ts` and `packages/create-theo/templates/default/server/routes/chat.ts` updated to use `Agent.create({ tools: [currentTime] })` + `yield* streamAgentRun(run)`. Tool is `current_time`, no API needed — deterministic for Playwright. EC-2 hardened: `try { await agent.dispose() } catch (e) { console.warn(...) }` in `finally` block so dispose failures don't mask the original SDK error (auth_failed, tool_dispatch_failed, etc.). LOC delta vs item-3 baseline: chat.ts is 53 lines (under the 60-line budget).
+- **Playwright spec** extended in `tests/e2e/template-default-canonical-chat.spec.ts` with 2 new tests: (1) tool-defined route boots without crash (proves defineAgentTool + streamAgentRun load cleanly server-side, zero console errors); (2) auth error surfaces via SSE even with tool defined (regression for EC-2 — proves dispose try/catch did not mask the actionable error). **5/5 PASSED in 2 consecutive CI runs.**
+- **`zod-to-json-schema@^3.24.0`** added as a direct dependency of `packages/theo`. ~5 KB minified, zero transitive deps, MIT, Zod 3 native, 3M weekly DLs. Per ADR D4. Server bundle delta ≈ +11 KB total. Client bundle unchanged (`+0 KB`) — server-only primitives, tree-shaken from client.
+- **Edge-case review** at `docs/reviews/edge-case-plan/item-4-define-agent-tool-edge-cases-2026-05-22.md` — 3 MUST FIX + 5 SHOULD TEST + 4 DOCUMENT findings, all incorporated in implementation (not deferred as follow-ups).
+
+**Tests:** 1859/1859 unit GREEN (+44 vs item-3's 1815), 127/127 agent-focused, Playwright 5/5, `tsc --noEmit` zero errors, zero `any` in production code. **Dogfood `full` health 80/100** ≥ 70 (ship-it), zero plan-caused regressions, report at `docs/audit/dogfood-2026-05-22-item-4.md`.
+
+### Added (Macro Roadmap item #3 — canonical chat.ts via @usetheo/sdk, 2026-05-22)
+
+**Default scaffold now ships the canonical `Agent.prompt` wiring out-of-the-box. `npx create-theokit my-app && pnpm install && echo ANTHROPIC_API_KEY=… >> .env && pnpm dev` produces a working chat in ~5 minutes with no `import { OpenAI }` artefact.**
+
+- **Canonical `chat.ts`** in both `fixtures/template-default/server/routes/chat.ts` and `packages/create-theo/templates/default/server/routes/chat.ts`: 10-line snippet using `Agent.prompt(message, { apiKey, model, throwOnError: true })` in a try/catch. EC-4 defensive body guard (`typeof body === 'object' && !Array.isArray(body)`). EC-5 empty-reply fallback (`result.result ?? ''`).
+- **`@usetheo/sdk` is a default dependency** of the scaffold (was opt-in `pnpm add`). `package.json.tmpl` ships `"@usetheo/sdk": "^1.0.0"`.
+- **Node ≥ 22.12.0 preflight** in `create-theokit` (`packages/create-theo/src/preflight-node.ts`). Zero-dep semver comparator. Refuses scaffold (exit 1, no files written) when Node is below the SDK floor. Actionable error message hints `nvm install 22` and lists alternative version managers (fnm, volta, asdf, nvs).
+- **Anti-stack lint gate** (`tests/unit/scaffold-no-openai-anti-stack.test.ts`): greps both scaffold chat.ts files for `openai` (case-insensitive). Fails CI if a future PR re-introduces the raw OpenAI/Anthropic SDK as the canonical path.
+- **README tutorial "Your first agent in 5 minutes"** updated to the 6-line `throwOnError: true` essence (canonical, idiomatic try/catch). 7 RED tests pin the snippet shape, scope grep to the tutorial section (EC-8 — no false positives if `result.status` appears in later docs).
+- **Playwright spec** (`tests/e2e/template-default-canonical-chat.spec.ts`) boots the fixture on port 3470 with `ANTHROPIC_API_KEY=sk-ant-fake-for-playwright-canonical-chat`, exercises the composer → Send flow, asserts the `AgentErrorCard` renders with `auth_failed` / 401 text. Explicit timeouts (EC-6) prevent CI-slow flake. **3/3 tests green** — full UI roundtrip validated.
+- **Template UI bugs fixed in the same session** (`fixtures/template-default/app/page.tsx` + `app/layout.tsx`): `<AgentErrorCard kind="model">` (crashed React with "Element type is invalid") → `kind="generic"`; `description` prop (doesn't exist on TheoUI's AgentErrorCard) → `detail`; `action` → `actions`; `Badge size="sm"` (TheoUI Badge has no `size` prop) → removed; `QuickAction.label` is `ReactNode` not `string` → typeof narrow before passing to handler. Closes EC-12 from the plan's edge-case review.
+- **Cross-repo SDK contributions** (in `theokit-sdk`, not this repo): new public `AgentRunError` class (extends `TheokitAgentError`, exported from barrel); new `AgentOptions.throwOnError?: boolean` (default false, non-breaking). 16 tests cover the new surface end-to-end (`tests/errors-agent-run-error.test.ts` + `tests/agent-prompt-throw-on-error.test.ts`). SDK CHANGELOG + `docs.md` updated.
+
+**Manual smoke verified 2026-05-22**: `pnpm dev` in fixture-template-default with fake key → `curl -X POST /api/chat -H "X-Theo-Action: 1" -d '{"message":"hi"}'` returns `data: {"type":"error","message":"Anthropic API error: auth_failed (HTTP 401)"}` — exactly the contract the tutorial promises.
+
+**Deferred (operator gate, not loop-completable):** T5.0 — `pnpm publish @usetheo/sdk@1.x.0` to npm registry. SDK code change is shipped; npm propagation requires real publish credentials. The README snippet works against the local workspace symlink today; works against npm once T5.0 ships.
+
+**Tests:** 1815/1815 GREEN, `tsc --noEmit` zero errors, full TheoKit suite + SDK 113 tests path-guard+tools+errors+throwOnError isolation green.
+
+### Removed (Studio scaffold reverted — out of TheoKit scope, 2026-05-21)
+
+The "Studio" experiment (embedded coding agent inside the dev server) was reverted in full. It violated TheoKit's explicit "Out of scope — built-in agent orchestration" rule documented in `theokit/CLAUDE.md` and duplicated the role of TheoCode (the ecosystem's coding-agent product). TheoKit's mission is **"the Next.js for agents"** — the framework where someone builds *their own* agent app — not a coding agent itself. The Studio source, tests, fixture, plan, and CHANGELOG entry are all removed. SDK contributions made along the way (see `@usetheo/sdk` CHANGELOG: public `path-safety` sub-export + new `tools` sub-export + defence-in-depth fix in `assertNoSymlinkEscape`) are retained because they are universally useful to any coding agent built on top of `@usetheo/sdk`.
+
 ### Added (Framework Maturity Hardening — close operational safety-net gaps, 2026-05-21)
 
 Implements `docs/plans/framework-maturity-hardening-plan.md` against the

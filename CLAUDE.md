@@ -110,6 +110,68 @@ The **vocabulary table** and **before/after examples** are living — add new en
 
 ---
 
+## Macro Roadmap — "Next.js for agents" delivery
+
+**Mission (locked 2026-05-21):** TheoKit is the Next.js for agents. The framework where someone builds *their own* agent app. Not a coding agent itself. See [[project-theokit-purpose]] in memory.
+
+Where we stand today: the primitives ship (`defineAgentEndpoint`, `useAgentStream`, `AgentEvent`, default agent-shaped scaffold). What separates the current state from "anyone builds their agent in 5 minutes" are the convergence layers below — ordered by ROI, ~3 weeks of focused work.
+
+| # | Phase | Deliverable | Effort | Status | Why it matters |
+|---|---|---|---|---|---|
+| 1 | A · Unblock | Fix `useAgentStream` to send `X-Theo-Action: 1` on every non-GET (default chat demo emits `csrf.warn` today) | 30 min | ✅ Done (T1.1, nextjs-maturity) — `agent-stream-core.ts:75` + 3 tests in `use-agent-stream.test.ts` | Unconditional blocker of 0.3.0 release |
+| 2 | A · Unblock | Tutorial **"Your first agent in 5 minutes"** in README (scaffold → API key → 5 lines → working chat) | 4 h | ✅ Done 2026-05-22 — `README.md` "Your first agent in 5 minutes" section; validated empirically via fixture experiment (10-line essence, not 5 — see frictions below) | Exposes real gaps; unlocks "how do I start?" |
+| 3 | B · Convergence | Canonical `chat.ts` wires `@usetheo/sdk` `Agent.prompt` + `throwOnError`; scaffold ships SDK as default dep; Node ≥ 22.12 preflight; anti-stack lint gate; 6-line README snippet | 1 d | ✅ Done 2026-05-22 — Phase 1 SDK (`AgentRunError` + `throwOnError`, 16 tests), T2.1 fixture (8 tests), **T2.2 Playwright 3/3 GREEN** (composer renders + typed-and-Enter + single SSE error event — found and FIXED 6 template UI bugs in same session: AgentErrorCard kind/detail/actions, Badge.size, QuickAction.label narrow, SDK DTS workaround), T2.3 lint gate (7 tests), T3.1 scaffold template (5 tests), T4.1 preflight (14 tests + live-fired on Node 20 in dogfood). **T5.0 SDK publish DEFERRED to operator (npm auth).** Full suite 1815/1815 + manual SSE smoke verified. **Dogfood `full` health 78/100** ≥ 70 (ship-it), zero plan-caused regressions, report at `docs/audit/dogfood-2026-05-22.md`. Plan at `docs/plans/item-3-canonical-chat-sdk-wiring-plan.md` | Reduces mock-replace from ~30 LOC to ~10 lines (10-line wired in scaffold, 6-line documented in README using throwOnError) |
+| 4 | B · Convergence | `defineAgentTool({ name, description, inputSchema, handler })` + `streamAgentRun(run)` — TheoKit-native sugar producing a `CustomTool` consumable by `Agent.create({ tools })`, plus SSE wire bridge that maps SDK `Run.stream()` SDKMessage → `AgentEvent` (`tool_call` → execute → `tool_result`) | 2 d | ✅ Done 2026-05-22 — T1.1 `defineAgentTool` (9 unit + 4 type tests; uses `zod-to-json-schema` to bridge Zod 3 → CustomTool, avoiding Zod 3 vs 4 dual-package hazard per ADR D1); T2.1 `streamAgentRun` (18 unit + 2 type tests with EC-1/EC-3/EC-4/EC-5/EC-8 inline); T3.1 fixture+template canonical chat updated with `current_time` tool example, EC-2 dispose try/catch (11+7 unit tests, byte-equal fixture/template); T4.1 **Playwright 5/5 GREEN** in 2 consecutive runs (3 item-3 + 2 item-4 new specs). Full suite 1859/1859 unit + 127/127 agent-focused. **Dogfood `full` health 80/100** ≥ 70, zero plan-caused regressions, report at `docs/audit/dogfood-2026-05-22-item-4.md`. Plan at `docs/plans/item-4-define-agent-tool-plan.md`. | Tool calling stops being manual wiring (~40 LOC of `for await (msg of run.stream())` boilerplate → 1 line `yield* streamAgentRun(run)`); reuses SDK's tool runtime |
+| 5 | B · Convergence | `createConversationHistory({ sessionId })` primitive — **wraps SDK `Agent.getOrCreate(sessionId)` + Memory layer**, plus session-cookie bridge so a TheoKit session resumes the right SDK agent | 1.5 d | ⏳ Pending | Conversation memory becomes zero-config by riding on SDK's Memory subsystem |
+| 6 | C · Proof | `examples/chat-anthropic/`, `examples/agent-with-tools/`, `examples/agent-with-memory/` — **every example uses `@usetheo/sdk` + `@usetheo/ui` end-to-end** (no naked provider SDK as canonical path) | 3 d | ⏳ Pending | Onboarding via real example projects on the locked stack |
+| 7 | C · Proof | Validate Vercel + Cloudflare Workers SSE end-to-end against a real deploy (not just adapter declarations) | 1 d | ⏳ Pending | Honesty in deploy adapter claims |
+| 8 | C · Proof | Playwright suite for the other 4 templates (`dashboard`, `api-only`, `postgres`, `saas`) | 2 d | ⏳ Pending | Regression coverage parity with `template-default` |
+
+**Total budget:** ~3 weeks of focused work. **Dependencies:** Phase A unblocks the 0.3.0 cutover; Phase B can run in parallel with the 0.3.0 warn-mode telemetry window; Phase C ships alongside or after 0.3.0.
+
+**Done definition for "Next.js for agents":**
+
+- `npm create theokit my-app` → chat thread (rendered with `@usetheo/ui` components) live in <30 seconds
+- Replace `server/routes/chat.ts` mock with 5 lines of `@usetheo/sdk` `createAgentFactory` + `Agent.send` → working LLM chat (SDK handles the provider — Anthropic, OpenAI, Ollama, etc.)
+- Add a tool via `defineAgentTool` → wraps SDK `defineTool`; agent uses it without manual `tool_call` plumbing
+- Add conversation history via `createConversationHistory` → wraps SDK `Agent.getOrCreate(sessionId)` + Memory; persistence across reloads is zero-config
+- README has a guided "5 minutes to first agent" path that a new developer can follow without reading the rest of the docs
+- 8 deploy adapters proven by `examples/chat-anthropic` deployed to at least 2 platforms (Node + one of Vercel/CF Workers)
+
+**Locked stack assumption:** every deliverable above wires `@usetheo/ui` (UI surface) + `@usetheo/sdk` (agent runtime). Not "evaluate vs alternatives" — premise. New TheoKit primitives are sugar/wrappers over what the SDK / UI already ship, never parallel implementations.
+
+Anything beyond this list is **out of scope** for the "Next.js for agents" milestone. Built-in agent orchestration, embedded coding agents (the Studio detour), agent marketplaces, hosted memory — all explicitly out of scope per `## Architectural decisions on record` below.
+
+### Frictions surfaced by item #2 (RESOLVED by item #3 — 2026-05-22 dogfood)
+
+Empirical experiment on 2026-05-22 (boot `fixtures/template-default`, replace mock with `Agent.prompt`, hit `/api/chat` with fake key). All friction below was real and reproducible; items #3 closed them.
+
+**TheoKit-side (item #3 shipped):**
+
+1. ✅ **Default mock comment referenced `import { OpenAI } from 'openai'`** — anti-stack. Item #3 T2.1 + T3.1 rewrote both copies of `chat.ts` to import `Agent` from `@usetheo/sdk`. T2.3 lint gate (`tests/unit/scaffold-no-openai-anti-stack.test.ts`) ensures no regression.
+2. ✅ **`@usetheo/sdk` was not a default dep.** Item #3 T3.1 added `"@usetheo/sdk": "^1.0.0"` to `packages/create-theo/templates/default/package.json.tmpl`. Fixture uses `workspace:*`.
+3. ✅ **Pre-existing TS errors + runtime crashes in template default** (`Badge size`, `AgentErrorCardProps.description`, `AgentErrorCard kind="model"` React-explode, `QuickAction.label` ReactNode→string narrow). Discovered via Playwright debugging during item #3 dogfood; ALL FIXED in same session (see `docs/audit/dogfood-2026-05-22.md` bug table). Closed EC-12.
+
+**SDK-side (item #3 shipped via cross-repo PRs):**
+
+4. ✅ **`Agent.prompt` silent-error trap.** SDK PR added `AgentOptions.throwOnError?: boolean` + `AgentRunError` class. Default `false` (non-breaking). Tutorial uses `throwOnError: true` for 6-line idiomatic try/catch. 16 tests pin the contract. CHANGELOG + `docs.md` updated. **T5.0 npm publish DEFERRED to operator (npm auth).**
+5. ✅ **Node ≥ 22.12 preflight.** Item #3 T4.1 added `packages/create-theo/src/preflight-node.ts` (zero-dep `compareSemver` + `assertNodeVersion`). 14 unit tests + LIVE-fired during dogfood Phase 2 (Node 20.19.2 refused with actionable nvm message).
+6. ⏳ **Dev server `Failed to resolve import "theokit/devtools/entry"` Vite pre-transform error** — cosmetic, devtools still mount. NOT addressed in item #3. Tracked for `dev-server-reliability-engineer` follow-up.
+
+**Cumulative dogfood verdict for items #2 + #3:** Health 78/100 (`docs/audit/dogfood-2026-05-22.md`), zero plan-caused regressions, 1815/1815 unit tests, Playwright canonical-chat 3/3 GREEN.
+
+### SDK plan (cross-repo) — required for items 3-5
+
+| SDK change | File | Test | Blocks item |
+|---|---|---|---|
+| Add `throwOnError?: boolean` to `AgentOptions`; on `true`, `Agent.prompt` throws `AgentRunError` carrying `error.message` + `error.code` + `error.provider` | `theokit-sdk/packages/sdk/src/agent.ts` (`prompt` impl) + `types/agent.ts` (option) | `theokit-sdk/packages/sdk/tests/agent-prompt-throw-on-error.test.ts` — fake provider 401, expect throw | Item #3 (tutorial simplification) |
+| (To be evaluated during item #4) — does the SDK already adapter `SDKMessage` → AgentEvent? If not, expose helper in `@usetheo/sdk` | TBD by item #4 spike | TBD | Item #4 (`defineAgentTool`) |
+| (To be evaluated during item #5) — does `Agent.getOrCreate(sessionId)` work zero-config with a string id? Does it persist conversation history out-of-the-box? | TBD by item #5 spike | TBD | Item #5 (`createConversationHistory`) |
+
+These SDK tasks are tracked in the active TheoKit plan and will be implemented in `theokit-sdk/` (RED → GREEN → `docs.md` + `CHANGELOG.md`) before the TheoKit-side wrapper consumes them.
+
+---
+
 ## Roadmap
 
 Honest north star, version by version. **What is on this list is committed; what is missing is not on the runway yet.** Move items between sections via PR with a one-line rationale. Do not delete a section without explicit strategic review.
