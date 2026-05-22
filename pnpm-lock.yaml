@@ -202,8 +202,8 @@ importers:
   examples/deploy-vercel:
     dependencies:
       '@usetheo/ui':
-        specifier: ^0.1.0-next.0
-        version: 0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+        specifier: ^0.3.0-next.0
+        version: 0.3.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))(yaml@2.8.4)
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.6)
@@ -239,8 +239,8 @@ importers:
   examples/devtools-demo:
     dependencies:
       '@usetheo/ui':
-        specifier: ^0.1.0-next.0
-        version: 0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+        specifier: ^0.3.0-next.0
+        version: 0.3.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))(yaml@2.8.4)
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.6)
@@ -285,8 +285,8 @@ importers:
         specifier: workspace:*
         version: link:../../../theokit-sdk/packages/sdk
       '@usetheo/ui':
-        specifier: ^0.1.0-next.0
-        version: 0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+        specifier: ^0.3.0-next.0
+        version: 0.3.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))(yaml@2.8.4)
       grammy:
         specifier: ^1.30.0
         version: 1.43.0
@@ -343,8 +343,8 @@ importers:
         specifier: workspace:*
         version: link:../../../theokit-sdk/packages/sdk
       '@usetheo/ui':
-        specifier: ^0.1.0-next.0
-        version: 0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+        specifier: ^0.3.0-next.0
+        version: 0.3.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))(yaml@2.8.4)
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@19.2.6)
@@ -2047,12 +2047,64 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@usetheo/ui@0.1.0-next.0':
-    resolution: {integrity: sha512-MloXBnryZ0QWVXZiun8Br1xQUuHRj7TUoG4ryb9q0BVExmN9eckmFTXp/3yNXpUGDwdVT4NtN4HNZpirfAyeqQ==}
+  '@usetheo/ui@0.3.0-next.0':
+    resolution: {integrity: sha512-l05PurdcPXp2mhAj0AeC0GDq7RcZGpPbefEyOxEUqKQ8cKJrlGi89v/41Js8tQCqWEC2CeqAwCyv+EmJHuICLQ==}
     engines: {node: '>=20'}
     peerDependencies:
+      hast-util-from-html: ^2.0.0
+      hast-util-sanitize: ^5.0.0
+      hast-util-to-jsx-runtime: ^2.0.0
+      katex: ^0.16.0
+      mdast-util-from-markdown: ^2.0.0
+      mdast-util-gfm: ^3.0.0
+      mdast-util-math: ^3.0.0
+      mdast-util-to-hast: ^13.0.0
+      mermaid: ^11.0.0
+      micromark-extension-gfm: ^3.0.0
+      micromark-extension-math: ^3.0.0
+      perfect-freehand: ^1.2.0
       react: '>=18.2.0 <20'
       react-dom: '>=18.2.0 <20'
+      roughjs: ^4.6.0
+      shiki: ^1.0.0
+      unist-util-visit: ^5.0.0
+      unist-util-visit-parents: ^6.0.0
+      yaml: ^2.0.0
+    peerDependenciesMeta:
+      hast-util-from-html:
+        optional: true
+      hast-util-sanitize:
+        optional: true
+      hast-util-to-jsx-runtime:
+        optional: true
+      katex:
+        optional: true
+      mdast-util-from-markdown:
+        optional: true
+      mdast-util-gfm:
+        optional: true
+      mdast-util-math:
+        optional: true
+      mdast-util-to-hast:
+        optional: true
+      mermaid:
+        optional: true
+      micromark-extension-gfm:
+        optional: true
+      micromark-extension-math:
+        optional: true
+      perfect-freehand:
+        optional: true
+      roughjs:
+        optional: true
+      shiki:
+        optional: true
+      unist-util-visit:
+        optional: true
+      unist-util-visit-parents:
+        optional: true
+      yaml:
+        optional: true
 
   '@vitejs/plugin-react@4.7.0':
     resolution: {integrity: sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA==}
@@ -6476,7 +6528,7 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.12.2':
     optional: true
 
-  '@usetheo/ui@0.1.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))':
+  '@usetheo/ui@0.3.0-next.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))(yaml@2.8.4)':
     dependencies:
       '@radix-ui/react-avatar': 1.1.11(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-checkbox': 1.3.3(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -6499,6 +6551,9 @@ snapshots:
       react-dom: 19.2.6(react@19.2.6)
       tailwind-merge: 2.6.1
       tailwindcss-animate: 1.0.7(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.4))
+      zod: 4.4.3
+    optionalDependencies:
+      yaml: 2.8.4
     transitivePeerDependencies:
       - '@types/react'
       - '@types/react-dom'
