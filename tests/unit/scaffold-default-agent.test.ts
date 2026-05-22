@@ -201,23 +201,24 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
     expect(layout).toMatch(/<Outlet/)
   })
 
-  it('template ships Tailwind + PostCSS config (TheoUI requires Tailwind v3 processing)', () => {
-    expect(() => read('tailwind.config.ts')).not.toThrow()
-    expect(() => read('postcss.config.js')).not.toThrow()
+  it('zero-config: template DOES NOT ship tailwind.config.ts or postcss.config.js (Phase 3 / @usetheo/ui ^0.5)', () => {
+    expect(() => read('tailwind.config.ts')).toThrow()
+    expect(() => read('postcss.config.js')).toThrow()
   })
 
-  it('tailwind.config scans app/, server/, and @usetheo/ui for utility classes', () => {
-    const cfg = read('tailwind.config.ts')
-    expect(cfg).toMatch(/app\/\*\*/)
-    expect(cfg).toMatch(/@usetheo\/ui/)
+  it('layout imports @usetheo/ui/styles.css (Tailwind v4 entry — pre-bundled by @usetheo/ui)', () => {
+    const layout = read('app/layout.tsx')
+    expect(layout).toMatch(/import\s+['"]@usetheo\/ui\/styles\.css['"]/)
   })
 
-  it('package.json.tmpl declares tailwindcss + postcss + lucide-react', () => {
+  it('package.json.tmpl declares tailwindcss@^4 + @tailwindcss/vite (v4 zero-config) + lucide-react', () => {
     const pkg = read('package.json.tmpl')
-    expect(pkg).toMatch(/"tailwindcss"/)
-    expect(pkg).toMatch(/"postcss"/)
-    expect(pkg).toMatch(/"autoprefixer"/)
-    expect(pkg).toMatch(/"tailwindcss-animate"/)
+    expect(pkg).toMatch(/"tailwindcss":\s*"\^4/)
+    expect(pkg).toMatch(/"@tailwindcss\/vite":\s*"\^4/)
     expect(pkg).toMatch(/"lucide-react"/)
+    // v3 toolchain removed — TheoKit's vite-plugin auto-chains v4 + UI plugin
+    expect(pkg).not.toMatch(/"postcss":/)
+    expect(pkg).not.toMatch(/"autoprefixer":/)
+    expect(pkg).not.toMatch(/"tailwindcss-animate":/)
   })
 })

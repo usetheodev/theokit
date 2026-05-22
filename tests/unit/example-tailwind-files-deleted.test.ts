@@ -21,12 +21,12 @@ import { describe, expect, it } from 'vitest'
 
 const EXAMPLE = resolve(process.cwd(), 'examples/full-stack-agent')
 
-describe('T3.5 — example tailwind/postcss files (target state, gated on cross-repo)', () => {
-  it.skip('tailwind.config.ts deleted', () => {
+describe('T3.5 — example tailwind/postcss files DELETED (zero-config wired via @usetheo/ui@^0.5)', () => {
+  it('tailwind.config.ts deleted', () => {
     expect(existsSync(resolve(EXAMPLE, 'tailwind.config.ts'))).toBe(false)
   })
 
-  it.skip('postcss.config.js deleted', () => {
+  it('postcss.config.js deleted', () => {
     expect(existsSync(resolve(EXAMPLE, 'postcss.config.js'))).toBe(false)
   })
 

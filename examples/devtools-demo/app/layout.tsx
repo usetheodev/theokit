@@ -1,3 +1,5 @@
+import '@usetheo/ui/styles.css'
+
 import { Outlet, Link } from 'react-router'
 import { ThemeSwitcher, Tooltip } from '@usetheo/ui'
 import { Bug, Home, Info, Package } from 'lucide-react'

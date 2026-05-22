@@ -1,3 +1,5 @@
+import '@usetheo/ui/styles.css'
+
 import { Outlet } from 'react-router'
 import {
   Sidebar,
