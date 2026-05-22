@@ -20,10 +20,14 @@ function readChat(): string {
   return readFileSync(CHAT_PATH, 'utf-8')
 }
 
-describe('fixtures/template-default canonical chat.ts (item #4)', () => {
-  it('imports Agent from @usetheo/sdk (no naked OpenAI/Anthropic SDK)', () => {
+describe('fixtures/template-default canonical chat.ts (item #5)', () => {
+  it('uses @usetheo/sdk indirectly via createConversationHistory (no naked Agent import needed)', () => {
     const src = readChat()
-    expect(src).toMatch(/import\s+\{\s*Agent\s*\}\s+from\s+['"]@usetheo\/sdk['"]/)
+    // item #5: agent acquisition is via createConversationHistory which
+    // dynamically imports the SDK. No direct `import { Agent } from '@usetheo/sdk'`
+    // line in the user-facing scaffold (kept clean).
+    expect(src).toMatch(/createConversationHistory/)
+    expect(src).not.toMatch(/import\s+\{\s*Agent\s*\}\s+from\s+['"]@usetheo\/sdk['"]/)
   })
 
   it('does NOT mention "openai" anywhere (anti-stack guard)', () => {
@@ -48,12 +52,26 @@ describe('fixtures/template-default canonical chat.ts (item #4)', () => {
     expect(src).toMatch(/yield\*\s+streamAgentRun\(/)
   })
 
-  it('EC-2 — disposes agent in a try/catch inside finally (never mask original error)', () => {
+  it('item #5 — does NOT call agent.dispose() (continuity requires keeping it alive)', () => {
     const src = readChat()
-    // Find the finally block and check it contains: try { await agent.dispose()
-    expect(src).toMatch(/finally\s*\{[\s\S]*try\s*\{\s*await\s+agent\.dispose\(\)/)
-    // Catch handler must log instead of swallowing silently
-    expect(src).toMatch(/catch\s*\([^)]*\)\s*\{[\s\S]*console\.warn/)
+    // Strip line comments before checking — the file MAY mention dispose in
+    // an explanatory `// Intentionally NO agent.dispose()` comment.
+    const codeOnly = src
+      .split('\n')
+      .map((line) => line.replace(/\/\/.*$/, ''))
+      .join('\n')
+    expect(codeOnly).not.toMatch(/agent\.dispose\(/)
+  })
+
+  it('item #5 — imports createConversationHistory from theokit/server', () => {
+    const src = readChat()
+    expect(src).toMatch(/createConversationHistory/)
+    expect(src).toMatch(/from\s+['"]theokit\/server['"]/)
+  })
+
+  it('item #5 — passes cookieHeaders to createConversationHistory', () => {
+    const src = readChat()
+    expect(src).toMatch(/createConversationHistory\([\s\S]*cookieHeaders/m)
   })
 
   it('supports OpenRouter OR Anthropic via env vars with actionable error on missing key', () => {

@@ -13,6 +13,7 @@ import {
   unlinkSync,
   readdirSync,
   rmSync,
+  statSync,
 } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +36,7 @@ export interface ScaffoldOptions {
   _testForceTransformError?: string
 }
 
+// eslint-disable-next-line complexity -- scaffold orchestrator: validate → copy → rename _gitignore → template-substitute all *.tmpl → optional --bare transform with rollback. Branches are linear, not nested.
 export function scaffold(
   targetDir: string,
   projectName: string,
@@ -79,12 +81,19 @@ export function scaffold(
     renameSync(gitignoreSrc, gitignoreDest)
   }
 
-  const tmplPath = join(targetDir, 'package.json.tmpl')
-  if (existsSync(tmplPath)) {
-    const content = readFileSync(tmplPath, 'utf-8')
+  // Apply {{name}} substitution to every `*.tmpl` file in the target dir.
+  // Each `foo.tmpl` becomes `foo` with placeholders replaced. Walks only
+  // the project root (deeper subfolders don't currently need templating).
+  for (const entry of readdirSync(targetDir)) {
+    if (!entry.endsWith('.tmpl')) continue
+    const src = join(targetDir, entry)
+    const stat = statSync(src)
+    if (!stat.isFile()) continue
+    const dst = join(targetDir, entry.slice(0, -'.tmpl'.length))
+    const content = readFileSync(src, 'utf-8')
     const replaced = content.replace(/\{\{name\}\}/g, projectName)
-    writeFileSync(join(targetDir, 'package.json'), replaced)
-    unlinkSync(tmplPath)
+    writeFileSync(dst, replaced)
+    unlinkSync(src)
   }
 
   // T4.1 — Apply --bare transform with EC-4 atomic rollback

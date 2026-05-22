@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { resolve, join, extname } from 'node:path'
 
 import { loadConfig } from '../../config/load-config.js'
+import { loadEnv } from '../../config/load-env.js'
 import { executeAction } from '../../server/action-execute.js'
 import { scanServerActions } from '../../server/action-scan.js'
 import type { ActionNode } from '../../server/action-scan.js'
@@ -15,13 +16,33 @@ import { loadManifest } from '../../server/manifest.js'
 import { matchRoute } from '../../server/match.js'
 import type { ServerRouteNode } from '../../server/match.js'
 import { createProductionLoader } from '../../server/module-loader.js'
+import { generateNonce } from '../../server/nonce.js'
 import { createRateLimiter } from '../../server/rate-limit.js'
 import { scanServerRoutes } from '../../server/scan.js'
+import { buildSecurityHeaders } from '../../server/security-headers.js'
 import { serveStaticFile } from '../../server/static.js'
 import { findSuggestion } from '../../server/suggest.js'
 import { resolveTransformer } from '../../server/transformer.js'
 import { scanWebSocketRoutes } from '../../server/ws-scan.js'
 import type { WebSocketRouteNode } from '../../server/ws-scan.js'
+
+/**
+ * T0.1 — Resolve the SSR entry-server module path. tsup may emit `.mjs` or
+ * `.js` depending on output format. Try `.mjs` first (modern default) then
+ * fall back to `.js`. Returns null when neither exists — SSR stays disabled.
+ *
+ * Exported so unit tests can pin the resolution order without booting the
+ * full CLI.
+ */
+const SSR_EXTENSIONS = ['.mjs', '.js'] as const
+export function resolveSsrEntry(distDir: string): string | null {
+  for (const ext of SSR_EXTENSIONS) {
+    const path = resolve(distDir, `server/entry-server${ext}`)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- distDir is from `theokit start`'s own caller-controlled config; the suffix is from a const literal array
+    if (existsSync(path)) return path
+  }
+  return null
+}
 
 interface StartOptions {
   port?: number
@@ -30,6 +51,8 @@ interface StartOptions {
 // eslint-disable-next-line max-lines-per-function, complexity -- top-level CLI bootstrap; setup + request orchestration intentionally co-located so the lifecycle is readable end-to-end
 export async function startCommand(options: StartOptions): Promise<void> {
   const cwd = process.cwd()
+  // Phase 1 (T1.2) — Load .env BEFORE config load.
+  loadEnv({ cwd, mode: 'production' })
   const config = await loadConfig(cwd)
 
   const distDir = resolve(cwd, '.theo')
@@ -81,17 +104,23 @@ export async function startCommand(options: StartOptions): Promise<void> {
       : undefined
   const rateLimiter = flatRateLimit ? createRateLimiter(flatRateLimit) : null
 
-  // SSR setup (opt-in)
-  const ssrServerPath = resolve(distDir, 'server/entry-server.js')
-  const ssrEnabled = config.ssr && existsSync(ssrServerPath)
+  // SSR setup (opt-in). T0.1: try .mjs first then .js — tsup builds in
+  // ESM mode emit .mjs by default; legacy CJS builds emit .js. Without this
+  // fallback, modern builds silently fail SSR even when ssr: true is set.
+  const ssrServerPath: string | null = config.ssr ? resolveSsrEntry(distDir) : null
+  const ssrEnabled = ssrServerPath !== null
   const ssrStreamingEnabled = ssrEnabled && config.ssrStreaming
-  let ssrRender: ((url: string) => Promise<string | { redirect: Response }>) | null = null
+  // T0.2: ssrRender now accepts `{ nonce }` so per-request nonce threads
+  // through to entry-server → StaticRouterProvider + renderToPipeableStream.
+  let ssrRender:
+    | ((url: string, options?: { nonce?: string }) => Promise<string | { redirect: Response }>)
+    | null = null
   type RenderStreamingResult = { redirect: Response } | { streaming: true } | undefined
   let ssrRenderStreaming:
     | ((
         url: string,
         response: ServerResponse,
-        options?: { signal?: AbortSignal },
+        options?: { signal?: AbortSignal; nonce?: string },
       ) => Promise<RenderStreamingResult>)
     | null = null
   let htmlHead = ''
@@ -99,11 +128,14 @@ export async function startCommand(options: StartOptions): Promise<void> {
 
   if (ssrEnabled) {
     interface SsrEntryServer {
-      render: (url: string) => Promise<string | { redirect: Response }>
+      render: (
+        url: string,
+        options?: { nonce?: string },
+      ) => Promise<string | { redirect: Response }>
       renderStreaming?: (
         url: string,
         response: ServerResponse,
-        options?: { signal?: AbortSignal },
+        options?: { signal?: AbortSignal; nonce?: string },
       ) => Promise<RenderStreamingResult>
     }
     const mod = (await import(ssrServerPath)) as SsrEntryServer
@@ -130,6 +162,20 @@ export async function startCommand(options: StartOptions): Promise<void> {
       const url = req.url ?? '/'
       const requestId = randomUUID()
       const start = Date.now()
+
+      // T0.2 — Generate a per-request nonce UNCONDITIONALLY (EC-6: avoids
+      // dev/prod CSP header divergence; dev's api-middleware nonces every
+      // response so prod must match). Apply security headers BEFORE any
+      // branch so they persist through writeHead() merges.
+      const nonce = generateNonce()
+      const securityHeaders = buildSecurityHeaders(
+        config.security?.headers ?? {},
+        { production: true },
+        { nonce },
+      )
+      for (const [k, v] of Object.entries(securityHeaders)) {
+        res.setHeader(k, v)
+      }
 
       try {
         // 1. Action routes
@@ -299,7 +345,10 @@ export async function startCommand(options: StartOptions): Promise<void> {
           }
           req.on('close', onClose)
           try {
-            const result = await ssrRenderStreaming(url, res, { signal: controller.signal })
+            const result = await ssrRenderStreaming(url, res, {
+              signal: controller.signal,
+              nonce,
+            })
             if (result && typeof result === 'object' && 'redirect' in result) {
               res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
               res.end()
@@ -323,7 +372,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
         }
         if (ssrRender) {
           try {
-            const result = await ssrRender(url)
+            const result = await ssrRender(url, { nonce })
             if (result && typeof result === 'object' && 'redirect' in result) {
               res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
               res.end()

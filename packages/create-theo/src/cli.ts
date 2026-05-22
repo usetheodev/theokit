@@ -22,12 +22,15 @@ export function main(): void {
   const projectName = positionalArgs[0]
 
   if (!projectName) {
-    console.error('Usage: create-theokit <project-name> [--template=name] [--bare]')
+    console.error('Usage: create-theokit <project-name> [--template=name] [--bare] [--skip-install]')
     console.error('')
-    console.error('Example:')
-    console.error('  npx create-theokit my-app')
+    console.error('Templates: default, dashboard, api-only, postgres, saas')
+    console.error('')
+    console.error('Recipes:')
+    console.error('  npx create-theokit my-app                    Full TheoUI + agent surface (requires @usetheo/sdk on npm)')
+    console.error('  npx create-theokit my-app --bare             Minimal Hello Theo (no @usetheo/* deps — always works)')
     console.error('  npx create-theokit my-app --template=dashboard')
-    console.error('  npx create-theokit my-app --bare    (skip @usetheo/ui defaults)')
+    console.error('  npx create-theokit my-app --skip-install     Scaffold files only, run install manually')
     process.exit(1)
   }
 
@@ -37,6 +40,9 @@ export function main(): void {
 
   // Parse --bare flag (only applies to default template)
   const bare = args.includes('--bare')
+
+  // Parse --skip-install — useful for smoke testing, monorepo dogfood, air-gapped envs.
+  const skipInstall = args.includes('--skip-install')
 
   const targetDir = resolve(process.cwd(), projectName)
 
@@ -49,12 +55,19 @@ export function main(): void {
     scaffold(targetDir, projectName, templateName, { bare })
 
     const pkgManager = detectPkgManager()
-    console.log(`Installing dependencies with ${pkgManager}...\n`)
-    runInstall(targetDir, pkgManager)
+    if (skipInstall) {
+      console.log(`Skipping install (--skip-install). Run \`${pkgManager} install\` manually.\n`)
+    } else {
+      console.log(`Installing dependencies with ${pkgManager}...\n`)
+      runInstall(targetDir, pkgManager)
+    }
 
     console.log(`\n  ✓ Project created at ${targetDir}\n`)
     console.log(`  Next steps:\n`)
     console.log(`    cd ${projectName}`)
+    if (skipInstall) {
+      console.log(`    ${pkgManager} install`)
+    }
     console.log(`    ${pkgManager === 'npm' ? 'npx' : pkgManager} theokit dev\n`)
   } catch (err) {
     console.error(`\n  ✗ ${(err as Error).message}\n`)

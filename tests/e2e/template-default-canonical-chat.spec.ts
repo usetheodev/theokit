@@ -161,4 +161,76 @@ test.describe('Canonical chat.ts — wired via @usetheo/sdk', () => {
       .count()
     expect(matchCount).toBeLessThanOrEqual(2)
   })
+
+  // Item #5 — conversation persistence via createConversationHistory
+  test('item-5 — conversation cookie issued on first POST (UUID format, HttpOnly)', async ({
+    page,
+    context,
+  }) => {
+    // Fresh context — no cookies. Playwright `context` arg already isolates.
+    await context.clearCookies()
+    await page.goto('/')
+    const composer = page.getByPlaceholder('Ask the agent…')
+    await expect(composer).toBeVisible({ timeout: 10_000 })
+    await composer.click()
+    await composer.pressSequentially('hi', { delay: 10 })
+    await composer.press('Enter')
+
+    // EC-6: wait for the SSE error/message body to commit BEFORE reading
+    // cookies — otherwise Playwright's context().cookies() may race the
+    // response-header commit and return [].
+    await expect(
+      page
+        .getByText(
+          /Agent error|Stream ended|Set OPENROUTER_API_KEY|Set ANTHROPIC_API_KEY|auth_failed|HTTP 401/i,
+        )
+        .first(),
+    ).toBeVisible({ timeout: 15_000 })
+
+    const cookies = await context.cookies()
+    const conv = cookies.find((c) => c.name === 'theo_conversation')
+    expect(conv).toBeDefined()
+    expect(conv!.value).toMatch(/^[0-9a-f-]{36}$/i)
+    expect(conv!.httpOnly).toBe(true)
+  })
+
+  test('item-5 — conversation id unchanged after reload (continuity proof)', async ({
+    page,
+    context,
+  }) => {
+    await context.clearCookies()
+    await page.goto('/')
+    const composer = page.getByPlaceholder('Ask the agent…')
+    await expect(composer).toBeVisible({ timeout: 10_000 })
+    await composer.click()
+    await composer.pressSequentially('first', { delay: 10 })
+    await composer.press('Enter')
+    await expect(
+      page
+        .getByText(
+          /Agent error|Stream ended|Set OPENROUTER_API_KEY|Set ANTHROPIC_API_KEY|auth_failed|HTTP 401/i,
+        )
+        .first(),
+    ).toBeVisible({ timeout: 15_000 })
+
+    const before = (await context.cookies()).find((c) => c.name === 'theo_conversation')!.value
+
+    // Reload the tab — cookie must survive.
+    await page.reload()
+    const composer2 = page.getByPlaceholder('Ask the agent…')
+    await expect(composer2).toBeVisible({ timeout: 10_000 })
+    await composer2.click()
+    await composer2.pressSequentially('second', { delay: 10 })
+    await composer2.press('Enter')
+    await expect(
+      page
+        .getByText(
+          /Agent error|Stream ended|Set OPENROUTER_API_KEY|Set ANTHROPIC_API_KEY|auth_failed|HTTP 401/i,
+        )
+        .first(),
+    ).toBeVisible({ timeout: 15_000 })
+
+    const after = (await context.cookies()).find((c) => c.name === 'theo_conversation')!.value
+    expect(after).toBe(before)
+  })
 })

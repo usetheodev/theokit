@@ -1,0 +1,13 @@
+{
+  "name": "zero-config-env-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "theokit dev",
+    "build": "theokit build",
+    "start": "theokit start"
+  },
+  "dependencies": {
+    "theokit": "workspace:*"
+  }
+}

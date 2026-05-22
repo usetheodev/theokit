@@ -7,3 +7,8 @@ packages:
   # canonical chat.ts wired in fixtures/template-default. pnpm tolerates
   # missing sibling for contributors without the checkout.
   - '../theokit-sdk/packages/sdk'
+  # @usetheo/gateway + @usetheo/gateway-telegram — required by
+  # examples/full-stack-agent for the Telegram bot demo. Same sibling-checkout
+  # tolerance as @usetheo/sdk.
+  - '../theokit-sdk/packages/gateway'
+  - '../theokit-sdk/packages/gateway-telegram'

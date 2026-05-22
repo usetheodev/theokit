@@ -1,6 +1,11 @@
 export { defineRoute } from './define-route.js'
 export type { RouteConfig } from './define-route.js'
 
+// T1.4 — auto-load .env for server code. Public surface for standalone
+// scripts (Telegram bot, queue consumers, cron jobs) that bypass the CLI.
+export { loadEnv, _resetEnvCache } from '../config/load-env.js'
+export type { LoadEnvOptions, LoadEnvResult } from '../config/load-env-types.js'
+
 export { defineAgentEndpoint } from './define-agent-endpoint.js'
 export type { AgentEndpointConfig, AgentEndpointHandlerArgs } from './define-agent-endpoint.js'
 
@@ -8,6 +13,14 @@ export { defineAgentTool } from './define-agent-tool.js'
 export type { DefineAgentToolSpec, CustomTool } from './define-agent-tool.js'
 
 export { streamAgentRun } from './stream-agent-run.js'
+
+export { createConversationHistory } from './create-conversation-history.js'
+export type {
+  ConversationHistoryArgs,
+  ConversationHistoryResult,
+  SdkAgent,
+  SdkAgentOptions,
+} from './create-conversation-history.js'
 
 export { defineAction } from './define-action.js'
 export type { ActionConfig } from './define-action.js'

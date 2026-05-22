@@ -43,9 +43,16 @@ describe('scaffold anti-stack lint — no raw OpenAI in default chat.ts', () => 
       ).not.toContain('openai')
     })
 
-    it(`${relativePath} imports Agent from @usetheo/sdk`, () => {
+    it(`${relativePath} uses @usetheo/sdk (directly OR indirectly via createConversationHistory)`, () => {
       const content = readFileSync(absPath, 'utf-8')
-      expect(content).toMatch(/import\s+\{\s*Agent\s*\}\s+from\s+['"]@usetheo\/sdk['"]/)
+      // Item #3 / #4 imported Agent directly. Item #5 routes via
+      // createConversationHistory (which dynamically imports the SDK).
+      // Either path proves the locked stack — accept both.
+      const directImport = /import\s+\{\s*Agent\s*\}\s+from\s+['"]@usetheo\/sdk['"]/.test(content)
+      const indirectViaTheokit = /createConversationHistory|defineAgentTool|streamAgentRun/.test(
+        content,
+      )
+      expect(directImport || indirectViaTheokit).toBe(true)
     })
   }
 })

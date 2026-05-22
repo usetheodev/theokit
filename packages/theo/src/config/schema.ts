@@ -162,6 +162,29 @@ export const securitySchema = z.object({
 export const theoConfigSchema = z.object({
   appDir: z.string().default('app'),
   serverDir: z.string().default('server'),
+  /**
+   * T2.2 / EC-4 — Build output directory. Must be a relative path inside
+   * the project root. Refused absolute or parent-relative paths to prevent
+   * `cleanOutDir` from wiping arbitrary locations (defense-in-depth on
+   * top of cleanOutDir's runtime EC-3 guard).
+   */
+  distDir: z
+    .string()
+    .default('.theo')
+    .refine(
+      (d) => !/^([A-Za-z]:)?[/\\]/.test(d) && !d.startsWith('..'),
+      'distDir must be a relative path inside the project root (e.g., ".theo")',
+    ),
+  /**
+   * T2.3 — Agent registry cleanup. Long-lived dev sessions accumulate
+   * `.theokit/agents/<id>/` directories. Each `theokit dev` startup runs
+   * an LRU cleanup keeping the N most recent (by mtime).
+   */
+  agents: z
+    .object({
+      maxRegistries: z.number().int().positive().default(100),
+    })
+    .optional(),
   port: z.number().int().min(1).max(65535).default(3000),
   ssr: z.boolean().default(false),
   /** When true (and ssr === true), use renderToPipeableStream with progressive

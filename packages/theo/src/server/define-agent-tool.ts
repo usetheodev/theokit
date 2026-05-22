@@ -62,10 +62,27 @@ const TOOL_NAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/
 
 function isZodObject(schema: z.ZodType): boolean {
   // Zod 3 stores the typeName at `_def.typeName`. ZodObject has 'ZodObject'.
-  // We avoid importing the ZodObject class to keep the runtime import surface
-  // minimal (Zod is a peer dep — only the type is used).
-  const def = (schema as unknown as { _def?: { typeName?: string } })._def
-  return def?.typeName === 'ZodObject'
+  // Refinements (`.refine`), transforms (`.transform`), and defaults wrap the
+  // underlying schema in ZodEffects / ZodDefault / etc. — walk the chain via
+  // `_def.schema` / `_def.innerType` until we hit ZodObject (or give up).
+  // Avoids importing the ZodObject class to keep the runtime import surface
+  // minimal.
+  let current: unknown = schema
+  for (let depth = 0; depth < 10; depth++) {
+    const def = (current as { _def?: { typeName?: string; schema?: unknown; innerType?: unknown } })
+      ._def
+    if (def?.typeName === 'ZodObject') return true
+    if (def?.schema !== undefined) {
+      current = def.schema
+      continue
+    }
+    if (def?.innerType !== undefined) {
+      current = def.innerType
+      continue
+    }
+    return false
+  }
+  return false
 }
 
 /**

@@ -28,16 +28,24 @@ export function generateEntryServer(options: EntryServerOptions = {}): string {
  */
 function buildAppTreeJs(options: EntryServerOptions): string {
   const theme = options.theoUi?.theme ?? 'violet-forge'
+  // T4.1 — pass options.nonce to StaticRouterProvider so its internal
+  // hydration data script (`<script>window.__staticRouterHydrationData
+  // = ...</script>`) carries the nonce attribute. Without this, CSP
+  // enforce mode (without 'unsafe-inline') blocks the hydration script
+  // → React falls back to client-only render → button onClick handlers
+  // never attach → page looks dead. The nonce option to
+  // renderToPipeableStream covers React-emitted scripts but NOT the
+  // hydration script which is emitted by react-router itself.
   if (options.theoUi) {
     return [
       `React.createElement(TheoUIProvider, { theme: { defaultTheme: '${theme}' } },`,
       `      React.createElement(Suspense, { fallback: null },`,
-      `        React.createElement(StaticRouterProvider, { router, context })`,
+      `        React.createElement(StaticRouterProvider, { router, context, nonce: options.nonce })`,
       `      )`,
       `    )`,
     ].join('\n')
   }
-  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context })\n    )`
+  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context, nonce: options.nonce })\n    )`
 }
 
 function generateSingleShotEntry(options: EntryServerOptions): string {

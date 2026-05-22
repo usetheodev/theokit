@@ -49,10 +49,14 @@ describe('create-theokit default template — chat.ts parity with fixture', () =
     expect(src).not.toContain('openai')
   })
 
-  it('template chat.ts disposes agent in try/catch finally (EC-2)', () => {
+  it('item #5 — template chat.ts uses createConversationHistory (no dispose per request)', () => {
     const src = readFileSync(TEMPLATE_CHAT, 'utf-8')
-    expect(src).toMatch(/finally\s*\{[\s\S]*try\s*\{\s*await\s+agent\.dispose\(\)/)
-    expect(src).toMatch(/catch\s*\([^)]*\)\s*\{[\s\S]*console\.warn/)
+    expect(src).toMatch(/createConversationHistory/)
+    const codeOnly = src
+      .split('\n')
+      .map((line) => line.replace(/\/\/.*$/, ''))
+      .join('\n')
+    expect(codeOnly).not.toMatch(/agent\.dispose\(/)
   })
 })
 

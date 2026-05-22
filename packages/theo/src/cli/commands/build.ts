@@ -3,13 +3,24 @@ import { resolve } from 'node:path'
 import { nodeAdapter } from '../../adapters/node.js'
 import { VALID_TARGETS, type BuildTarget } from '../../adapters/types.js'
 import { loadConfig } from '../../config/load-config.js'
+import { loadEnv } from '../../config/load-env.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
 import { generateManifest, writeManifest } from '../../server/manifest.js'
+import { cleanOutDir } from '../lib/cleanup.js'
 
 export async function buildCommand(options?: { target?: string }): Promise<void> {
   const cwd = process.cwd()
+  // Phase 1 (T1.2) — Load .env BEFORE config load.
+  loadEnv({ cwd, mode: 'production' })
+
   const config = await loadConfig(cwd)
   validateProjectStructure(cwd)
+
+  // T2.2 — Clean .theo/ at build start (Astro pattern). Skip .git*.
+  // Schema-validated distDir is relative; EC-3 path guard in cleanOutDir
+  // is defense-in-depth.
+  const distDirAbs = resolve(cwd, config.distDir)
+  await cleanOutDir({ dir: distDirAbs })
 
   const target = (options?.target ?? 'node') as BuildTarget
 
@@ -64,7 +75,7 @@ export async function buildCommand(options?: { target?: string }): Promise<void>
 
   // Generate route manifest
   const serverDir = resolve(cwd, config.serverDir)
-  const distDir = resolve(cwd, '.theo')
+  const distDir = distDirAbs
   const manifest = generateManifest(serverDir)
   writeManifest(manifest, distDir)
 

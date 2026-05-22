@@ -31,6 +31,17 @@ export interface AgentEndpointHandlerArgs<TCtx = unknown, TBody = unknown> {
   params: undefined
   request: Request
   ctx: TCtx
+  /**
+   * Mutable headers bag that the wrapper merges into the SSE response BEFORE
+   * the stream starts. Used by `createConversationHistory` to issue a
+   * conversation-id cookie on first request. Append entries via
+   * `cookieHeaders.append('set-cookie', '<cookie-string>')`.
+   *
+   * Cookies appended AFTER the first yield are NOT applied — the response
+   * headers commit when the wrapper constructs the Response, before the
+   * async generator runs. This is per HTTP semantics, not a wrapper choice.
+   */
+  cookieHeaders: Headers
 }
 
 export interface AgentEndpointConfig<TCtx = unknown, TBody = unknown> {
@@ -94,16 +105,42 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
   config: AgentEndpointConfig<TCtx, TBody>,
 ): RouteConfig<z.ZodUndefined, z.ZodUndefined, z.ZodUndefined, TCtx, Response> {
   return {
-    handler: ({ request, ctx, body, query, params }) => {
+    handler: async ({ request, ctx, body, query, params }) => {
+      const cookieHeaders = new Headers()
       const generator = config.handler({
         request,
         ctx: ctx,
         body: body as TBody,
         query: query,
         params: params,
+        cookieHeaders,
       })
 
       const signal = resolveAbortSignal(request)
+
+      // Prime the generator to its first yield. This forces the handler's
+      // synchronous + async setup (including `createConversationHistory` if
+      // used) to run BEFORE the Response headers commit, so any Set-Cookie
+      // lines appended to `cookieHeaders` land in the actual response.
+      //
+      // First-byte latency cost: bounded by the work up to the first yield
+      // (typically 100-500ms for an LLM chat with `agent.send`). Acceptable
+      // for the use case; alternative (heuristic detection of cookie writes)
+      // is brittle.
+      let firstResult: IteratorResult<AgentEvent, void>
+      let primeError: unknown
+      try {
+        firstResult = await generator.next()
+      } catch (err) {
+        primeError = err
+        firstResult = { value: undefined, done: true }
+      }
+
+      // Merge any cookies the handler issued into the response headers.
+      const responseHeaders = new Headers(SSE_HEADERS)
+      for (const value of cookieHeaders.getSetCookie()) {
+        responseHeaders.append('set-cookie', value)
+      }
 
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
@@ -118,6 +155,26 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
           signal.addEventListener('abort', onAbort, { once: true })
 
           try {
+            // If priming threw, yield a final error event and close.
+            if (primeError !== undefined) {
+              let message: string
+              if (primeError instanceof Error) {
+                message = primeError.message
+              } else if (typeof primeError === 'string') {
+                message = primeError
+              } else {
+                message = 'agent handler failed during setup'
+              }
+              controller.enqueue(encodeSSE({ type: 'error', message }))
+              return
+            }
+            // Enqueue the primed first value (if any).
+            if (firstResult.done !== true) {
+              controller.enqueue(encodeSSE(firstResult.value))
+            } else {
+              return
+            }
+            // Continue iterating remaining events.
             for await (const event of generator) {
               // `signal.aborted` can flip true asynchronously via the
               // listener registered above. ESLint's narrowing only sees
@@ -140,7 +197,7 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
         },
       })
 
-      return new Response(stream, { headers: SSE_HEADERS })
+      return new Response(stream, { headers: responseHeaders })
     },
   }
 }

@@ -363,7 +363,19 @@ export async function executeRoute(
     }
 
     if (handlerResult instanceof Response) {
-      res.writeHead(handlerResult.status, Object.fromEntries(handlerResult.headers))
+      // `Object.fromEntries(Headers)` collapses multi-valued headers like
+      // `Set-Cookie` to a single string. Set Set-Cookie via setHeader array
+      // overload BEFORE writeHead (writeHead flushes headers; later setHeader
+      // is a no-op or throws). Then writeHead with the remaining singletons.
+      const headersBag: Record<string, string> = {}
+      for (const [k, v] of handlerResult.headers) {
+        if (k.toLowerCase() !== 'set-cookie') headersBag[k] = v
+      }
+      const setCookies = handlerResult.headers.getSetCookie()
+      if (setCookies.length > 0) {
+        res.setHeader('Set-Cookie', setCookies)
+      }
+      res.writeHead(handlerResult.status, headersBag)
 
       if (handlerResult.body) {
         await pipeWebStreamToResponse(handlerResult.body, res, {

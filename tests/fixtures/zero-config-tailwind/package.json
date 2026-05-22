@@ -1,0 +1,13 @@
+{
+  "name": "zero-config-tailwind-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "theokit dev",
+    "build": "theokit build"
+  },
+  "dependencies": {
+    "@usetheo/ui": "workspace:*",
+    "theokit": "workspace:*"
+  }
+}

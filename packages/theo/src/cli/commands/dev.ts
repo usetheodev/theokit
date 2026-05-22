@@ -1,17 +1,40 @@
+import { resolve } from 'node:path'
+
 import react from '@vitejs/plugin-react'
 import { createServer, type ViteDevServer } from 'vite'
 
 import { loadConfig } from '../../config/load-config.js'
+import { loadEnv } from '../../config/load-env.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
 import { theoPlugin } from '../../vite-plugin/index.js'
+import { gcAgentRegistry } from '../lib/cleanup.js'
 
 interface DevOptions {
   port?: number
 }
 
 export async function startDevServer(cwd: string, options?: DevOptions): Promise<ViteDevServer> {
+  // Phase 1 (T1.2) — Load .env files into process.env BEFORE any module
+  // reads them. Must run before loadConfig() so theo.config.ts functions
+  // referencing process.env.* resolve correctly.
+  loadEnv({ cwd, mode: 'development' })
+
   const config = await loadConfig(cwd)
   validateProjectStructure(cwd)
+
+  // T2.3 — LRU cleanup of `.theokit/agents/<id>/` at startup. Long-lived
+  // dev sessions accumulate orphan agent registries (52+ in item #6 dogfood).
+  // Default cap 100, configurable via config.agents.maxRegistries.
+  const agentsDir = resolve(cwd, '.theokit/agents')
+  const gcResult = await gcAgentRegistry({
+    dir: agentsDir,
+    maxAgents: config.agents?.maxRegistries ?? 100,
+  })
+  if (gcResult.deleted > 0) {
+    console.log(
+      `[theokit] Cleaned ${String(gcResult.deleted)} stale agent registries (kept ${String(gcResult.kept)})`,
+    )
+  }
 
   const port = options?.port ?? config.port
   // Narrow the rateLimit union: only the legacy flat shape (windowMs+max)

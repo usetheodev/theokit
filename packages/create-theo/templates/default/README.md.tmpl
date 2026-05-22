@@ -1,0 +1,73 @@
+# {{name}}
+
+TheoKit project. Build the app your agent lives in — routing, auth, real-time, deploy — wired.
+
+## Quick start
+
+```bash
+# 1. Set your provider key (OpenRouter recommended — one key, any model)
+cp .env.example .env  # if .env.example shipped; otherwise:
+echo 'OPENROUTER_API_KEY=sk-or-v1-...' > .env
+
+# 2. Boot the dev server
+npx theokit dev
+```
+
+Open the printed URL. The default surface is a chat composer wired to `server/routes/chat.ts`. Drop in your real key in `.env` and the agent responds.
+
+## Templates
+
+- **default** (this one) — TheoUI chat composer + agent route.
+- **`--bare`** — Hello Theo with no `@usetheo/*` deps. Use this when you want a clean structure to grow into or when the SDK isn't on your registry yet.
+- **dashboard** — nested layouts + sidebar.
+- **api-only** — server routes without React.
+- **postgres** — Drizzle ORM + migrations.
+- **saas** — full app with auth, billing, sessions.
+
+## What the framework auto-loads
+
+- **`.env` → `process.env`**. Edit `.env`; restart the dev server. Server routes read `process.env.MY_KEY` directly.
+- **`.theo/` build output cleanup** on every `theokit build`.
+- **`.theokit/agents/` LRU GC** on every `theokit dev` startup (default cap: 100 agents).
+- **Tailwind + `@usetheo/ui` styling** auto-configured when `@usetheo/ui` is in your `package.json` AND no consumer `tailwind.config.*` is present. This project ships an explicit `tailwind.config.ts` because the TheoUI v3 surface still requires it. The zero-config path lands when `@usetheo/ui` ships its Vite plugin (cross-repo work, pending sign-off).
+
+For the full story of what's automatic vs deliberate, see [docs.usetheo.dev/zero-config](https://docs.usetheo.dev/zero-config) (or your local `node_modules/theokit/docs/concepts/zero-config.md`).
+
+## Project structure
+
+```
+app/                  Frontend (file-based routing)
+├── page.tsx          /              — chat composer
+├── layout.tsx        wrapper        — TheoUI provider + theme
+server/               Backend (explicit routes & actions)
+├── routes/
+│   ├── chat.ts       POST /api/chat — agent SSE stream
+│   └── health.ts     GET  /api/health
+theo.config.ts        Framework config
+tailwind.config.ts    Tailwind theme tokens (TheoUI)
+postcss.config.js     PostCSS pipeline (Tailwind + autoprefixer)
+.env                  Secrets — never committed (.gitignore)
+```
+
+## Common commands
+
+| Command | What it does |
+|---|---|
+| `npx theokit dev` | Dev server with HMR, devtools overlay, structured logs |
+| `npx theokit build` | Production build → `.theo/` |
+| `npx theokit start` | Serve the production build |
+| `npx theokit check` | Lint for upgrade-readiness (CSRF, CSP, zero-config migration hints) |
+| `npx theokit generate route foo` | Scaffold a new server route |
+| `npx theokit routes` | List all routes + actions detected |
+
+## What if `npm install` fails on `@usetheo/sdk`?
+
+The agent SDK is in soft-release while the npm publish is operator-deferred. If you hit `404 Not Found` for `@usetheo/sdk`:
+
+- **Quick path**: re-scaffold with `--bare` — Hello Theo without any `@usetheo/*` deps.
+- **Inside the TheoKit monorepo**: replace `"@usetheo/sdk": "^1.0.0"` with `"workspace:*"` in `package.json`.
+- **Wait**: track the publish at https://github.com/usetheo/theokit-sdk.
+
+## License
+
+Apply your own. The TheoKit framework is Apache-2.0.

@@ -194,4 +194,44 @@ describe('defineAgentEndpoint (T5.1)', () => {
     expect(captured.request).toBe(req)
     expect(captured.ctx).toEqual({ userId: 'u-1' })
   })
+
+  // Item #5 — cookieHeaders bridge
+  it('forwards cookieHeaders writes from handler into the SSE response', async () => {
+    const endpoint = defineAgentEndpoint({
+      async *handler({ cookieHeaders }): AsyncGenerator<AgentEvent> {
+        cookieHeaders.append('set-cookie', 'theo_conversation=abc123; HttpOnly; Path=/')
+        yield { type: 'message', content: 'hi' }
+      },
+    })
+
+    const response = (await endpoint.handler({
+      query: undefined,
+      body: undefined,
+      params: undefined,
+      request: makeMockRequest(),
+      ctx: undefined,
+    })) as Response
+
+    expect(response.headers.getSetCookie()).toContain(
+      'theo_conversation=abc123; HttpOnly; Path=/',
+    )
+  })
+
+  it('does not add Set-Cookie when handler does not touch cookieHeaders', async () => {
+    const endpoint = defineAgentEndpoint({
+      async *handler(): AsyncGenerator<AgentEvent> {
+        yield { type: 'message', content: 'silent' }
+      },
+    })
+
+    const response = (await endpoint.handler({
+      query: undefined,
+      body: undefined,
+      params: undefined,
+      request: makeMockRequest(),
+      ctx: undefined,
+    })) as Response
+
+    expect(response.headers.getSetCookie()).toEqual([])
+  })
 })

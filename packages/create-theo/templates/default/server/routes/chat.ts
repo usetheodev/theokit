@@ -1,22 +1,23 @@
-import { Agent } from '@usetheo/sdk'
 import { z } from 'zod'
 import {
   defineAgentEndpoint,
   defineAgentTool,
   streamAgentRun,
+  createConversationHistory,
   type AgentEvent,
 } from 'theokit/server'
 
 /**
- * Chat agent endpoint — powered by `@usetheo/sdk` with one example tool.
+ * Chat agent endpoint — persistent conversation via createConversationHistory.
  *
- * defineAgentTool → Zod 3 in, LLM-facing JSON Schema + parsed handler out.
- * yield* streamAgentRun → adapts SDK Run lifecycle to AgentEvent SSE wire.
- * try/catch around dispose → never mask the original SDK error.
+ * Each browser tab gets a stable conversation id cookie on first visit;
+ * subsequent requests resume the same agent. Conversation turns auto-persist
+ * in `<cwd>/.theokit/agents/<conversationId>/messages.jsonl` (SDK owns
+ * storage). Tools: current_time example. Memory facts: opt-in via
+ * options.memory (off by default).
  *
- * Provider: prefers OPENROUTER_API_KEY (gateway to many models). Falls back
- * to ANTHROPIC_API_KEY for direct Anthropic. The SDK parses the model id —
- * `openrouter/...` routes via OpenRouter; bare `claude-*` ids route direct.
+ * Provider: OPENROUTER_API_KEY (preferred — gateway to many models) OR
+ * ANTHROPIC_API_KEY (direct Anthropic).
  */
 
 const currentTime = defineAgentTool({
@@ -27,7 +28,7 @@ const currentTime = defineAgentTool({
 })
 
 export const POST = defineAgentEndpoint({
-  async *handler({ body }): AsyncGenerator<AgentEvent> {
+  async *handler({ body, request, cookieHeaders }): AsyncGenerator<AgentEvent> {
     const safeBody =
       body !== null && typeof body === 'object' && !Array.isArray(body)
         ? (body as { message?: string })
@@ -47,20 +48,18 @@ export const POST = defineAgentEndpoint({
       }
       return
     }
-    const agent = await Agent.create({
-      apiKey,
-      model: { id: modelId },
-      tools: [currentTime],
+    const { agent } = await createConversationHistory({
+      request,
+      response: { headers: cookieHeaders },
+      options: {
+        apiKey,
+        model: { id: modelId },
+        tools: [currentTime],
+      },
     })
-    try {
-      const run = await agent.send(message)
-      yield* streamAgentRun(run)
-    } finally {
-      try {
-        await agent.dispose()
-      } catch (e) {
-        console.warn('[chat] agent.dispose() failed:', e)
-      }
-    }
+    const run = await agent.send(message)
+    yield* streamAgentRun(run)
+    // Intentionally NO agent.dispose() — the agent stays registered so the
+    // next request from the same conversation resumes it (continuity).
   },
 })

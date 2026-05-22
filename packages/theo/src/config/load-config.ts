@@ -8,6 +8,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { TheoConfigError } from './errors.js'
+import { loadEnv } from './load-env.js'
 import { theoConfigSchema } from './schema.js'
 import type { TheoConfig } from './schema.js'
 
@@ -50,6 +51,12 @@ export function deepMerge(
 }
 
 export async function loadConfig(dir: string): Promise<TheoConfig> {
+  // T1.3 — Load .env BEFORE reading theo.config.ts. Defensive: CLI commands
+  // (dev/build/start) already call loadEnv() first, but programmatic users
+  // who call loadConfig directly (tests, custom scripts) need this too.
+  // Module-level cache makes the second call a Map-lookup (no FS).
+  loadEnv({ cwd: dir })
+
   const configPath = resolve(dir, CONFIG_FILE)
 
   if (!existsSync(configPath)) {

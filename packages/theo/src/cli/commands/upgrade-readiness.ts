@@ -31,6 +31,8 @@ export type ViolationRule =
   | 'csrf-missing-header'
   | 'inline-script'
   | 'dangerously-set-inline-script'
+  | 'zero-config-tailwind-suggest'
+  | 'handrolled-dotenv-suggest'
 
 export interface Violation {
   file: string
@@ -185,6 +187,74 @@ function scanHtmlFile(file: string, rel: string, content: string, out: Violation
 }
 
 /**
+ * T4.1 — Zero-config hint: consumer has @usetheo/ui in deps AND a manual
+ * tailwind.config.* that does NOT import the @usetheo/ui preset. Suggest
+ * extending via `import preset from '@usetheo/ui/preset'`.
+ */
+function scanZeroConfigTailwindHint(cwd: string, out: Violation[]): void {
+  const pkgPath = resolve(cwd, 'package.json')
+  if (!existsSync(pkgPath)) return
+  let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> }
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as typeof pkg
+  } catch {
+    return
+  }
+  const hasUi =
+    Boolean(pkg.dependencies?.['@usetheo/ui']) ||
+    Boolean(pkg.devDependencies?.['@usetheo/ui'])
+  if (!hasUi) return
+
+  for (const ext of ['.ts', '.js', '.mjs', '.cjs']) {
+    const cfgPath = resolve(cwd, `tailwind.config${ext}`)
+    if (!existsSync(cfgPath)) continue
+    let content: string
+    try {
+      content = readFileSync(cfgPath, 'utf8')
+    } catch {
+      continue
+    }
+    if (content.includes('@usetheo/ui/preset')) return // already using preset
+    out.push({
+      file: `tailwind.config${ext}`,
+      line: 1,
+      rule: 'zero-config-tailwind-suggest',
+      message:
+        '@usetheo/ui detected with a manual tailwind.config — extend with the UI preset to keep theme tokens in sync.',
+      fix: "import preset from '@usetheo/ui/preset'; export default { presets: [preset], content: [...] }",
+    })
+    return
+  }
+}
+
+/**
+ * T4.1 — Zero-config hint: consumer has hand-rolled dotenv loading in
+ * server/ (import 'dotenv/config', dotenv.config(), readFile('.env'), etc.).
+ * Suggest the framework's loadEnv (auto-invoked by CLI commands; importable
+ * from theokit/server for standalone scripts).
+ */
+function scanHandRolledDotenvHint(file: string, rel: string, content: string, out: Violation[]): void {
+  // Only flag server/ files
+  if (!rel.startsWith('server/')) return
+  const lines = content.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? ''
+    // import 'dotenv/config' or import * as dotenv from 'dotenv'
+    if (/from\s+['"]dotenv['"]/.test(line) || /import\s+['"]dotenv\/config['"]/.test(line)) {
+      out.push({
+        file: rel,
+        line: i + 1,
+        rule: 'handrolled-dotenv-suggest',
+        message:
+          'Manual dotenv import detected — TheoKit auto-loads .env in CLI commands. For standalone scripts, import { loadEnv } from "theokit/server".',
+        fix: "Remove this import. CLI commands (dev/build/start) auto-load .env. For standalone scripts: import { loadEnv } from 'theokit/server'; loadEnv()",
+      })
+      return // one hint per file
+    }
+  }
+}
+
+/**
  * EC-3: a directory may have an `app/` directory (Next.js, Remix, etc.) but
  * not actually be a TheoKit project. Run our 3 rules against such a project
  * would generate many false positives. The strict guard checks for `theokit`
@@ -253,8 +323,13 @@ export async function scanUpgradeReadiness(options: ScanOptions): Promise<Upgrad
       scanHtmlFile(file, rel, content, violations)
     } else if (SOURCE_EXTS.has(ext)) {
       scanSourceFile(file, rel, content, violations)
+      scanHandRolledDotenvHint(file, rel, content, violations)
     }
   }
+
+  // T4.1 — Project-level hint (not per-file): does the consumer have a
+  // manual tailwind.config without the UI preset?
+  scanZeroConfigTailwindHint(cwd, violations)
 
   const hasHigh = violations.length > 0
   const status: ReadinessStatus = hasHigh ? 'has-violations' : 'ready'

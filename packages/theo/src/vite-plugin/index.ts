@@ -37,6 +37,7 @@ import {
   injectDevtoolsScript,
 } from './inject-devtools.js'
 import { injectEntryClient } from './inject-entry-client.js'
+import { integrateUseTheoUI } from './integrate-ui.js'
 import { resolveTheoRootDir } from './resolve-theo-root.js'
 import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
 
@@ -71,6 +72,26 @@ export interface TheoPluginOptions {
   rateLimit?: RateLimitConfig
   ssr?: boolean
   ssrStreaming?: boolean
+}
+
+/**
+ * T3.3 — Find a consumer-side config file (`tailwind.config.*`, `postcss.config.*`)
+ * by walking from projectRoot up to 3 levels. Returns the absolute path on the
+ * first hit, or `undefined`. Used to defer to consumer's manual config (D3).
+ */
+function findConsumerConfig(projectRoot: string, basename: string): string | undefined {
+  const extensions = ['.ts', '.js', '.mjs', '.cjs']
+  let dir = projectRoot
+  for (let level = 0; level < 3; level++) {
+    for (const ext of extensions) {
+      const candidate = resolve(dir, `${basename}${ext}`)
+      if (existsSync(candidate)) return candidate
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return undefined
 }
 
 // eslint-disable-next-line max-lines-per-function -- Vite plugin factory: state setup + hooks live together by Vite convention
@@ -149,11 +170,23 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
       }
     },
 
-    config() {
+    async config() {
       // Detect whether we're running from source (.ts) or compiled dist (.js)
       const ext = existsSync(resolve(theoSrcDir, 'index.ts')) ? '.ts' : '.js'
+
+      // T3.3 — auto-chain @tailwindcss/vite + @usetheo/ui/vite-plugin when
+      // the consumer has @usetheo/ui in deps AND no manual tailwind/postcss
+      // config (D3 deferral). Detection of consumer configs walks 3 levels.
+      const consumerTailwindConfig = findConsumerConfig(projectRoot, 'tailwind.config')
+      const consumerPostcssConfig = findConsumerConfig(projectRoot, 'postcss.config')
+      const uiPlugins = await integrateUseTheoUI(projectRoot, {
+        consumerTailwindConfig,
+        consumerPostcssConfig,
+      })
+
       return {
         envPrefix: 'THEO_PUBLIC_',
+        plugins: uiPlugins,
         resolve: {
           alias: [
             // Order matters: most-specific first so `theokit/X` doesn't

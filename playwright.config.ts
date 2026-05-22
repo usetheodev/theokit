@@ -49,6 +49,23 @@ export default defineConfig({
       testMatch: 'template-default-canonical-chat.spec.ts',
     },
     {
+      // 0.3.0 cutover T4.1 validation — per-request nonce machinery
+      // end-to-end. Asserts that <script nonce="X"> in the SSR'd HTML
+      // matches the Content-Security-Policy header's nonce-X directive,
+      // Cache-Control: private, no-store is set (EC-3), and every <script>
+      // tag emitted carries the nonce attribute (EC-12).
+      name: 'ssr-nonce',
+      use: { baseURL: 'http://localhost:3492' },
+      testMatch: 'ssr-nonce.spec.ts',
+    },
+    {
+      // Item #6 — examples/full-stack-agent demo. Exercises every Phase B
+      // primitive end-to-end + the cookie persistence story.
+      name: 'full-stack-agent',
+      use: { baseURL: 'http://localhost:3494' },
+      testMatch: 'example-full-stack-agent.spec.ts',
+    },
+    {
       name: 'devtools',
       use: { baseURL: 'http://localhost:3461' },
       testMatch: 'devtools.spec.ts',
@@ -130,13 +147,35 @@ export default defineConfig({
       timeout: 60000,
     },
     {
-      // T2.2 — Canonical chat.ts spec. Same fixture, separate port. No API
-      // key set — the fixture yields a friendly "Set OPENROUTER_API_KEY or
-      // ANTHROPIC_API_KEY in your .env" error event, which the spec asserts.
-      // Avoids committing any fake-looking secrets that trip secret scanners.
+      // T2.2 — Canonical chat.ts spec. Same fixture, separate port. A
+      // placeholder OPENROUTER_API_KEY is set so the route reaches the
+      // `createConversationHistory` path (issues the cookie) BEFORE the
+      // SDK call returns 401 from OpenRouter — exactly what the item-5
+      // continuity specs assert. The string intentionally lacks any
+      // `sk-` prefix so secret scanners don't trip.
       command: `npx tsx ${cliPath} dev --port 3470`,
       cwd: fixture('template-default'),
       port: 3470,
+      reuseExistingServer: false,
+      timeout: 60000,
+      env: { OPENROUTER_API_KEY: 'PLAYWRIGHT_PLACEHOLDER_canonical_chat' },
+    },
+    {
+      // Item #6 — examples/full-stack-agent. Placeholder OpenRouter key
+      // reaches createConversationHistory (cookie issued) before the SDK
+      // returns 401 from OpenRouter — exactly the wire we want to assert.
+      command: `npx tsx ${cliPath} dev --port 3494`,
+      cwd: path.resolve(rootDir, 'examples/full-stack-agent'),
+      port: 3494,
+      reuseExistingServer: false,
+      timeout: 60000,
+      env: { OPENROUTER_API_KEY: 'PLAYWRIGHT_PLACEHOLDER_full_stack_agent' },
+    },
+    {
+      // 0.3.0 cutover T4.1 — ssr-basic on dedicated port for the nonce spec.
+      command: `npx tsx ${cliPath} dev --port 3492`,
+      cwd: fixture('ssr-basic'),
+      port: 3492,
       reuseExistingServer: false,
       timeout: 60000,
     },
