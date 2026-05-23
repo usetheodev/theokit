@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "theokit": "workspace:*",
-    "@usetheo/ui": "^0.6.1-next.0",
+    "@usetheo/ui": "^0.6.2-next.0",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
