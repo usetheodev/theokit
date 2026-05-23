@@ -21,12 +21,16 @@ describe('T3.3 — vite-plugin wires integrateUseTheoUI', () => {
     expect(src).toMatch(/import\s+\{\s*integrateUseTheoUI\s*\}\s+from\s+['"]\.\/integrate-ui/)
   })
 
-  it('config() hook is async', () => {
+  it('config() hook is sync (auto-chain moved to theoPluginAsync; no awaits left)', () => {
     const src = readFileSync(VP, 'utf-8')
-    expect(src).toMatch(/async\s+config\(\)/)
+    // Vite drops plugins returned from a child plugin's `config()` hook
+    // (verified empirically 2026-05-23). The auto-chain moved to the
+    // top-level `theoPluginAsync` factory. The `config()` hook itself
+    // is now sync — no awaits remain.
+    expect(src).toMatch(/^\s*config\(\)/m)
   })
 
-  it('config() calls integrateUseTheoUI with projectRoot + consumer-config detection', () => {
+  it('theoPluginAsync calls integrateUseTheoUI with projectRoot + consumer-config detection', () => {
     const src = readFileSync(VP, 'utf-8')
     expect(src).toMatch(/integrateUseTheoUI\(projectRoot/)
     expect(src).toMatch(/consumerTailwindConfig/)

@@ -310,13 +310,17 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         if (devtools.warning) console.warn(devtools.warning)
         next = devtools.html
 
-        // 3. Stylesheet links (dev only) — fixes LCP. Without this, CSS
-        // only loads after JS bundle executes the `import 'styles.css'`,
-        // causing FOUC + LCP > 9s on cold loads. In prod, Vite's SSR
-        // bundle emits the correct hashed <link> automatically.
+        // 3. Stylesheet links + font preloads (dev only) — fixes LCP +
+        // CLS. Without the <link rel="stylesheet">, CSS only loads after
+        // JS bundle executes the `import 'styles.css'`, causing FOUC + LCP
+        // > 9s. Without font preload, Geist swaps in late and the text
+        // reflows (CLS ~0.4). Production builds rely on Vite's SSR bundle
+        // for both (correct hashed <link> + preload metadata).
         const styles = injectStylesheets(next, {
           isDev: isDevMode,
           hasPackage: (name) => existsSync(resolve(projectRoot, 'node_modules', ...name.split('/'))),
+          projectRoot,
+          hasFile: (relPath) => existsSync(resolve(projectRoot, relPath)),
         })
         next = styles.html
 
