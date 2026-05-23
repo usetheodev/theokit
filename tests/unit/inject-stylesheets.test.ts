@@ -66,55 +66,16 @@ describe('injectStylesheets', () => {
     expect(result.html).toMatch(/<body[^>]*>\s*<link/i)
   })
 
-  // Font preload path (CLS fix 2026-05-23 — @usetheo/ui ships font-display:swap
-  // which causes Geist to swap-in late and reflow text; preloading the woff2
-  // in parallel with HTML brings CLS from 0.39 → ~0).
-  it('preloads Geist woff2 fonts when projectRoot + hasFile provided', () => {
-    const result = injectStylesheets(BASE_HTML, {
-      isDev: true,
-      hasPackage: () => true,
-      projectRoot: '/proj',
-      hasFile: () => true,
-    })
-    const preloads = result.injected.filter((t) => t.includes('rel="preload"'))
-    expect(preloads.length).toBe(3) // geist-400, 500, 600
-    expect(result.html).toContain('as="font"')
-    expect(result.html).toContain('type="font/woff2"')
-    expect(result.html).toContain('crossorigin')
-    expect(result.html).toContain('geist-400.woff2')
-    expect(result.html).toContain('geist-500.woff2')
-    expect(result.html).toContain('geist-600.woff2')
-  })
-
-  it('skips font preloads when projectRoot is missing', () => {
+  // Font preload was reverted on 2026-05-23 — see inject-stylesheets.ts
+  // module comment. Browser logged "preloaded but not used" because the
+  // pnpm symlink path didn't match the actual @font-face request path.
+  it('does NOT emit font preloads (would be wasted in pnpm dev)', () => {
     const result = injectStylesheets(BASE_HTML, {
       isDev: true,
       hasPackage: () => true,
     })
     const preloads = result.injected.filter((t) => t.includes('rel="preload"'))
     expect(preloads.length).toBe(0)
-  })
-
-  it('skips font preloads when hasFile returns false (woff2 not on disk)', () => {
-    const result = injectStylesheets(BASE_HTML, {
-      isDev: true,
-      hasPackage: () => true,
-      projectRoot: '/proj',
-      hasFile: () => false,
-    })
-    const preloads = result.injected.filter((t) => t.includes('rel="preload"'))
-    expect(preloads.length).toBe(0)
-  })
-
-  it('font preload URLs encode projectRoot via /@fs/ Vite scheme', () => {
-    const result = injectStylesheets(BASE_HTML, {
-      isDev: true,
-      hasPackage: () => true,
-      projectRoot: '/home/user/my-app',
-      hasFile: () => true,
-    })
-    expect(result.html).toContain(
-      '/@fs//home/user/my-app/node_modules/@usetheo/ui/dist/fonts/geist-400.woff2',
-    )
+    expect(result.html).not.toContain('woff2')
   })
 })

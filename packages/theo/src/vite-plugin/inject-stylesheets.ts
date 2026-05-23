@@ -33,39 +33,25 @@ const TARGETS: StylesheetTarget[] = [
 ]
 
 /**
- * Font preloads — cuts the "Flash of Unstyled Text" (FOUT) that
- * `font-display: swap` causes. Without preloading, the browser paints
- * with system-ui first, swaps to Geist when the woff2 lands, and the
- * text reflows (Geist has different glyph metrics than system fonts).
- * That reflow shows up as CLS in DevTools (measured 0.39 in the example
- * before this fix). With preload, the browser fetches the woff2 IN
- * PARALLEL with the HTML — Geist is cached before paint, swap happens
- * before user perception, CLS → ~0.
+ * Note (2026-05-23): font preloads were briefly added here to address a
+ * "FOUT-looking" CLS of 0.39 measured in DevTools. They turned out to
+ * be a misdiagnosis — the real cause was a React hydration mismatch
+ * from `<StaticRouterProvider hydrate>` emitting a `<script>` inside
+ * the React tree (fixed in commit 31506d1).
  *
- * Only the 3 body weights are preloaded — display variants and Mono are
- * lazy (rarely on the critical path).
+ * Why we don't preload fonts:
+ *   - In dev, pnpm hoists @usetheo/ui via `.pnpm/<hash>/...`. The CSS
+ *     `@font-face` resolves to the real path; our preload would use the
+ *     symlink path. Browser doesn't dedupe — preload is "wasted" and
+ *     Chrome logs "preloaded but not used within a few seconds".
+ *   - In prod, Vite's SSR bundle emits proper hashed preload metadata
+ *     for fonts referenced from compiled CSS. Manual preload there
+ *     would conflict.
+ *
+ * If a future regression brings back font-related CLS, the right path
+ * is `font-display: optional` (no swap) or size-adjust metric matching
+ * in @usetheo/ui itself — not framework-side preload.
  */
-interface FontPreloadTarget {
-  /** URL Vite serves the woff2 at */
-  href: string
-  /** Filesystem path checked before injection (existsSync inside hasPackage's cwd) */
-  filePath: string
-}
-
-const FONT_TARGETS: FontPreloadTarget[] = [
-  {
-    href: '/@fs/REPLACE/node_modules/@usetheo/ui/dist/fonts/geist-400.woff2',
-    filePath: 'node_modules/@usetheo/ui/dist/fonts/geist-400.woff2',
-  },
-  {
-    href: '/@fs/REPLACE/node_modules/@usetheo/ui/dist/fonts/geist-500.woff2',
-    filePath: 'node_modules/@usetheo/ui/dist/fonts/geist-500.woff2',
-  },
-  {
-    href: '/@fs/REPLACE/node_modules/@usetheo/ui/dist/fonts/geist-600.woff2',
-    filePath: 'node_modules/@usetheo/ui/dist/fonts/geist-600.woff2',
-  },
-]
 
 export interface InjectStylesheetsResult {
   html: string
@@ -77,10 +63,6 @@ export interface InjectStylesheetsOptions {
   isDev: boolean
   /** Function that checks whether a package is installed at projectRoot. */
   hasPackage(name: string): boolean
-  /** Absolute project root — used to materialize font preload URLs. */
-  projectRoot?: string
-  /** Function that checks whether a file exists inside projectRoot. */
-  hasFile?(relPath: string): boolean
 }
 
 export function injectStylesheets(
@@ -95,20 +77,6 @@ export function injectStylesheets(
     // Idempotency: skip if href already present
     if (html.includes(target.href)) continue
     tagsToInject.push(`<link rel="stylesheet" href="${target.href}" />`)
-  }
-
-  // Font preloads — only when @usetheo/ui present + the woff2 files
-  // exist on disk + projectRoot is known. /@fs/ URL needs the absolute
-  // path; we serialize the realpath so Vite serves the file directly.
-  if (opts.projectRoot && opts.hasFile && opts.hasPackage('@usetheo/ui')) {
-    for (const font of FONT_TARGETS) {
-      if (!opts.hasFile(font.filePath)) continue
-      const absUrl = `/@fs/${opts.projectRoot}/${font.filePath}`
-      if (html.includes(absUrl)) continue
-      tagsToInject.push(
-        `<link rel="preload" as="font" type="font/woff2" crossorigin href="${absUrl}" />`,
-      )
-    }
   }
 
   if (tagsToInject.length === 0) return { html, injected: [] }
