@@ -36,16 +36,47 @@ function buildAppTreeJs(options: EntryServerOptions): string {
   // never attach → page looks dead. The nonce option to
   // renderToPipeableStream covers React-emitted scripts but NOT the
   // hydration script which is emitted by react-router itself.
+  // hydrate: false — CRITICAL fix for hydration mismatch.
+  //
+  // StaticRouterProvider with `hydrate: true` (default) emits
+  // `<script>window.__staticRouterHydrationData = ...</script>` INSIDE
+  // the React tree. The client's `<RouterProvider>` does NOT emit any
+  // script. React's reconciler sees server={...stuff, <script>} vs
+  // client={...stuff} and DISCARDS the entire server tree, regenerating
+  // from scratch on the client. That regeneration causes a massive
+  // layout shift (CLS 0.39 measured in the example).
+  //
+  // Fix: tell StaticRouterProvider to NOT emit the script. The framework
+  // emits the hydration data as a separate `<script>` in the HTML
+  // template (outside #root), via the `hydrationData` returned from
+  // `render()`. The script still runs BEFORE entry-client.js, so
+  // window.__staticRouterHydrationData is populated when
+  // createBrowserRouter reads it.
   if (options.theoUi) {
     return [
       `React.createElement(TheoUIProvider, { theme: { defaultTheme: '${theme}' } },`,
       `      React.createElement(Suspense, { fallback: null },`,
-      `        React.createElement(StaticRouterProvider, { router, context, nonce: options.nonce })`,
+      `        React.createElement(StaticRouterProvider, { router, context, hydrate: false })`,
       `      )`,
       `    )`,
     ].join('\n')
   }
-  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context, nonce: options.nonce })\n    )`
+  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context, hydrate: false })\n    )`
+}
+
+/**
+ * Generate the hydration data extraction snippet. Reads
+ * loaderData/actionData/errors from the StaticHandlerContext and returns
+ * them as an object the framework can serialize into a `<script>` tag.
+ */
+function hydrationDataExtractSnippet(): string {
+  return [
+    `    const hydrationData = {`,
+    `      loaderData: context.loaderData,`,
+    `      actionData: context.actionData,`,
+    `      errors: context.errors,`,
+    `    }`,
+  ].join('\n')
 }
 
 function generateSingleShotEntry(options: EntryServerOptions): string {
@@ -70,22 +101,22 @@ function generateSingleShotEntry(options: EntryServerOptions): string {
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
     `  const app = ${appTree}`,
     ``,
+    hydrationDataExtractSnippet(),
+    ``,
     `  return new Promise((resolve, reject) => {`,
     `    let html = ''`,
     `    let piped = false`,
     `    const passthrough = new PassThrough()`,
     `    passthrough.on('data', (chunk) => { html += chunk.toString() })`,
-    `    passthrough.on('end', () => { resolve(html) })`,
+    `    passthrough.on('end', () => { resolve({ html, hydrationData }) })`,
     `    passthrough.on('error', reject)`,
     ``,
-    `    // T3.1 — Pipe on onShellReady (Next.js pattern). Calling pipe()`,
-    `    // twice throws "React currently only supports piping to one`,
-    `    // writable stream". The \`piped\` flag is a belt-and-suspenders`,
-    `    // guard if onShellReady fires unexpectedly more than once.`,
-    `    // T4.1 — Forward options.nonce to React so every <script> tag`,
-    `    // React emits (StaticRouterProvider hydration data + Suspense`,
-    `    // boundary scripts) carries the nonce attribute. Required for`,
-    `    // 0.3.0 strict CSP without 'unsafe-inline'. EC-12.`,
+    `    // Pipe on onShellReady (Next.js pattern). Calling pipe() twice`,
+    `    // throws "React currently only supports piping to one writable`,
+    `    // stream". The \`piped\` flag is a belt-and-suspenders guard if`,
+    `    // onShellReady fires unexpectedly more than once.`,
+    `    // Forward options.nonce to React so every <script> tag React`,
+    `    // emits (Suspense boundary scripts) carries the nonce attribute.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
     `      nonce: options.nonce,`,
     `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,
@@ -193,16 +224,18 @@ function backCompatRenderer(appTree: string): string[] {
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
     `  const app = ${appTree}`,
     ``,
+    hydrationDataExtractSnippet(),
+    ``,
     `  const { PassThrough } = await import('node:stream')`,
     `  return new Promise((resolve, reject) => {`,
     `    let html = ''`,
     `    let piped = false`,
     `    const passthrough = new PassThrough()`,
     `    passthrough.on('data', (chunk) => { html += chunk.toString() })`,
-    `    passthrough.on('end', () => { resolve(html) })`,
+    `    passthrough.on('end', () => { resolve({ html, hydrationData }) })`,
     `    passthrough.on('error', reject)`,
     ``,
-    `    // T3.1 — pipe on onShellReady (Next.js pattern). T4.1 — nonce.`,
+    `    // Pipe on onShellReady (Next.js pattern). nonce forwarded.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
     `      nonce: options.nonce,`,
     `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,

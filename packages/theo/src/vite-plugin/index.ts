@@ -479,16 +479,30 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
                 { nonce },
               )
 
+              interface SsrRenderResult {
+                html: string
+                hydrationData: {
+                  loaderData?: unknown
+                  actionData?: unknown
+                  errors?: unknown
+                }
+              }
+              const isSsrRenderResult = (value: unknown): value is SsrRenderResult => {
+                if (typeof value !== 'object' || value === null) return false
+                if (!('html' in value)) return false
+                const html = (value as Record<string, unknown>).html
+                return typeof html === 'string'
+              }
               interface SsrEntryServer {
                 render: (
                   url: string,
                   opts: { nonce: string },
-                ) => Promise<string | { redirect: Response }>
+                ) => Promise<SsrRenderResult | { redirect: Response } | string>
               }
               const mod = (await server.ssrLoadModule(VIRTUAL_ENTRY_SERVER_ID)) as SsrEntryServer
               const result = await mod.render(url, { nonce })
 
-              if (typeof result === 'object' && 'redirect' in result) {
+              if (result && typeof result === 'object' && 'redirect' in result) {
                 res.writeHead(302, {
                   Location: result.redirect.headers.get('location') ?? '/',
                 })
@@ -496,8 +510,24 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
                 return
               }
 
-              // render() returns HTML string — inject into template
-              const ssrHtml = result
+              // Backward-compat: old render returned string. New shape
+              // returns { html, hydrationData } so the framework can emit
+              // the hydration data script OUTSIDE the React root (fixes
+              // hydration mismatch — see entry-server.ts comment).
+              let ssrHtml: string
+              let hydrationScript = ''
+              if (typeof result === 'string') {
+                ssrHtml = result
+              } else if (isSsrRenderResult(result)) {
+                ssrHtml = result.html
+                const dataJson = JSON.stringify(result.hydrationData).replace(
+                  /</g,
+                  '\\u003c',
+                )
+                hydrationScript = `<script nonce="${nonce}">window.__staticRouterHydrationData=${dataJson}</script>`
+              } else {
+                ssrHtml = ''
+              }
               const rootDivMatch = /<div id=["']root["'][^>]*>/.exec(template)
               if (!rootDivMatch) {
                 res.writeHead(200, { 'Content-Type': 'text/html' })
@@ -506,7 +536,11 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
               }
 
               const splitIdx = template.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
-              const html = template.slice(0, splitIdx) + ssrHtml + template.slice(splitIdx)
+              const html =
+                template.slice(0, splitIdx) +
+                ssrHtml +
+                hydrationScript +
+                template.slice(splitIdx)
 
               res.writeHead(200, { 'Content-Type': 'text/html' })
               res.end(html)

@@ -112,8 +112,13 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const ssrStreamingEnabled = ssrEnabled && config.ssrStreaming
   // T0.2: ssrRender now accepts `{ nonce }` so per-request nonce threads
   // through to entry-server → StaticRouterProvider + renderToPipeableStream.
+  // Return shape: { html, hydrationData } (new) | string (backward-compat
+  // for older entry-server bundles) | { redirect } for SSR redirects.
   let ssrRender:
-    | ((url: string, options?: { nonce?: string }) => Promise<string | { redirect: Response }>)
+    | ((
+        url: string,
+        options?: { nonce?: string },
+      ) => Promise<SsrRenderResult | { redirect: Response } | string>)
     | null = null
   type RenderStreamingResult = { redirect: Response } | { streaming: true } | undefined
   let ssrRenderStreaming:
@@ -126,12 +131,34 @@ export async function startCommand(options: StartOptions): Promise<void> {
   let htmlHead = ''
   let htmlTail = ''
 
+  interface SsrRenderResult {
+    html: string
+    hydrationData: {
+      loaderData?: unknown
+      actionData?: unknown
+      errors?: unknown
+    }
+  }
+  function isSsrRenderResult(value: unknown): value is SsrRenderResult {
+    if (typeof value !== 'object' || value === null) return false
+    if (!('html' in value)) return false
+    const html = (value as Record<string, unknown>).html
+    if (typeof html !== 'string') return false
+    return true
+  }
+  function asSsrRenderResult(value: SsrRenderResult): SsrRenderResult {
+    // Type-laundering helper. After `isSsrRenderResult` narrows, the
+    // linter still complains about member access on the union type
+    // (Awaited<ReturnType<...>> evaluates to a wider type). Routing
+    // through this typed identity makes downstream access type-safe.
+    return value
+  }
   if (ssrEnabled) {
     interface SsrEntryServer {
       render: (
         url: string,
         options?: { nonce?: string },
-      ) => Promise<string | { redirect: Response }>
+      ) => Promise<SsrRenderResult | { redirect: Response } | string>
       renderStreaming?: (
         url: string,
         response: ServerResponse,
@@ -378,9 +405,27 @@ export async function startCommand(options: StartOptions): Promise<void> {
               res.end()
               return
             }
-            const ssrHtml = result
+            // Backward-compat: old render() returned just a string.
+            // New shape: { html, hydrationData } — framework emits
+            // hydration data script outside the React root to avoid
+            // hydration mismatch with client RouterProvider.
+            let ssrHtml = ''
+            let hydrationScript = ''
+            if (typeof result === 'string') {
+              ssrHtml = result
+            } else if (isSsrRenderResult(result)) {
+              const rendered = asSsrRenderResult(result)
+              ssrHtml = rendered.html
+              const dataJson = JSON.stringify(rendered.hydrationData).replace(
+                /</g,
+                '\\u003c',
+              )
+              hydrationScript = `<script${
+                nonce ? ` nonce="${nonce}"` : ''
+              }>window.__staticRouterHydrationData=${dataJson}</script>`
+            }
             res.writeHead(200, { 'Content-Type': 'text/html' })
-            res.end(htmlHead + ssrHtml + htmlTail)
+            res.end(htmlHead + ssrHtml + hydrationScript + htmlTail)
             return
           } catch (ssrErr) {
             console.error('[SSR Error] Falling back to CSR:', (ssrErr as Error).message)
