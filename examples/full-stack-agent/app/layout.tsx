@@ -3,7 +3,7 @@
 // import graph and processes @theme tokens correctly. See globals.css.
 import './globals.css'
 
-import { Outlet } from 'react-router'
+import { Outlet, useLocation, useNavigate } from 'react-router'
 import {
   Sidebar,
   TopNav,
@@ -28,6 +28,8 @@ const AGENTS: AgentProfileDescriptor[] = [
 ]
 
 export default function RootLayout() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
   return (
     <div className="grid h-screen w-screen grid-rows-[auto_1fr] bg-background text-foreground">
       <TopNav className="border-border/60 border-b px-4 py-2">
@@ -56,11 +58,27 @@ export default function RootLayout() {
           </Sidebar.Header>
 
           <Sidebar.Section title="Workspace">
-            <Sidebar.Item icon={MessageSquare} active>
+            <Sidebar.Item
+              icon={MessageSquare}
+              active={pathname === '/'}
+              onClick={() => navigate('/')}
+            >
               New conversation
             </Sidebar.Item>
-            <Sidebar.Item icon={History}>History</Sidebar.Item>
-            <Sidebar.Item icon={Settings}>Settings</Sidebar.Item>
+            <Sidebar.Item
+              icon={History}
+              active={pathname.startsWith('/history')}
+              onClick={() => navigate('/history')}
+            >
+              History
+            </Sidebar.Item>
+            <Sidebar.Item
+              icon={Settings}
+              active={pathname.startsWith('/settings')}
+              onClick={() => navigate('/settings')}
+            >
+              Settings
+            </Sidebar.Item>
           </Sidebar.Section>
 
           <Sidebar.Footer className="mt-auto">
