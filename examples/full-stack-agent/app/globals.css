@@ -1,0 +1,12 @@
+/**
+ * Tailwind v4 entry CSS — per @usetheo/ui@0.5.1-next.0 RFC 0008 recipe.
+ *
+ * - `@import "@usetheo/ui/styles.css"` brings the v4 pre-built surface
+ *   (tailwindcss + tokens + tokens-v4 + base layer + fonts).
+ * - `@source` tells Tailwind v4 to scan @usetheo/ui's dist for class
+ *   names. v4 skips node_modules by default; this opts the UI library
+ *   back into the scan.
+ */
+@import "@usetheo/ui/styles.css";
+
+@source "../node_modules/@usetheo/ui/dist/**/*.{js,mjs,cjs}";

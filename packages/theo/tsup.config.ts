@@ -10,6 +10,13 @@ export default defineConfig([
       'react-query/index': 'src/react-query/index.ts',
       'adapters/web-shim': 'src/adapters/web-shim.ts',
       'adapters/ws-shim': 'src/adapters/ws-shim.ts',
+      // Devtools client entry — loaded dynamically in dev mode by the
+      // Vite plugin's `theokit/devtools/entry` alias. MUST ship in dist
+      // because consumers resolve `theokit` via package.json#exports → dist/,
+      // not src/. Without this entry the alias resolves to a missing file
+      // and `pnpm dev` in any consumer crashes with a vite:import-analysis
+      // error (regression from 2026-05-22; see tests/unit/devtools-entry-dist.test.ts).
+      'devtools/entry': 'src/devtools/entry.tsx',
     },
     format: ['esm'],
     dts: true,

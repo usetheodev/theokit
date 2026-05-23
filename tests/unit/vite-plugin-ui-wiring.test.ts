@@ -33,9 +33,14 @@ describe('T3.3 — vite-plugin wires integrateUseTheoUI', () => {
     expect(src).toMatch(/consumerPostcssConfig/)
   })
 
-  it('config() returns the auto-detected plugins via `plugins: uiPlugins`', () => {
+  it('exports theoPluginAsync that returns Plugin[] (Vite-canonical auto-chain)', () => {
     const src = readFileSync(VP, 'utf-8')
-    expect(src).toMatch(/plugins:\s+uiPlugins/)
+    // The auto-chain moved out of config()'s `plugins:` return (Vite drops
+    // plugins returned that way) into a top-level `theoPluginAsync` factory
+    // that returns `[theoPlugin, ...uiPlugins]`. Consumers spread its
+    // result into the plugins array.
+    expect(src).toMatch(/export\s+async\s+function\s+theoPluginAsync/)
+    expect(src).toMatch(/return\s*\[\s*theoPlugin\(rootOrOptions\)\s*,\s*\.\.\.uiPlugins\s*\]/)
   })
 
   it('findConsumerConfig helper walks for tailwind.config + postcss.config', () => {

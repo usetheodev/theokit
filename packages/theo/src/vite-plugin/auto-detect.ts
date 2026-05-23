@@ -116,7 +116,31 @@ export function detectPackage(name: string, cwd: string): DetectResult {
     }
   }
 
-  // Fallback path — exports doesn't include ./package.json. Walk up from
+  // Filesystem fallback: ESM-only packages (no `require` condition) can't
+  // be resolved by createRequire. Check node_modules directly. The walk
+  // upward handles pnpm hoist + workspace symlinks.
+  let dir = cwd
+  for (let i = 0; i < 10; i++) {
+    const nmPath = join(dir, 'node_modules', ...name.split('/'))
+    const nmPkgJson = join(nmPath, 'package.json')
+    if (existsSync(nmPkgJson)) {
+      try {
+        const raw = readFileSync(nmPkgJson, 'utf-8')
+        const pkg = JSON.parse(raw) as { name?: string; version?: string }
+        if (pkg.name === name) {
+          return { installed: true, version: pkg.version, resolvedPath: nmPkgJson }
+        }
+      } catch {
+        /* fall through to entry probe */
+      }
+      return { installed: true }
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  // Last-resort fallback — exports doesn't include ./package.json. Walk up from
   // the resolved entry to find the package's own package.json.
   const probe = fallbackProbe(name, cwd)
   if (probe) {

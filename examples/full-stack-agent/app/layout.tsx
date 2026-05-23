@@ -1,4 +1,7 @@
-import '@usetheo/ui/styles.css'
+// CSS-side entry per RFC 0008 follow-up: `@import "@usetheo/ui/styles.css"`
+// must be in a CSS file (not JS) so Tailwind v4's compiler crawls the
+// import graph and processes @theme tokens correctly. See globals.css.
+import './globals.css'
 
 import { Outlet } from 'react-router'
 import {

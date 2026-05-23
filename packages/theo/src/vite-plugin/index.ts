@@ -37,6 +37,7 @@ import {
   injectDevtoolsScript,
 } from './inject-devtools.js'
 import { injectEntryClient } from './inject-entry-client.js'
+import { injectStylesheets } from './inject-stylesheets.js'
 import { integrateUseTheoUI } from './integrate-ui.js'
 import { resolveTheoRootDir } from './resolve-theo-root.js'
 import { detectTheoUi, type TheoUiDetectResult } from './theoui-detect.js'
@@ -92,6 +93,38 @@ function findConsumerConfig(projectRoot: string, basename: string): string | und
     dir = parent
   }
   return undefined
+}
+
+/**
+ * Async factory companion. Returns `[theoPlugin, ...autoChainedPlugins]`.
+ *
+ * Why this exists alongside the sync `theoPlugin()` factory: Vite does NOT
+ * reliably merge plugins returned from a child plugin's `config()` hook
+ * (verified empirically 2026-05-23 — plugins were silently dropped from
+ * the resolved chain despite being returned correctly). The canonical
+ * Vite pattern for plugin-from-plugin is to return `Plugin[]` from the
+ * plugin factory itself, which Vite flattens into the consumer's
+ * `plugins` array.
+ *
+ * Consumers should prefer `await theoPluginAsync(...)` over `theoPlugin(...)`
+ * when they want @usetheo/ui + @tailwindcss/vite auto-chaining. The sync
+ * factory remains for backward compatibility and tests.
+ */
+export async function theoPluginAsync(
+  rootOrOptions?: string | TheoPluginOptions,
+): Promise<Plugin[]> {
+  const options =
+    typeof rootOrOptions === 'string' ? { root: rootOrOptions } : (rootOrOptions ?? {})
+  const projectRoot = options.root ?? process.cwd()
+
+  const consumerTailwindConfig = findConsumerConfig(projectRoot, 'tailwind.config')
+  const consumerPostcssConfig = findConsumerConfig(projectRoot, 'postcss.config')
+  const uiPlugins = await integrateUseTheoUI(projectRoot, {
+    consumerTailwindConfig,
+    consumerPostcssConfig,
+  })
+
+  return [theoPlugin(rootOrOptions), ...uiPlugins]
 }
 
 // eslint-disable-next-line max-lines-per-function -- Vite plugin factory: state setup + hooks live together by Vite convention
@@ -170,23 +203,58 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
       }
     },
 
-    async config() {
+    // Vite calls this hook (sync return is fine — no awaits left after
+    // the auto-chain moved to theoPluginAsync). The @usetheo/ui +
+    // @tailwindcss/vite auto-chain lives in `theoPluginAsync` because
+    // Vite drops plugins returned from a child plugin's config() hook.
+    config() {
       // Detect whether we're running from source (.ts) or compiled dist (.js)
       const ext = existsSync(resolve(theoSrcDir, 'index.ts')) ? '.ts' : '.js'
 
-      // T3.3 — auto-chain @tailwindcss/vite + @usetheo/ui/vite-plugin when
-      // the consumer has @usetheo/ui in deps AND no manual tailwind/postcss
-      // config (D3 deferral). Detection of consumer configs walks 3 levels.
-      const consumerTailwindConfig = findConsumerConfig(projectRoot, 'tailwind.config')
-      const consumerPostcssConfig = findConsumerConfig(projectRoot, 'postcss.config')
-      const uiPlugins = await integrateUseTheoUI(projectRoot, {
-        consumerTailwindConfig,
-        consumerPostcssConfig,
-      })
+      // Perf: pre-bundle heavy deps at server startup (not on first request).
+      // Without this, a cold `pnpm dev` takes ~10s before serving `/` because
+      // Vite discovers @usetheo/ui mid-request and stops to bundle it.
+      // Measured 2026-05-22: cold first GET / = 10s → ~1s with includes wired.
+      // See https://vite.dev/guide/dep-pre-bundling — "lazy dependency
+      // discovery" is the canonical mitigation.
+      const optimizeDepsInclude: string[] = []
+      if (existsSync(resolve(projectRoot, 'node_modules', '@usetheo', 'ui'))) {
+        optimizeDepsInclude.push('@usetheo/ui')
+      }
+      if (existsSync(resolve(projectRoot, 'node_modules', 'lucide-react'))) {
+        optimizeDepsInclude.push('lucide-react')
+      }
+
+      // Perf: warm up the app's critical-path files so Vite transforms them
+      // before the browser asks. Cuts the visible LCP when these files
+      // import heavy barrels (TheoUI).
+      const warmupClientFiles: string[] = []
+      for (const candidate of ['app/layout.tsx', 'app/page.tsx', 'app/page.jsx']) {
+        const full = resolve(projectRoot, candidate)
+        if (existsSync(full)) warmupClientFiles.push(`./${candidate}`)
+      }
 
       return {
         envPrefix: 'THEO_PUBLIC_',
-        plugins: uiPlugins,
+        optimizeDeps: optimizeDepsInclude.length > 0 ? { include: optimizeDepsInclude } : undefined,
+        server: {
+          ...(warmupClientFiles.length > 0
+            ? { warmup: { clientFiles: warmupClientFiles } }
+            : {}),
+          // Skip watching gitignored heavy dirs to avoid hitting ENOSPC
+          // (inotify watcher exhaustion). `referencias/` are deep-research
+          // clones; `.theokit/` is per-conversation cache; `.theo/` is
+          // build output. None should trigger HMR.
+          watch: {
+            ignored: [
+              '**/referencias/**',
+              '**/.theokit/**',
+              '**/.theo/**',
+              '**/dist/**',
+              '**/node_modules/**',
+            ],
+          },
+        },
         resolve: {
           alias: [
             // Order matters: most-specific first so `theokit/X` doesn't
@@ -241,6 +309,16 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         })
         if (devtools.warning) console.warn(devtools.warning)
         next = devtools.html
+
+        // 3. Stylesheet links (dev only) — fixes LCP. Without this, CSS
+        // only loads after JS bundle executes the `import 'styles.css'`,
+        // causing FOUC + LCP > 9s on cold loads. In prod, Vite's SSR
+        // bundle emits the correct hashed <link> automatically.
+        const styles = injectStylesheets(next, {
+          isDev: isDevMode,
+          hasPackage: (name) => existsSync(resolve(projectRoot, 'node_modules', ...name.split('/'))),
+        })
+        next = styles.html
 
         return next
       },

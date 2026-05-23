@@ -6,7 +6,7 @@ import { createServer, type ViteDevServer } from 'vite'
 import { loadConfig } from '../../config/load-config.js'
 import { loadEnv } from '../../config/load-env.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
-import { theoPlugin } from '../../vite-plugin/index.js'
+import { theoPluginAsync } from '../../vite-plugin/index.js'
 import { gcAgentRegistry } from '../lib/cleanup.js'
 
 interface DevOptions {
@@ -45,9 +45,18 @@ export async function startDevServer(cwd: string, options?: DevOptions): Promise
     config.rateLimit && 'windowMs' in config.rateLimit && 'max' in config.rateLimit
       ? config.rateLimit
       : undefined
+  // theoPluginAsync auto-chains @usetheo/ui + @tailwindcss/vite via
+  // top-level Plugin[] return (sync `theoPlugin()` factory's config()
+  // hook returning {plugins:[...]} is silently dropped by Vite — see
+  // commit history). Spread the result so Vite flattens them.
+  const theoPlugins = await theoPluginAsync({
+    root: cwd,
+    rateLimit: flatRateLimit,
+    ssr: config.ssr,
+  })
   const server = await createServer({
     root: cwd,
-    plugins: [react(), theoPlugin({ root: cwd, rateLimit: flatRateLimit, ssr: config.ssr })],
+    plugins: [react(), ...theoPlugins],
     server: { port },
     logLevel: options?.port === 0 ? 'silent' : undefined,
   })
