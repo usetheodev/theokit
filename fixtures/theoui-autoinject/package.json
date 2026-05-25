@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@usetheo/ui": "^0.10.0-next.0"
+    "@usetheo/ui": "^0.11.0-next.0"
   }
 }
