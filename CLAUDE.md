@@ -19,7 +19,7 @@ TheoKit is the **app the agent lives in**. Technically, it is a Next.js-based fr
 **Positioning, public:**
 
 - Use the Voice and Tone section below. Aspirational HERO, benefit-first BODY, technical DEEP DIVE.
-- Mention sibling products (TheoCode, TheoCreate, Theo PaaS) only as context for the workflow — never as the lede. The TheoKit reader landed here because they want to build something. Give them that first.
+- Mention sibling products (TheoCode, TheoCreate, the `theo` Go platform) only as context for the *family*, never as the lede. The TheoKit reader landed here because they want to build something. Give them that first. **Honesty rule:** do not list a sibling as a *capability* of TheoKit unless the code wiring exists in this repo. The Ecosystem section below states the literal wiring; copy that contradicts it is invalid.
 
 ---
 
@@ -107,6 +107,36 @@ The **vocabulary table** and **before/after examples** are living — add new en
 - Monorepo cross-project rules (Cross-Project Rules 1–10 in [`../CLAUDE.md`](../CLAUDE.md)) still apply inside `theokit/`. This file does not override them.
 - The voice and tone defined here is **scoped to the TheoKit project tree**. Do not export these rules to other sub-projects without an explicit strategic review at the monorepo level.
 - The Locked Narrative table in the monorepo `CLAUDE.md` is authoritative for cross-product positioning (headline, sub-headline, comparison stack). TheoKit copy must not contradict it; TheoKit copy may be more aspirational *within* the TheoKit-shaped slice of that narrative.
+
+---
+
+## Ecosystem — the three siblings, literally
+
+TheoKit lives next to three sibling projects under `/home/paulo/Projetos/usetheo/`. This table is the **source of truth** for what TheoKit actually integrates with. Any README claim, comparison table, or pitch deck that contradicts this is wrong and must be corrected to match the code.
+
+| Sibling | Sibling repo | Kind | TheoKit consumes via | Code wiring | Status |
+|---------|--------------|------|---------------------|-------------|:------:|
+| **`@usetheo/sdk`** + `@usetheo/gateway` + `@usetheo/gateway-telegram` | `../theokit-sdk/` (TypeScript) | Agent runtime: `Agent.create/send/getOrCreate`, `Run.stream`, providers (OpenAI/Anthropic/Ollama/OpenRouter), conversation persistence (`.theokit/agents/<id>/messages.jsonl`), custom-tool runtime | **Workspace protocol** — `pnpm-workspace.yaml` includes `../theokit-sdk/packages/{sdk,gateway,gateway-telegram}`. Local edits in the sibling reflect immediately. | 6 framework files: `server/agent/{create-conversation-history,stream-agent-run,agent-types}.ts`, `server/define/define-agent-tool.ts`, examples + templates `from '@usetheo/sdk'`. | ✅ Wired |
+| **`@usetheo/ui`** | `../theo-ui/` (TypeScript) | React component library: chat surface (`ChatMessage`, `ChatThread`, `ChatComposer`, `ToolCallCard`), theme system (`ThemeProvider`, `ThemeScript`, `TheoUIProvider`), design tokens, 50+ generic components | **npm dep** — published `@usetheo/ui` (`^0.11.0-next.0`) consumed via the npm registry. `pnpm-workspace.yaml` does **NOT** include `../theo-ui/`. Local edits in the sibling do NOT reflect — they require a npm publish first. | Framework auto-injects `<TheoUIProvider>` in SSR + client entries when the package is detected. 10+ files reference it: `vite-plugin/{inject-stylesheets,integrate-ui,theoui-detect}.ts`, `router/entry{,-server}.ts`, `config/schema.ts`, `cli/commands/{dev,upgrade-readiness}.ts`, `server/cost/track-agent-run.ts`. | ✅ Wired (npm) |
+| **`theo` → TheoCloud** (formerly "Theo PaaS") | `../theo/` (Go) | **The principal deploy target** — hosted product where TheoKit apps run in production. K8s operators (Crossplane-style), Helm charts, multi-tenant control plane, managed Postgres + Redis, secret rotation, audit log persistence, distributed rate-limiter store. Separate Go CLI named `theo`. | **Adapter not yet shipped** — `packages/theo/src/adapters/theo-cloud.ts` does not exist. However, the **architectural hooks are already in place**: `JobBackend` interface (ADR-0002), `UsageStorageAdapter` interface (R0.5.11 design), `RateLimitStorageAdapter` (security-hardening plan), structured logging to stdout. TheoCloud-side issues #58, #59, #60 interlock with TheoKit's security primitives. | The deploy adapter is the next major milestone after 0.4.0; pluggable interfaces are designed *for it*. | 🟡 **Primary target — adapter on roadmap, interfaces ready** |
+
+### Rules that derive from this table
+
+1. **TheoCloud (formerly Theo PaaS) IS the principal strategic target** — comparison tables, pitch decks, and roadmap items should reflect that. What they **must not** claim is that the `theo-cloud` *deploy adapter* exists today. Honest framing: "TheoCloud is the principal deploy target; the adapter ships with the next milestone."
+2. **TheoCloud-shaped surfaces in framework code use neutral interfaces, not direct TheoCloud calls.** `JobBackend`, `UsageStorageAdapter`, `RateLimitStorageAdapter`, structured-logging-to-stdout — all designed so TheoCloud "slots in as a third backend" (per ADR-0002) without coupling the framework to a single platform. Same interface lets Postgres/Redis/SQS/Cloudflare Queues plug in.
+3. **`@usetheo/sdk` is the agent runtime — always.** The locked premise (`[[project-stack-deps]]` memory) stands: defaults, docs, examples wire `@usetheo/sdk`. New agent primitives are *sugar over the SDK*, not parallel implementations.
+4. **`@usetheo/ui` is a published npm dep** — if you need to evolve it alongside TheoKit, the cross-repo PR flow is: (a) ship the change in `../theo-ui/`, (b) publish `^0.X.Y-next.Z`, (c) bump TheoKit consumers. **Do not** add `theo-ui/` to `pnpm-workspace.yaml` casually — that's a strategic-review-worthy decision (would unify the monorepo at the cost of slower published-package iteration cycles).
+5. **The TheoKit framework remains self-contained for non-TheoCloud deploys.** A user cloning this repo and running `pnpm install && pnpm dev` does not need to clone the `theo` Go sibling at all. They can deploy to any of the 8 in-tree adapters (Node, Vercel, Cloudflare Workers, AWS Lambda, Bun, Deno Deploy, Netlify, Static). The TheoCloud adapter, when it lands, is opt-in — not a hard dependency.
+6. **Renaming "Theo PaaS" → "TheoCloud" in user-facing copy** — README, marketing surfaces, comparison tables, status banners. Internal ADRs and historical plans retain "Theo PaaS" with `(formerly)` annotation when re-edited — do not rewrite history that says "Theo PaaS" inside completed plans.
+
+### Future evolution of these relationships
+
+Changes to the table above (e.g., upgrading `theo-ui` to a workspace link, shipping the `theo-cloud` adapter, deprecating `gateway-telegram`) are **architectural decisions** — they require:
+1. An ADR in `docs/adr/`
+2. A migration plan in `docs/plans/`
+3. An explicit update to this Ecosystem table
+
+Inserting a new sibling in copy without doing the wiring is not allowed. **For TheoCloud specifically:** copy *may* state "TheoCloud is the principal deploy target" (truthful — it is the strategic target with pluggable-interface preparation already in place), but copy *must not* state "deploys to TheoCloud" until the adapter file exists and a structural smoke test passes.
 
 ---
 

@@ -42,7 +42,7 @@ const FEATURES: Feature[] = [
     icon: Cloud,
     title: 'Deploy adapters',
     description:
-      'Node, Vercel, Cloudflare Workers, Bun, Deno Deploy, Netlify, AWS Lambda, static, Theo PaaS.',
+      '8 in-tree adapters today (Node, Vercel, Cloudflare Workers, Bun, Deno Deploy, Netlify, AWS Lambda, Static) + TheoCloud (principal target, shipping next).',
   },
 ]
 
