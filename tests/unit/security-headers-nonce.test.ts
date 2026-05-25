@@ -3,7 +3,7 @@ import {
   buildSecurityHeaders,
   type SecurityHeadersConfig,
   type SecurityEnv,
-} from '../../packages/theo/src/server/security-headers.js'
+} from '../../packages/theo/src/server/security/security-headers.js'
 
 /**
  * T4.1 — CSP nonce wiring + EC-3 (Cache-Control) + EC-4 (prerender skip).

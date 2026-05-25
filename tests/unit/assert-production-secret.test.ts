@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { assertProductionSecret } from '../../packages/theo/src/server/session.js'
+import { assertProductionSecret } from '../../packages/theo/src/server/auth/session.js'
 
 const REAL_SECRET = 'a-real-32-char-or-more-secret-value-for-tests'
 

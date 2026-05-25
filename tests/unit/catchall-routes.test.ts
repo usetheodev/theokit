@@ -6,8 +6,8 @@ import {
   compilePattern,
   matchRoute,
   type ServerRouteNode,
-} from '../../packages/theo/src/server/match.js'
-import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
+} from '../../packages/theo/src/server/scan/match.js'
+import { scanServerRoutes } from '../../packages/theo/src/server/scan/scan.js'
 
 describe('compilePattern catch-all', () => {
   it('should convert :...slug to (.+) regex', () => {

@@ -4,7 +4,7 @@ import {
   createNoOpLogger,
   type AuditEvent,
   type AuditLogger,
-} from '../../packages/theo/src/server/audit-log.js'
+} from '../../packages/theo/src/server/observability/audit-log.js'
 import { theoConfigSchema } from '../../packages/theo/src/config/schema.js'
 
 /**

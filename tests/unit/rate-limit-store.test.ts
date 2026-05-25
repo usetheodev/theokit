@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   InMemoryStore,
   type RateLimitStore,
-} from '../../packages/theo/src/server/rate-limit-store.js'
+} from '../../packages/theo/src/server/rate-limit/rate-limit-store.js'
 
 /**
  * T2.1 — `RateLimitStore` interface + `InMemoryStore` adapter.

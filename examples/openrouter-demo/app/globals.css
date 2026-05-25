@@ -1,0 +1,13 @@
+/**
+ * Tailwind v4 entry CSS — TheoUI ships pre-compiled tokens + utilities.
+ * @import must be in a CSS file (not JS) so Tailwind crawls the import
+ * graph and processes @theme tokens correctly.
+ */
+@import "@usetheo/ui/styles.css";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

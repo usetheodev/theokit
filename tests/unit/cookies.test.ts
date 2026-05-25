@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { getCookie, setCookie, deleteCookie } from '../../packages/theo/src/server/cookies.js'
+import { getCookie, setCookie, deleteCookie } from '../../packages/theo/src/server/http/cookies.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 function mockReq(cookieHeader: string): IncomingMessage {

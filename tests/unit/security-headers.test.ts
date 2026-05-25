@@ -5,7 +5,7 @@ import {
   DEFAULT_CSP,
   DEFAULT_PERMISSIONS_POLICY,
   type SecurityHeadersConfig,
-} from '../../packages/theo/src/server/security-headers.js'
+} from '../../packages/theo/src/server/security/security-headers.js'
 import { securityHeadersSchema } from '../../packages/theo/src/config/schema.js'
 
 /**

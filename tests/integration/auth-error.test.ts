@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { executeRoute } from '../../packages/theo/src/server/execute.js'
-import type { ServerRouteNode } from '../../packages/theo/src/server/match.js'
-import { requireAuth } from '../../packages/theo/src/server/auth.js'
+import { executeRoute } from '../../packages/theo/src/server/http/execute.js'
+import type { ServerRouteNode } from '../../packages/theo/src/server/scan/match.js'
+import { requireAuth } from '../../packages/theo/src/server/auth/auth.js'
 
 function createMockReq(method = 'GET', url = '/api/test'): IncomingMessage {
   return {

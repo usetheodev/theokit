@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { defineAgentEndpoint } from '../../packages/theo/src/server/define-agent-endpoint.js'
-import type { AgentEvent } from '../../packages/theo/src/server/agent-types.js'
+import { defineAgentEndpoint } from '../../packages/theo/src/server/define/define-agent-endpoint.js'
+import type { AgentEvent } from '../../packages/theo/src/server/agent/agent-types.js'
 
 /**
  * Regression for nextjs-maturity T1.1.

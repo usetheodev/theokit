@@ -1,30 +1,33 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { resolve, join, extname } from 'node:path'
+import { resolve, join } from 'node:path'
 
 import { loadConfig } from '../../config/load-config.js'
 import { loadEnv } from '../../config/load-env.js'
-import { executeAction } from '../../server/action-execute.js'
-import { scanServerActions } from '../../server/action-scan.js'
-import type { ActionNode } from '../../server/action-scan.js'
-import type { WebSocketHandler } from '../../server/define-websocket.js'
-import { executeRoute, sendError } from '../../server/execute.js'
-import { createPluginRunnerFromConfig } from '../../server/load-plugins.js'
-import { logRequest } from '../../server/logger.js'
-import { loadManifest } from '../../server/manifest.js'
-import { matchRoute } from '../../server/match.js'
-import type { ServerRouteNode } from '../../server/match.js'
-import { createProductionLoader } from '../../server/module-loader.js'
-import { generateNonce } from '../../server/nonce.js'
-import { createRateLimiter } from '../../server/rate-limit.js'
-import { scanServerRoutes } from '../../server/scan.js'
-import { buildSecurityHeaders } from '../../server/security-headers.js'
-import { serveStaticFile } from '../../server/static.js'
-import { findSuggestion } from '../../server/suggest.js'
+import { generateNonce } from '../../server/auth/nonce.js'
+import type { WebSocketHandler } from '../../server/define/define-websocket.js'
+import { sendError } from '../../server/http/send-response.js'
+import { createPluginRunnerFromConfig } from '../../server/plugins/load-plugins.js'
+import { createRateLimiter } from '../../server/rate-limit/rate-limit.js'
+import { scanServerActions } from '../../server/scan/action-scan.js'
+import type { ActionNode } from '../../server/scan/action-scan.js'
+import { loadManifest } from '../../server/scan/manifest.js'
+import type { ServerRouteNode } from '../../server/scan/match.js'
+import { createProductionLoader } from '../../server/scan/module-loader.js'
+import { scanServerRoutes } from '../../server/scan/scan.js'
+import { scanWebSocketRoutes } from '../../server/scan/ws-scan.js'
+import type { WebSocketRouteNode } from '../../server/scan/ws-scan.js'
+import { buildSecurityHeaders } from '../../server/security/security-headers.js'
 import { resolveTransformer } from '../../server/transformer.js'
-import { scanWebSocketRoutes } from '../../server/ws-scan.js'
-import type { WebSocketRouteNode } from '../../server/ws-scan.js'
+
+import {
+  tryServeAction,
+  tryServeApiRoute,
+  tryServeCustom404,
+  tryServeStatic,
+  type RequestHandlerCtx,
+} from './start-handlers.js'
 
 /**
  * T0.1 — Resolve the SSR entry-server module path. tsup may emit `.mjs` or
@@ -179,7 +182,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
     }
   }
 
-  /* eslint-disable max-lines-per-function, complexity, sonarjs/cognitive-complexity --
+  /* eslint-disable complexity, sonarjs/cognitive-complexity --
    * Inline request orchestrator. Mirrors the routing decisions a Vite
    * dev-server middleware does at module top-level; keeping all branches
    * in one place makes the request lifecycle traceable.
@@ -204,163 +207,30 @@ export async function startCommand(options: StartOptions): Promise<void> {
         res.setHeader(k, v)
       }
 
+      // T6.1 — branch handlers extracted to start-handlers.ts
+      const handlerCtx: RequestHandlerCtx = {
+        req,
+        res,
+        url,
+        requestId,
+        startTime: start,
+        clientDir,
+        custom404Html,
+        cachedRoutes,
+        cachedActions,
+        loadModule,
+        serverDir,
+        pluginRunner,
+        transformer,
+        csrfMode: config.security?.csrf ?? 'strict',
+        disallowed: config.security?.disallowed,
+        rateLimiter,
+      }
       try {
-        // 1. Action routes
-        if (url.startsWith('/api/__actions/')) {
-          res.setHeader('x-request-id', requestId)
-
-          // Rate limit check
-          if (rateLimiter) {
-            const check = rateLimiter(req)
-            for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
-            if (check.limited) {
-              sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
-              logRequest({
-                method: req.method ?? 'POST',
-                url,
-                status: 429,
-                duration: Date.now() - start,
-                requestId,
-              })
-              return
-            }
-          }
-
-          const pathAfterPrefix = url.slice('/api/__actions/'.length).split('?')[0]
-          const segments = pathAfterPrefix.split('/').filter(Boolean)
-          if (segments.length < 2) {
-            sendError(
-              res,
-              'BAD_REQUEST',
-              'Action URL must be /api/__actions/{file}/{exportName}',
-              400,
-              undefined,
-              requestId,
-            )
-            logRequest({
-              method: req.method ?? 'POST',
-              url,
-              status: 400,
-              duration: Date.now() - start,
-              requestId,
-            })
-            return
-          }
-          const exportName = segments[segments.length - 1]
-          const actionPath = segments.slice(0, -1).join('/')
-          const action = cachedActions.find((a) => a.actionPath === actionPath)
-          if (!action) {
-            const actionPaths = cachedActions.map((a) => a.actionPath)
-            const suggestion = findSuggestion(actionPath, actionPaths)
-            const msg = suggestion
-              ? `Action "${actionPath}" not found. Did you mean: ${suggestion}?`
-              : `Action "${actionPath}" not found`
-            sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
-            logRequest({
-              method: req.method ?? 'POST',
-              url,
-              status: 404,
-              duration: Date.now() - start,
-              requestId,
-            })
-            return
-          }
-          await executeAction(
-            action.filePath,
-            exportName,
-            req,
-            res,
-            loadModule,
-            serverDir,
-            requestId,
-            pluginRunner,
-            config.security?.csrf ?? 'strict',
-            config.security?.disallowed,
-          )
-          logRequest({
-            method: req.method ?? 'POST',
-            url,
-            status: res.statusCode,
-            duration: Date.now() - start,
-            requestId,
-          })
-          return
-        }
-
-        // 2. API routes
-        if (url.startsWith('/api/')) {
-          res.setHeader('x-request-id', requestId)
-
-          // Rate limit check
-          if (rateLimiter) {
-            const check = rateLimiter(req)
-            for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
-            if (check.limited) {
-              sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
-              logRequest({
-                method: req.method ?? 'GET',
-                url,
-                status: 429,
-                duration: Date.now() - start,
-                requestId,
-              })
-              return
-            }
-          }
-
-          const match = matchRoute(url, cachedRoutes)
-          if (!match) {
-            const urlPath = url.split('?')[0]
-            const routePaths = cachedRoutes.map((r) => r.routePath)
-            const suggestion = findSuggestion(urlPath, routePaths)
-            const msg = suggestion
-              ? `API route not found: ${urlPath}. Did you mean: ${suggestion}?`
-              : 'API route not found'
-            sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
-            logRequest({
-              method: req.method ?? 'GET',
-              url,
-              status: 404,
-              duration: Date.now() - start,
-              requestId,
-            })
-            return
-          }
-          const method = (req.method ?? 'GET').toUpperCase()
-          await executeRoute(
-            match.route,
-            method,
-            match.params,
-            req,
-            res,
-            loadModule,
-            serverDir,
-            requestId,
-            pluginRunner,
-            transformer,
-            config.security?.csrf ?? 'strict',
-            config.security?.disallowed,
-          )
-          logRequest({
-            method,
-            url,
-            status: res.statusCode,
-            duration: Date.now() - start,
-            requestId,
-          })
-          return
-        }
-
-        // 3. Static files
-        if (serveStaticFile(req, res, clientDir)) return
-
-        // 4. Custom 404 for URLs with file extensions (missing static files)
-        const urlPath = url.split('?')[0]
-        if (custom404Html && extname(urlPath)) {
-          res.writeHead(404, { 'Content-Type': 'text/html' })
-          res.end(custom404Html)
-          return
-        }
+        if (await tryServeAction(handlerCtx)) return
+        if (await tryServeApiRoute(handlerCtx)) return
+        if (tryServeStatic(handlerCtx)) return
+        if (tryServeCustom404(handlerCtx)) return
 
         // 5. SSR or SPA fallback
         // T6.1: prefer streaming when config.ssrStreaming AND the build emitted renderStreaming.
@@ -416,10 +286,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
             } else if (isSsrRenderResult(result)) {
               const rendered = asSsrRenderResult(result)
               ssrHtml = rendered.html
-              const dataJson = JSON.stringify(rendered.hydrationData).replace(
-                /</g,
-                '\\u003c',
-              )
+              const dataJson = JSON.stringify(rendered.hydrationData).replace(/</g, '\\u003c')
               hydrationScript = `<script${
                 nonce ? ` nonce="${nonce}"` : ''
               }>window.__staticRouterHydrationData=${dataJson}</script>`
@@ -448,7 +315,7 @@ export async function startCommand(options: StartOptions): Promise<void> {
         }
       }
     })()
-    /* eslint-enable max-lines-per-function, complexity, sonarjs/cognitive-complexity */
+    /* eslint-enable complexity, sonarjs/cognitive-complexity */
   })
 
   // WebSocket upgrade handler (opt-in: only if server/ws/ exists)

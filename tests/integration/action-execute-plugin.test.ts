@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 
-import { executeAction } from '../../packages/theo/src/server/action-execute.js'
-import { AuthRequiredError } from '../../packages/theo/src/server/auth.js'
-import { PluginRunner } from '../../packages/theo/src/server/plugin-runner.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+import { executeAction } from '../../packages/theo/src/server/http/action-execute.js'
+import { AuthRequiredError } from '../../packages/theo/src/server/auth/auth.js'
+import { PluginRunner } from '../../packages/theo/src/server/plugins/plugin-runner.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 
 /**
  * Coverage for the plugin-pipeline branches of `executeAction`:

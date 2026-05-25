@@ -3,10 +3,7 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  cleanOutDir,
-  gcAgentRegistry,
-} from '../../packages/theo/src/cli/lib/cleanup.js'
+import { cleanOutDir, gcAgentRegistry } from '../../packages/theo/src/cli/cleanup/cleanup.js'
 
 /**
  * T2.1 — cleanOutDir + gcAgentRegistry unit tests.
@@ -96,7 +93,9 @@ describe('cleanOutDir — Astro-pattern wipe with skip list', () => {
     writeFileSync(join(dir, 'b.txt'), 'x')
     // Mock fs.rm to reject with EROFS
     const { promises: fsp } = await import('node:fs')
-    const spy = vi.spyOn(fsp, 'rm').mockRejectedValue(Object.assign(new Error('rofs'), { code: 'EROFS' }))
+    const spy = vi
+      .spyOn(fsp, 'rm')
+      .mockRejectedValue(Object.assign(new Error('rofs'), { code: 'EROFS' }))
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const result = await cleanOutDir({ dir })
     expect(result.deleted).toBe(0)

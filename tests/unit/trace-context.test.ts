@@ -4,7 +4,7 @@ import {
   parseTraceparent,
   TRACE_HEADER,
   TRACE_PARENT_HEADER,
-} from '../../packages/theo/src/server/trace-context.js'
+} from '../../packages/theo/src/server/http/trace-context.js'
 
 /**
  * Phase 7 — Observability — TraceId propagation (D7).

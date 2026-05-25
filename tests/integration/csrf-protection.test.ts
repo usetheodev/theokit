@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { executeRoute } from '../../packages/theo/src/server/execute.js'
-import type { ServerRouteNode } from '../../packages/theo/src/server/match.js'
+import { executeRoute } from '../../packages/theo/src/server/http/execute.js'
+import type { ServerRouteNode } from '../../packages/theo/src/server/scan/match.js'
 
 /**
  * Phase 5 — CSRF integration test.

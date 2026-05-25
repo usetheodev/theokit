@@ -4,7 +4,7 @@ import {
   createRouteRateLimiter,
   deriveKey,
   matchRoutePattern,
-} from '../../packages/theo/src/server/rate-limit-per-route.js'
+} from '../../packages/theo/src/server/rate-limit/rate-limit-per-route.js'
 
 /**
  * T2.2 — Per-route + per-user rate limiting.

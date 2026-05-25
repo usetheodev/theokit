@@ -2,18 +2,23 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { execSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { buildTheokitPackageOnce } from '../integration/_helpers/build-theokit-package.js'
 
 const theoDistDir = resolve(__dirname, '../../packages/theo/dist')
 const createTheoDistDir = resolve(__dirname, '../../packages/create-theo/dist')
 
 describe('Smoke: Package Build Outputs', () => {
   beforeAll(() => {
-    // Ensure build has been run
-    if (!existsSync(resolve(theoDistDir, 'index.js'))) {
+    // Shared mutex-guarded build of theokit; create-theo built separately if missing
+    buildTheokitPackageOnce()
+    if (!existsSync(resolve(createTheoDistDir, 'cli.js'))) {
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local smoke test
-      execSync('pnpm build', { cwd: resolve(__dirname, '../..'), stdio: 'pipe' })
+      execSync('pnpm --filter create-theokit build', {
+        cwd: resolve(__dirname, '../..'),
+        stdio: 'pipe',
+      })
     }
-  })
+  }, 300_000)
 
   describe('theo package dist/', () => {
     it('should have dist/index.js', () => {
@@ -120,17 +125,23 @@ describe('Smoke: Import Validation from dist/', () => {
   })
 
   it('should import theoPlugin from theo/vite-plugin dist', async () => {
-    const mod = await import('../../packages/theo/dist/vite-plugin/index.js')
+    const mod = (await import('../../packages/theo/dist/vite-plugin/index.js')) as {
+      theoPlugin: unknown
+    }
     expect(typeof mod.theoPlugin).toBe('function')
   })
 
   it('should import theoFetch from theo/client dist', async () => {
-    const mod = await import('../../packages/theo/dist/client/index.js')
+    const mod = (await import('../../packages/theo/dist/client/index.js')) as {
+      theoFetch: unknown
+    }
     expect(typeof mod.theoFetch).toBe('function')
   })
 
   it('should import TheoFetchError from theo/client dist', async () => {
-    const mod = await import('../../packages/theo/dist/client/index.js')
+    const mod = (await import('../../packages/theo/dist/client/index.js')) as {
+      TheoFetchError: unknown
+    }
     expect(typeof mod.TheoFetchError).toBe('function')
   })
 

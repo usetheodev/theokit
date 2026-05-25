@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { execSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
+import { buildTemplateDefaultOnce } from '../integration/_helpers/build-template-default.js'
 
 /**
  * Bundle budget gate — security-hardening plan acceptance criterion.
@@ -26,10 +26,10 @@ const BUDGET_BYTES = 350 * 1024
 
 describe('Bundle budget — template-default <= 350 KB gzipped', () => {
   beforeAll(() => {
-    // Fresh production build to ensure measurement reflects current code.
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local test running the project's own build CLI
-    execSync('pnpm exec theokit build', { cwd: FIXTURE, stdio: 'pipe' })
-  }, 180_000)
+    // Shared mutex-guarded build to avoid clobbering another concurrent test
+    // (e.g. devtools-treeshake) writing to the same .theo/ directory.
+    buildTemplateDefaultOnce()
+  }, 200_000)
 
   it('main client bundle gzipped is under 350 KB (security primitives must not leak)', () => {
     const assets = resolve(FIXTURE, '.theo/client/assets')

@@ -4,11 +4,11 @@ import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import path from 'node:path'
 import { execSync } from 'node:child_process'
-import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
-import { matchRoute } from '../../packages/theo/src/server/match.js'
-import { executeRoute, sendError } from '../../packages/theo/src/server/execute.js'
-import { createProductionLoader } from '../../packages/theo/src/server/module-loader.js'
-import { serveStaticFile } from '../../packages/theo/src/server/static.js'
+import { scanServerRoutes } from '../../packages/theo/src/server/scan/scan.js'
+import { matchRoute } from '../../packages/theo/src/server/scan/match.js'
+import { executeRoute, sendError } from '../../packages/theo/src/server/http/execute.js'
+import { createProductionLoader } from '../../packages/theo/src/server/scan/module-loader.js'
+import { serveStaticFile } from '../../packages/theo/src/server/http/static.js'
 
 const FIXTURES = path.resolve(import.meta.dirname, '../../fixtures')
 const fixtureDir = path.join(FIXTURES, 'production-build')

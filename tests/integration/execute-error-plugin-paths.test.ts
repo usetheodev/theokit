@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Readable } from 'node:stream'
 
-import { executeRoute } from '../../packages/theo/src/server/execute.js'
-import type { ServerRouteNode } from '../../packages/theo/src/server/match.js'
-import { requireAuth } from '../../packages/theo/src/server/auth.js'
-import { PluginRunner } from '../../packages/theo/src/server/plugin-runner.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+import { executeRoute } from '../../packages/theo/src/server/http/execute.js'
+import type { ServerRouteNode } from '../../packages/theo/src/server/scan/match.js'
+import { requireAuth } from '../../packages/theo/src/server/auth/auth.js'
+import { PluginRunner } from '../../packages/theo/src/server/plugins/plugin-runner.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 
 /**
  * Coverage for the plugin-pipeline branches of `executeRoute` reachable only

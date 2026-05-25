@@ -3,8 +3,8 @@ import {
   PluginRunner,
   DuplicatePluginError,
   DuplicateDecorationError,
-} from '../../packages/theo/src/server/plugin-runner.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+} from '../../packages/theo/src/server/plugins/plugin-runner.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 import type {
   PluginContext,
   PluginErrorContext,

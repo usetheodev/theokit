@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   discoverOidcProvider,
   clearOidcCache,
-} from '../../packages/theo/src/server/oidc-discovery.js'
+} from '../../packages/theo/src/server/auth/oidc-discovery.js'
 
 /**
  * T7.4 — OIDC Discovery 1.0 fetcher.

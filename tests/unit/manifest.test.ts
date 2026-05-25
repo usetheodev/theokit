@@ -5,7 +5,7 @@ import {
   generateManifest,
   writeManifest,
   loadManifest,
-} from '../../packages/theo/src/server/manifest.js'
+} from '../../packages/theo/src/server/scan/manifest.js'
 
 const TMP_DIR = join(__dirname, '..', '__tmp_manifest_test__')
 

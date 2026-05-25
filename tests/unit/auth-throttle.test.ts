@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { checkThrottle, recordAttempt } from '../../packages/theo/src/server/auth-throttle.js'
-import { InMemoryStore } from '../../packages/theo/src/server/rate-limit-store.js'
+import { checkThrottle, recordAttempt } from '../../packages/theo/src/server/auth/auth-throttle.js'
+import { InMemoryStore } from '../../packages/theo/src/server/rate-limit/rate-limit-store.js'
 
 /**
  * T6.1 — Login throttling primitive (OWASP A07:2021 mitigation).

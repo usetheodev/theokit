@@ -30,7 +30,7 @@ export type {
   AgentToolCallEvent,
   AgentToolResultEvent,
   AgentErrorEvent,
-} from '../server/agent-types.js'
+} from '../server/agent/agent-types.js'
 export type {
   Fetcher,
   FetchOptionsLike,

@@ -3,7 +3,7 @@ import {
   enforceCsrf,
   matchDisallowed,
   type DisallowedConfig,
-} from '../../packages/theo/src/server/csrf.js'
+} from '../../packages/theo/src/server/security/csrf.js'
 
 /**
  * T5.1 — disallowedRoutes + disallowedBehavior (Rails-inspired).

@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { scanMiddlewares } from '../../packages/theo/src/server/middleware-scan.js'
-import { runMiddlewareAndContext } from '../../packages/theo/src/server/middleware-runner.js'
+import { scanMiddlewares } from '../../packages/theo/src/server/scan/middleware-scan.js'
+import { runMiddlewareAndContext } from '../../packages/theo/src/server/http/middleware-runner.js'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { LoadModule } from '../../packages/theo/src/server/module-loader.js'
+import type { LoadModule } from '../../packages/theo/src/server/scan/module-loader.js'
 
 // ---------------------------------------------------------------------------
 // scanMiddlewares tests — use real filesystem

@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { buildTheokitPackageOnce } from '../integration/_helpers/build-theokit-package.js'
 
 /**
  * Regression: dist mode of the framework MUST ship `devtools/entry.js`.
@@ -29,6 +30,10 @@ const ROOT = process.cwd()
 const DIST = resolve(ROOT, 'packages/theo/dist')
 
 describe('regression: devtools/entry must ship in dist', () => {
+  beforeAll(() => {
+    buildTheokitPackageOnce()
+  }, 300_000)
+
   it('packages/theo/dist/devtools/entry.js exists after build', () => {
     // If this fails, run `pnpm --filter=theokit build` first. If it still
     // fails after a clean build, tsup.config.ts is missing the
@@ -44,10 +49,7 @@ describe('regression: devtools/entry must ship in dist', () => {
   it('tsup.config.ts declares devtools/entry as a build entry', () => {
     // Static check — catches removal of the entry from tsup config even
     // if dist hasn't been rebuilt yet.
-    const tsupConfig = readFileSync(
-      resolve(ROOT, 'packages/theo/tsup.config.ts'),
-      'utf-8',
-    )
+    const tsupConfig = readFileSync(resolve(ROOT, 'packages/theo/tsup.config.ts'), 'utf-8')
     expect(tsupConfig).toMatch(/['"]devtools\/entry['"]\s*:/)
   })
 })

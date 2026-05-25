@@ -6,30 +6,39 @@ import { Readable } from 'node:stream'
 import {
   applySecurityHeaders,
   DEFAULT_PERMISSIONS_POLICY,
-} from '../../packages/theo/src/server/security-headers.js'
-import { createCorsHandler } from '../../packages/theo/src/server/cors.js'
-import { createRouteRateLimiter } from '../../packages/theo/src/server/rate-limit-per-route.js'
-import { enforceCsrf } from '../../packages/theo/src/server/csrf.js'
-import { createSessionManager, rotateIfNeeded } from '../../packages/theo/src/server/session.js'
-import { handleCspReport, CSP_REPORT_PATH } from '../../packages/theo/src/server/csp-report.js'
-import { checkThrottle, recordAttempt } from '../../packages/theo/src/server/auth-throttle.js'
+} from '../../packages/theo/src/server/security/security-headers.js'
+import { createCorsHandler } from '../../packages/theo/src/server/http/cors.js'
+import { createRouteRateLimiter } from '../../packages/theo/src/server/rate-limit/rate-limit-per-route.js'
+import { enforceCsrf } from '../../packages/theo/src/server/security/csrf.js'
+import {
+  createSessionManager,
+  rotateIfNeeded,
+} from '../../packages/theo/src/server/auth/session.js'
+import {
+  handleCspReport,
+  CSP_REPORT_PATH,
+} from '../../packages/theo/src/server/security/csp-report.js'
+import { checkThrottle, recordAttempt } from '../../packages/theo/src/server/auth/auth-throttle.js'
 import {
   generateTotp,
   verifyTotp,
   generateTotpSecret,
-} from '../../packages/theo/src/server/auth-totp.js'
+} from '../../packages/theo/src/server/auth/auth-totp.js'
 import {
   generateBackupCodes,
   verifyBackupCode,
-} from '../../packages/theo/src/server/auth-backup-codes.js'
-import { generatePkceChallenge } from '../../packages/theo/src/server/oauth-pkce.js'
-import { generateOAuthState, verifyOAuthState } from '../../packages/theo/src/server/oauth-state.js'
-import { InMemoryStore } from '../../packages/theo/src/server/rate-limit-store.js'
+} from '../../packages/theo/src/server/auth/auth-backup-codes.js'
+import { generatePkceChallenge } from '../../packages/theo/src/server/auth/oauth-pkce.js'
+import {
+  generateOAuthState,
+  verifyOAuthState,
+} from '../../packages/theo/src/server/auth/oauth-state.js'
+import { InMemoryStore } from '../../packages/theo/src/server/rate-limit/rate-limit-store.js'
 import {
   safeAudit,
   type AuditEvent,
   type AuditLogger,
-} from '../../packages/theo/src/server/audit-log.js'
+} from '../../packages/theo/src/server/observability/audit-log.js'
 
 /**
  * Security-hardening DOGFOOD — composed end-to-end exercise of every

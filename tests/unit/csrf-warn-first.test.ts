@@ -5,7 +5,7 @@ import {
   type CsrfWarnPayload,
   CSRF_WARN_CODE,
   CSRF_WARN_DOCS_URL,
-} from '../../packages/theo/src/server/csrf.js'
+} from '../../packages/theo/src/server/security/csrf.js'
 
 /**
  * Phase 5 — CSRF warn-first (EC-1).

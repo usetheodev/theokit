@@ -7,7 +7,7 @@ import { loadConfig } from '../../config/load-config.js'
 import { loadEnv } from '../../config/load-env.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
 import { theoPluginAsync } from '../../vite-plugin/index.js'
-import { gcAgentRegistry } from '../lib/cleanup.js'
+import { gcAgentRegistry } from '../cleanup/cleanup.js'
 
 interface DevOptions {
   port?: number

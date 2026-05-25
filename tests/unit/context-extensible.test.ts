@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { runMiddlewareAndContext } from '../../packages/theo/src/server/middleware-runner.js'
+import { runMiddlewareAndContext } from '../../packages/theo/src/server/http/middleware-runner.js'
 import { tmpdir } from 'node:os'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

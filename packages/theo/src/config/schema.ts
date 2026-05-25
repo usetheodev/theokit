@@ -45,6 +45,41 @@ export const loggingSchema = z.object({
 })
 
 /**
+ * Cache subsystem config (caching-and-revalidation-plan).
+ * Default `cache: undefined` keeps the framework backward-compatible
+ * (no engine initialized → no cache primitives available).
+ *
+ * Setting `cache: {}` opts in with all defaults.
+ */
+const routeRuleSchema = z.object({
+  maxAge: z.number().nonnegative().finite().optional(),
+  swr: z.number().nonnegative().finite().optional(),
+  tags: z.array(z.string()).optional(),
+})
+
+export const cacheSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** 'memory' uses InMemoryCacheAdapter; otherwise pass a custom adapter instance. */
+  storage: z.union([z.literal('memory'), z.custom<unknown>()]).default('memory'),
+  maxEntries: z.number().int().positive().default(1000),
+  defaults: z
+    .object({
+      maxAge: z.number().nonnegative().finite().default(1),
+      swr: z.number().nonnegative().finite().optional(),
+      cacheErrors: z.boolean().default(false),
+    })
+    .default({}),
+  keyDerivation: z
+    .object({
+      excludeQuery: z.array(z.string()).optional(),
+      sortQuery: z.boolean().default(true),
+      lowercaseHost: z.boolean().default(true),
+    })
+    .default({}),
+  routeRules: z.record(z.string(), routeRuleSchema).optional(),
+})
+
+/**
  * Phase 5 — CSRF warn-first (EC-1).
  *
  * 0.2.0 default: `warn`. Existing apps keep working but get structured
@@ -225,6 +260,12 @@ export const theoConfigSchema = z.object({
     ])
     .optional(),
   /**
+   * Cache subsystem (caching-and-revalidation-plan).
+   * Default `undefined` keeps caching disabled (backward compatible).
+   * Pass `cache: {}` to opt in with defaults.
+   */
+  cache: cacheSchema.optional(),
+  /**
    * Devtools overlay (Phase 0.4.0+ — see docs/plans/devtools-plan.md).
    *
    * - `undefined` (default): devtools auto-injects in `pnpm dev`, NEVER in `vite build`.
@@ -242,6 +283,23 @@ export const theoConfigSchema = z.object({
         theme: z.enum(['light', 'dark', 'system']).optional(),
       }),
     ])
+    .optional(),
+  /**
+   * Informative list of deploy adapters the app supports. Does NOT
+   * trigger per-build translations — only the `--target` CLI flag does
+   * (EC-201 / ADR D2). If `config.adapters` includes a target NOT
+   * matching `--target`, `theokit build` emits a cross-reference note.
+   */
+  adapters: z.array(z.string()).optional(),
+  /**
+   * Jobs backend (ADR D3 + T2.1). When configured, every request gets
+   * `ctx.queue.enqueue` auto-wired via the outbox lifecycle. Pass a
+   * `JobBackend` instance (InMemoryJobBackend, PostgresJobBackend, etc.).
+   */
+  jobs: z
+    .object({
+      backend: z.custom<unknown>((v) => typeof v === 'object' && v !== null),
+    })
     .optional(),
 })
 

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { describe, it, expect } from 'vitest'
-import { createCorsHandler, matchesOrigin } from '../../packages/theo/src/server/cors.js'
+import { createCorsHandler, matchesOrigin } from '../../packages/theo/src/server/http/cors.js'
 import { corsSchema } from '../../packages/theo/src/config/schema.js'
 
 /**

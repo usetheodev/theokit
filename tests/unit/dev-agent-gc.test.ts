@@ -17,7 +17,7 @@ const DEV = resolve(process.cwd(), 'packages/theo/src/cli/commands/dev.ts')
 describe('T2.3 — dev wires gcAgentRegistry', () => {
   it('imports gcAgentRegistry from cleanup lib', () => {
     const src = readFileSync(DEV, 'utf-8')
-    expect(src).toMatch(/import\s+\{\s*gcAgentRegistry\s*\}\s+from\s+['"]\.\.\/lib\/cleanup/)
+    expect(src).toMatch(/import\s+\{\s*gcAgentRegistry\s*\}\s+from\s+['"]\.\.\/cleanup\/cleanup/)
   })
 
   it('calls gcAgentRegistry with agentsDir + config.agents?.maxRegistries', () => {

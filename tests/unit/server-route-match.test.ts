@@ -3,7 +3,7 @@ import {
   compilePattern,
   matchRoute,
   type ServerRouteNode,
-} from '../../packages/theo/src/server/match.js'
+} from '../../packages/theo/src/server/scan/match.js'
 
 describe('compilePattern', () => {
   it('should match static path', () => {

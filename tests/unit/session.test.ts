@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { createSessionManager } from '../../packages/theo/src/server/session.js'
+import { createSessionManager } from '../../packages/theo/src/server/auth/session.js'
 
 const SECRET = 'a-very-secure-secret-key-for-testing-purposes-1234'
 

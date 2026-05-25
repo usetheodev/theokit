@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   generatePkceChallenge,
   pkceChallengeFromVerifier,
-} from '../../packages/theo/src/server/oauth-pkce.js'
+} from '../../packages/theo/src/server/auth/oauth-pkce.js'
 
 /**
  * T7.3 — RFC 7636 PKCE (Proof Key for Code Exchange).

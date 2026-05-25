@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   createPluginRunnerFromConfig,
   InvalidPluginShapeError,
-} from '../../packages/theo/src/server/load-plugins.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+} from '../../packages/theo/src/server/plugins/load-plugins.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 
 describe('createPluginRunnerFromConfig', () => {
   it('returns undefined when plugins is null', async () => {

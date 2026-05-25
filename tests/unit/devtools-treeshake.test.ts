@@ -7,14 +7,15 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
-import { execSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
+import {
+  buildTemplateDefaultOnce,
+  TEMPLATE_DEFAULT_ASSETS,
+} from '../integration/_helpers/build-template-default.js'
 
-const ROOT = resolve(__dirname, '../..')
-const FIXTURE = resolve(ROOT, 'fixtures/template-default')
-const DIST_ASSETS = resolve(FIXTURE, '.theo/client/assets')
+const DIST_ASSETS = TEMPLATE_DEFAULT_ASSETS
 
 interface BundleSnapshot {
   files: string[]
@@ -26,13 +27,8 @@ let buildError: string | null = null
 
 beforeAll(() => {
   try {
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local test running the project's own build CLI
-    execSync('pnpm exec theokit build', {
-      cwd: FIXTURE,
-      stdio: 'pipe',
-      env: { ...process.env, NODE_ENV: 'production', CI: '1' },
-      timeout: 180_000,
-    })
+    // Shared mutex-guarded build — see _helpers/build-template-default.ts
+    buildTemplateDefaultOnce()
   } catch (err) {
     const e = err as { stdout?: Buffer; stderr?: Buffer; message?: string }
     buildError = `build failed: ${e.message ?? 'unknown'}\nstdout:\n${e.stdout?.toString() ?? ''}\nstderr:\n${e.stderr?.toString() ?? ''}`

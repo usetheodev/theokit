@@ -5,7 +5,7 @@ import type {
   AgentToolCallEvent,
   AgentToolResultEvent,
   AgentErrorEvent,
-} from '../../packages/theo/src/server/agent-types.js'
+} from '../../packages/theo/src/server/agent/agent-types.js'
 import type { AgentEvent as AgentEventClient } from '../../packages/theo/src/client/index.js'
 
 describe('AgentEvent runtime variant (T1.1 — standalone in TheoKit, no TheoUI coupling)', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { defineAgentEndpoint } from '../../packages/theo/src/server/define-agent-endpoint.js'
-import type { AgentEvent } from '../../packages/theo/src/server/agent-types.js'
+import { defineAgentEndpoint } from '../../packages/theo/src/server/define/define-agent-endpoint.js'
+import type { AgentEvent } from '../../packages/theo/src/server/agent/agent-types.js'
 
 /**
  * T5.1 — defineAgentEndpoint
@@ -212,9 +212,7 @@ describe('defineAgentEndpoint (T5.1)', () => {
       ctx: undefined,
     })) as Response
 
-    expect(response.headers.getSetCookie()).toContain(
-      'theo_conversation=abc123; HttpOnly; Path=/',
-    )
+    expect(response.headers.getSetCookie()).toContain('theo_conversation=abc123; HttpOnly; Path=/')
   })
 
   it('does not add Set-Cookie when handler does not touch cookieHeaders', async () => {

@@ -16,7 +16,7 @@ import {
   Tooltip,
   Button,
   ScrollArea,
-  type Message,
+  type UIMessage,
   type QuickAction,
   type CommandItem,
   type ToolCallStatus,
@@ -74,14 +74,13 @@ const CONTEXT_USED = 4_200
 const CONTEXT_TOTAL = 200_000
 const MODEL_NAME = 'mock-llm'
 
+// Modern chat UX: only the assistant carries an avatar. User messages are
+// right-aligned with a distinct bubble style — that's enough signal.
+// (TheoUI's ChatMessage uses flex-col, so a user avatar would land BELOW
+// the bubble, not above — visually unusual.)
 const ASSISTANT_AVATAR = (
   <Avatar size="sm" tone="primary">
     <Avatar.Fallback>TH</Avatar.Fallback>
-  </Avatar>
-)
-const USER_AVATAR = (
-  <Avatar size="sm" tone="muted">
-    <Avatar.Fallback>YOU</Avatar.Fallback>
   </Avatar>
 )
 
@@ -193,18 +192,16 @@ export default function Page() {
             <ChatThread>
               {items.map((item) => {
                 if (item.kind === 'message') {
-                  const message: Message = {
+                  const message: UIMessage = {
                     id: item.id,
                     role: item.role,
-                    content: item.content,
-                    timestamp: item.timestamp,
-                    model: item.role === 'assistant' ? MODEL_NAME : undefined,
+                    parts: [{ type: 'text', text: item.content, state: 'done' }],
                   }
                   return (
                     <ChatMessage
                       key={item.id}
                       message={message}
-                      avatar={item.role === 'assistant' ? ASSISTANT_AVATAR : USER_AVATAR}
+                      avatar={item.role === 'assistant' ? ASSISTANT_AVATAR : undefined}
                     />
                   )
                 }

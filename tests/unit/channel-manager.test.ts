@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { ChannelManager } from '../../packages/theo/src/server/channel-manager.js'
-import type { WebSocketLike } from '../../packages/theo/src/server/define-websocket.js'
+import { ChannelManager } from '../../packages/theo/src/server/realtime/channel-manager.js'
+import type { WebSocketLike } from '../../packages/theo/src/server/define/define-websocket.js'
 
 function createMockWs(): WebSocketLike {
   return {

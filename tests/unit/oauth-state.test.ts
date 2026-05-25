@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { generateOAuthState, verifyOAuthState } from '../../packages/theo/src/server/oauth-state.js'
+import {
+  generateOAuthState,
+  verifyOAuthState,
+} from '../../packages/theo/src/server/auth/oauth-state.js'
 
 /**
  * T7.4 — OAuth state parameter (RFC 6749 §10.12 — anti-CSRF token).

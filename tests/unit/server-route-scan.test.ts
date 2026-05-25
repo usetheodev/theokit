@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
+import { scanServerRoutes } from '../../packages/theo/src/server/scan/scan.js'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'

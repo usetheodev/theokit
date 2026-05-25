@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import { z } from 'zod'
 
-import { defineAgentTool } from '../../packages/theo/src/server/define-agent-tool.js'
+import { defineAgentTool } from '../../packages/theo/src/server/define/define-agent-tool.js'
 
 /**
  * T1.1 — defineAgentTool unit tests.

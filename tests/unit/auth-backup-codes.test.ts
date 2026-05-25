@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   generateBackupCodes,
   verifyBackupCode,
-} from '../../packages/theo/src/server/auth-backup-codes.js'
+} from '../../packages/theo/src/server/auth/auth-backup-codes.js'
 
 /**
  * T6.3 — Backup codes (2FA recovery).

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { warnOnce, _resetWarnOnceForTests } from '../../packages/theo/src/server/logger.js'
+import {
+  warnOnce,
+  _resetWarnOnceForTests,
+} from '../../packages/theo/src/server/observability/logger.js'
 
 /**
  * T2.1 — `warnOnce` helper.

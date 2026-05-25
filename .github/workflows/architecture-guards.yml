@@ -1,0 +1,54 @@
+name: architecture-guards
+
+# Enforces .claude/rules/architecture.md v2 + naming convention on every PR.
+# Added in T1.1 of architecture-review-remediation-plan (2026-05-23).
+#
+# Fails the build on:
+#   • Cyclic dependencies (Acyclic Dependencies Principle — consensus)
+#   • `core/` reaching outside itself (INVARIANT)
+#   • Filename violating kebab-case (or React PascalCase/camelCase use*)
+#
+# Path-filtered: only fires when src/ or the rule files change.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/theo/src/**'
+      - '.dependency-cruiser.cjs'
+      - '.ls-lint.yml'
+      - '.claude/rules/architecture.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/theo/src/**'
+      - '.dependency-cruiser.cjs'
+      - '.ls-lint.yml'
+      - '.claude/rules/architecture.md'
+
+jobs:
+  dep-cruiser:
+    name: dependency-cruiser (architecture rules)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:deps
+
+  ls-lint:
+    name: ls-lint (filename convention)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:naming

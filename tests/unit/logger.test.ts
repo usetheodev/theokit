@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { logRequest } from '../../packages/theo/src/server/logger.js'
-import type { RequestLog } from '../../packages/theo/src/server/logger.js'
+import { logRequest } from '../../packages/theo/src/server/observability/logger.js'
+import type { RequestLog } from '../../packages/theo/src/server/observability/logger.js'
 
 const sampleInfo = {
   method: 'GET',

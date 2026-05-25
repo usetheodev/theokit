@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { generatePkceChallenge } from '../../packages/theo/src/server/oauth-pkce.js'
-import { generateOAuthState, verifyOAuthState } from '../../packages/theo/src/server/oauth-state.js'
+import { generatePkceChallenge } from '../../packages/theo/src/server/auth/oauth-pkce.js'
+import {
+  generateOAuthState,
+  verifyOAuthState,
+} from '../../packages/theo/src/server/auth/oauth-state.js'
 
 /**
  * T7.5 — Fixture sanity tests.

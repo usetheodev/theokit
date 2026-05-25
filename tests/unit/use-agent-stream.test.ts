@@ -5,7 +5,7 @@ import {
   consumeAgentStream,
   parseSSEChunk,
 } from '../../packages/theo/src/client/agent-stream-core.js'
-import type { AgentEvent } from '../../packages/theo/src/server/agent-types.js'
+import type { AgentEvent } from '../../packages/theo/src/server/agent/agent-types.js'
 
 /**
  * T5.2 — useAgentStream

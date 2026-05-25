@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Readable } from 'node:stream'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { handleCspReport, CSP_REPORT_PATH } from '../../packages/theo/src/server/csp-report.js'
+import {
+  handleCspReport,
+  CSP_REPORT_PATH,
+} from '../../packages/theo/src/server/security/csp-report.js'
 
 /**
  * T5.1 — Integration tests for the CSP report pipeline.

@@ -1,0 +1,37 @@
+---
+# TheoKit filename naming convention (architecture-review T1.1).
+#
+# Locked 2026-05-23 per Phase 2 audit's naming verdict: kebab-case
+# strict for TypeScript sources, with explicit exceptions for React
+# components (PascalCase) and React hooks (camelCase use*).
+#
+# Run: pnpm check:naming
+# CI:  .github/workflows/architecture-guards.yml
+
+ls:
+  packages/theo/src:
+    # TypeScript source files — kebab-case (with hook + type-test exceptions)
+    .ts: kebab-case | regex:[A-Z][A-Za-z0-9]*\.test-d | regex:use[A-Z][A-Za-z0-9]*
+    # React TSX — PascalCase (components), camelCase use* (hooks), OR kebab-case
+    # (for DOM bootstrap / utility tsx like entry.tsx, shadow-portal.tsx).
+    # Acronym-prefix PascalCase (JSONExplorer.tsx) allowed via explicit regex.
+    .tsx: PascalCase | kebab-case | regex:use[A-Z][A-Za-z0-9]* | regex:[A-Z]{2,}[A-Za-z0-9]*
+
+ignore:
+  - node_modules
+  - .git
+  - dist
+  - packages/theo/dist
+  - packages/theo/node_modules
+  - packages/create-theo
+  - examples
+  - fixtures
+  - tests
+  - referencias
+  - architecture-output
+  - docs
+  - app
+  - my-test
+  - my-test-bare
+  - scripts
+  - packages/theo/src/devtools/dev-overlay # vendored from external — preserve original case

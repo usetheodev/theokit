@@ -257,15 +257,82 @@ The honest gaps after 0.2.0. Closing these moves us from "ready for indie devs a
 - [ ] **WebSocket Playwright spec** — `defineWebSocket` has unit tests but no real-browser test exercises the full upgrade + bidi + reconnect flow.
 - [ ] **Bundle budget asserted in CI** — fail the build if `index-*.js` gzipped exceeds 350 KB for the default template.
 
-### 0.5.0+ — Beyond defaults (no commitment, just on the runway)
+### 0.5.0 — Background work + external integration
 
-These items widen the framework's reach but require strategic decisions before scoping. Listed so the team has a shared view of where 1.0 could go.
+> **Locked theme:** "Make TheoKit complete for 4 agent use cases simultaneously — chat, background-processing, webhook-triggered, report-generating."
+>
+> **Scope analysis:** see ultrathink turn 2026-05-24 (`docs/analysis/2026-05-24-five-gaps-to-100-percent.md` — to write) for the gap audit. After framework-scope-guardian review + ultrathink critique, the verdict is **5 primitives + 1 manifest schema in one coherent onda**. `defineWorker` (stream consumer) was explicitly REJECTED and stays out of scope per the 3 conditions documented below.
+>
+> **Prerequisites (BLOCKING):** items #7 (deploy validation) + #8 (Playwright templates) + bundle CI gate from 0.4.0 MUST land before 0.5.0 starts. Otherwise jobs+crons are theoretical work on an unvalidated foundation.
 
-- [ ] **`next/image`-equivalent** for image optimization (or explicit decision to stay out of that lane)
-- [ ] **`next/font`-equivalent** for self-hosted fonts (TheoUI ships bundled Geist today; this is the generic surface)
-- [ ] **Edge runtime adapter parity** — current adapters declare Vercel Edge / Cloudflare Workers / Deno Deploy, but the Web Standards shim has rough edges (no `Buffer` in Deno, native bindings in argon2 — already mitigated, but other surfaces TBD)
-- [ ] **Plugin ecosystem incubation** — `definePlugin` exists; we have 3 plugins. Real ecosystem growth needs a registry, docs site, and at least one community-authored plugin we proudly link.
-- [ ] **Production debugging story** — source maps in adapters, traceId correlation with downstream services (OpenTelemetry exporter? Sentry integration?), structured error pages with actionable hints. **Foundation already in place:** the 0.4.0 devtools ships a server-side `dispatcher` + `broadcastToDevtools` abstraction (see `packages/theo/src/devtools/server-side/broadcast.ts`). A prod exporter is an additive sink — swap the WS target for OTel/Sentry; the existing data shape (`RequestRecord` + `ErrorRecord` + redaction) is the same contract. No re-plumbing of `logger.ts` / `csrf.ts` needed.
+#### Roadmap items — 0.5.0
+
+| # | Item | Description | Acceptance criteria | References |
+|---|---|---|---|---|
+| **R0.5.1** | **Vercel/CF SSE deploy validation** (0.4.0 prereq) | Deploy `create-theokit my-app` output to vercel.app + workers.dev; hit live URL; verify SSE roundtrip + security headers in real production. Replicates item #7 of macro roadmap as a 0.5.0 blocker. | (a) live URL committed to repo (b) Playwright spec hitting prod URL passes (c) latency telemetry committed | `examples/deploy-vercel/` + `scripts/deploy-smoke-vercel.sh` |
+| **R0.5.2** | **Playwright for 3 remaining templates** (0.4.0 prereq) | Cover `dashboard`, `api-only`, `postgres`+`saas` with the same fixture pattern as `template-default`. Saas needs Postgres in CI. | 100% template coverage in CI matrix; 4 spec files green | `fixtures/template-default/` + `tests/e2e/template-default.spec.ts` |
+| **R0.5.3** | **Bundle budget asserted in CI** (0.4.0 prereq) | Fail build if `index-*.js` gzipped > 350 KB for default template. Today: 193.90 KB; want a regression gate, not a recurring measure. | `pnpm check:bundle` exit 1 on overshoot; GH Actions step | `scripts/check-bundle-budget.sh` |
+| **R0.5.4** | **`defineCron(name, { schedule, handler })`** | Time-triggered handlers. Schedule = 5-field cron string, UTC. Each adapter translates to platform-native (vercel.json crons, wrangler.toml triggers, EventBridge). | (a) Zod-validated config (b) build emits `.theo/crons.json` (c) 8 adapters translate or document N/A (d) fixture | plan TBD: `docs/plans/jobs-crons-plan.md` + reference TBD: `.claude/knowledge-base/reference/cron-primitives.md` |
+| **R0.5.5** | **`defineJob(name, { input, handler })`** | Async work triggered via `ctx.queue.enqueue`. Handler returns void (NOT Promise<Result>). Default `maxAttempts: 1`. `NonRetryableError` class for opt-out of retries. | (a) Zod-validated input (b) `JobBackend` interface (in-memory + Postgres adapters shipped) (c) fixture + test harness `expect(queue).toHaveEnqueued(...)` | plan + reference TBD |
+| **R0.5.6** | **`ctx.queue.enqueue<JobName>(name, input, { idempotencyKey? })`** | Typed client over defineJob. Same inference pattern as `theoFetch<typeof GET>`. Returns `void` (or `{ jobId }` for log correlation). | (a) compile error on misnamed job or wrong input (b) idempotency key dedupes within TTL | (acoplado a R0.5.5) |
+| **R0.5.7** | **Job/Cron manifest** (`.theo/{jobs,crons}.json`) | Build artifact, neutral schema (versioned), consumable by ANY platform (not theo-specific). theo will be the first consumer; spec MUST work for others. | (a) `schemaVersion` field (b) snapshot test of manifest from fixture (c) docs/concepts/jobs-manifest.md | (acoplado a R0.5.4/R0.5.5) |
+| **R0.5.8** | **Transactional outbox semantics** | `enqueue` defers actual dispatch until current request commits (`res.on('finish')`). Rollback = nothing enqueued. Prevents orphan jobs after DB txn failure. Documented invariant. | (a) integration test: enqueue inside throwing handler → 0 jobs dispatched (b) doc in caching.md analog | (acoplado a R0.5.5) |
+| **R0.5.9** | **W3C Trace Context propagation** through enqueue → job → child enqueues | Existing trace plumbing in HTTP must flow through queue. `ctx.traceId` in job handler matches originating request. | snapshot test asserting trace chain across 3-deep enqueue | reuses existing `server/http/trace-context.ts` |
+| **R0.5.10** | **`defineWebhook({ verify, handler })`** with provider plugins | First-class HMAC signature verification for Stripe, GitHub, Slack, Twilio, Resend. Failed verify → 401, no handler. Provider helpers via `@theokit/webhook-*` packages OR pluggable `verify` function. | (a) `defineWebhook` exported (b) 3 provider helpers shipped (stripe, github, slack) (c) fixture per provider | plan TBD: `docs/plans/define-webhook-plan.md` |
+| **R0.5.11** | **`trackAgentRun({ userId, model, tokens, costUsd })`** server-side | Companion to client-side `<CostMeter>` from `@usetheo/ui`. Accumulates per-user usage in a `UsageStorageAdapter` (in-memory default; user plugs Postgres/Redis). Surface `getUsage({ userId, period })` for tier enforcement. | (a) primitive exported (b) integration with `defineAgentEndpoint` (auto-track on Agent.prompt completion) (c) fixture with rate-limit-by-tier | plan TBD: `docs/plans/agent-cost-tracking-plan.md` |
+
+#### Architectural decisions to land in 0.5.0
+
+These ADRs MUST be written before the corresponding roadmap items ship. Each becomes `docs/adr/NNNN-*.md` once accepted.
+
+| ADR # (proposed) | Title | Why it matters | Affects |
+|---|---|---|---|
+| ADR-0002 | `JobBackend` interface — neutral contract | Decouples TheoKit from `theo` platform. In-memory + Postgres + (theo-future) all implement the same `enqueue` / `dequeue` / `ack` / `idempotency`. | R0.5.5, R0.5.6 |
+| ADR-0003 | `enqueue` MUST return `void` (transactional outbox) | Locks the constraint that prevents drift into workflow engine. Foot-gun shield against PRs that "just add Promise<Result>". | R0.5.5, R0.5.8 |
+| ADR-0004 | Cron schedule format — UTC always, 5-field strict | Cross-adapter portability. Vercel/CF/AWS all support this subset. Timezone field rejected for ambiguity. | R0.5.4 |
+| ADR-0005 | Webhook verification — plugin OR inline function (not class hierarchy) | Avoid abstraction inflation. `verify: stripe(secret)` is a 1-line helper, not an Adapter pattern. | R0.5.10 |
+| ADR-0006 | `defineWorker` (stream consumer) — REJECTED with 3 reopen conditions | Codify the rejection from the framework-scope-guardian review so future PRs don't relitigate. | (negative scope) |
+
+#### Out of scope for 0.5.0 (intentional non-goals)
+
+These ARE tempting and would naturally come up during implementation. They are NOT shipping in this onda. Adding them requires fresh scope review.
+
+| Tempted addition | Why rejected | Where it belongs |
+|---|---|---|
+| `defineWorker(name, { stream, handler })` | Stream semantics = deep layer (ordering, partitioning, exactly-once); no universal backend (Kafka ≠ NATS ≠ Redis Streams); crosses into agent-orchestration territory | Possibly never; revisit only if (a) theo offers managed streams, (b) 3+ apps demand, (c) agent layer formalizes |
+| `enqueue().then(result => ...)` (workflow API) | Reaches into Inngest/Trigger.dev territory. TheoKit's wedge is web framework, not workflow engine | External: Inngest, Trigger.dev, Mastra |
+| `defineDLQ()` / `onJobFailed()` framework hooks | Dead-letter queue is platform decision, not framework primitive | theo platform OR user's queue backend config |
+| `ctx.queue.status(jobId)` / `cancel(jobId)` | Vira API de orquestração; expand scope. Apenas log correlation. | User code reading queue backend directly |
+| Result Store / Job Status API | Vira workflow tracker. theo dashboard problem, not TheoKit. | theo platform |
+| Email delivery primitive (`defineEmail`) | Provider lock-in (Resend ≠ Postmark ≠ SES API). | User adapter via SDK |
+| BlobStorageAdapter (S3/R2/disk) | Scope expansion in same onda. Defer to 0.6.0. | 0.6.0 (see below) |
+| Database/ORM | Drizzle/Prisma solve this. Not framework's job to pick. | User code |
+| Vector store integration | SDK concern, not framework. | `@usetheo/sdk` |
+| Multi-agent orchestration | Categoria diferente. Near agent-layer (out of scope per locked mission). | External: Mastra, LangGraph |
+
+### 0.6.0+ — Runway (post-0.5.0, no commitment yet)
+
+These items widen the framework's reach but require strategic decisions before scoping. They survive past 0.5.0 because the agent app categories above can ship without them. Listed so the team has shared visibility.
+
+| # | Item | Description | Why deferred |
+|---|---|---|---|
+| R0.6.1 | **`BlobStorageAdapter` interface** (S3/R2/disk) | Pluggable blob storage analog to `CacheStorageAdapter`. Enables agent apps that generate large outputs (HTML reports, PDFs, images). In-memory default + filesystem adapter + 3rd-party recipes (S3/R2). | Useful but not blocking: report agents can write directly via `fs.writeFile` today. |
+| R0.6.2 | **`next/image`-equivalent** | Image optimization primitive (resize, format conversion, srcset). Avatars, generated images. | Bonito-de-ter, NÃO essencial para agent apps. Vendor lock-in concern (sharp ≠ vips ≠ wasm). |
+| R0.6.3 | **`next/font`-equivalent** | Self-hosted font loading. TheoUI ships bundled Geist today; this is the generic surface for apps that need other fonts. | TheoUI cobre 80% dos casos. Generic surface is post-1.0. |
+| R0.6.4 | **Edge runtime adapter parity** | Validate all 8 adapters end-to-end on real edge runtimes (Vercel Edge, CF Workers, Deno Deploy). Currently declared, not validated. | High effort, each adapter is its own deployment story. Item #7 of macro roadmap covers Vercel only. |
+| R0.6.5 | **Plugin ecosystem incubation** | `definePlugin` exists; 3 plugins shipped (web-shim, ws-shim, batching). Real ecosystem growth needs a registry, docs site, and 1+ community plugin we proudly link. | Bottom-up — needs community demand signal first. |
+| R0.6.6 | **Production debugging story** | Source maps in adapters, traceId correlation with downstream services (OpenTelemetry exporter? Sentry integration?), structured error pages with actionable hints. **Foundation already in place:** 0.4.0 devtools' `dispatcher` + `broadcastToDevtools` (`packages/theo/src/devtools/server-side/broadcast.ts`). A prod exporter is an additive sink — swap the WS target for OTel/Sentry; existing data shape (`RequestRecord` + `ErrorRecord` + redaction) is the same contract. | Foundation exists; production hardening is a separate workstream. |
+| R0.6.7 | **`UsageStorageAdapter`** Redis recipe + theo platform integration | Once R0.5.11 (trackAgentRun) lands with in-memory default, recipes for Redis/Postgres + theo platform hosted storage. | Sequenced after the primitive exists in 0.5.0. |
+| R0.6.8 | **Metadata API** (`defineMetadata`) + OG image generation | `app/page.tsx` exports metadata declaration; framework injects into `<head>`. OG images server-rendered. Lower-priority gap vs Next.js. | Per honesty chart (2026-05-23): "OG images = adoption boost, fácil em Vite, ~3 dias". Defer until 0.5.0 lands. |
+
+### 1.0 — Stability lock (target: post-0.6.0)
+
+The window where breaking changes stop. Requires:
+
+- All HIGH and CRITICAL items from architecture audit resolved (status as of 2026-05-23: ✅ all 7 HIGH resolved; ✅ 1 CRITICAL resolved via ADR-0001).
+- Migration guides for every breaking change in 0.2 → 1.0 chain.
+- At least 5 community apps in production (demand-side validation, not internal use only).
+- Public API frozen — additions allowed via semver minor, removals require major.
 
 ### Architectural decisions on record
 

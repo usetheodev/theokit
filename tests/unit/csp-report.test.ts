@@ -6,7 +6,7 @@ import {
   normalizeLegacy,
   normalizeNew,
   CSP_REPORT_PATH,
-} from '../../packages/theo/src/server/csp-report.js'
+} from '../../packages/theo/src/server/security/csp-report.js'
 
 /**
  * T5.1 — CSP report endpoint.

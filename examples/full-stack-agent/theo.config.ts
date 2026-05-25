@@ -20,5 +20,13 @@ export default defineConfig({
       cspMode: isProduction ? 'enforce' : 'off',
     },
   },
+  // Cache demo at /cache page. The engine is initialized at module load
+  // via server/lib/cache.ts (initCacheEngine call). These defaults inform
+  // route handlers that don't pass per-route overrides.
+  cache: {
+    enabled: true,
+    storage: 'memory',
+    maxEntries: 500,
+    defaults: { maxAge: 5, cacheErrors: false },
+  },
 })
-

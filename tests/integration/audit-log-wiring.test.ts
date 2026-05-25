@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { enforceCsrf } from '../../packages/theo/src/server/csrf.js'
-import { createRouteRateLimiter } from '../../packages/theo/src/server/rate-limit-per-route.js'
-import { createSessionManager } from '../../packages/theo/src/server/session.js'
+import { enforceCsrf } from '../../packages/theo/src/server/security/csrf.js'
+import { createRouteRateLimiter } from '../../packages/theo/src/server/rate-limit/rate-limit-per-route.js'
+import { createSessionManager } from '../../packages/theo/src/server/auth/session.js'
 import {
   safeAudit,
   type AuditEvent,
   type AuditLogger,
-} from '../../packages/theo/src/server/audit-log.js'
+} from '../../packages/theo/src/server/observability/audit-log.js'
 
 /**
  * T4.2 — Wire framework events to audit logger.

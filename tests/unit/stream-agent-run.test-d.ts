@@ -1,8 +1,8 @@
 import { describe, expectTypeOf, it } from 'vitest'
 
-import { streamAgentRun } from '../../packages/theo/src/server/stream-agent-run.js'
-import type { AgentRunLike } from '../../packages/theo/src/server/stream-agent-run.js'
-import type { AgentEvent } from '../../packages/theo/src/server/agent-types.js'
+import { streamAgentRun } from '../../packages/theo/src/server/agent/stream-agent-run.js'
+import type { AgentRunLike } from '../../packages/theo/src/server/agent/stream-agent-run.js'
+import type { AgentEvent } from '../../packages/theo/src/server/agent/agent-types.js'
 
 /**
  * T2.1 — streamAgentRun type tests.

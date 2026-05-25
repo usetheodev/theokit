@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createLogger, logRequest } from '../../packages/theo/src/server/logger.js'
-import type { StructuredLog } from '../../packages/theo/src/server/logger.js'
+import { createLogger, logRequest } from '../../packages/theo/src/server/observability/logger.js'
+import type { StructuredLog } from '../../packages/theo/src/server/observability/logger.js'
 
 describe('createLogger', () => {
   it('should output info level by default', () => {

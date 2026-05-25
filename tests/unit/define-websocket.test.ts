@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defineWebSocket } from '../../packages/theo/src/server/define-websocket.js'
+import { defineWebSocket } from '../../packages/theo/src/server/define/define-websocket.js'
 
 describe('defineWebSocket', () => {
   it('should return the same reference (identity)', () => {

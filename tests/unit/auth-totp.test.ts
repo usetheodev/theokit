@@ -4,7 +4,7 @@ import {
   verifyTotp,
   generateTotpSecret,
   totpUri,
-} from '../../packages/theo/src/server/auth-totp.js'
+} from '../../packages/theo/src/server/auth/auth-totp.js'
 
 /**
  * T6.2 — RFC 6238 TOTP primitive.

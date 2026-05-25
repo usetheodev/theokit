@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
   CsrfReadinessStore,
   type CsrfWarnRecord,
-} from '../../packages/theo/src/server/csrf-readiness-store.js'
+} from '../../packages/theo/src/server/security/csrf-readiness-store.js'
 
 /**
  * T2.2 — In-memory bounded counter for CSRF warn events.

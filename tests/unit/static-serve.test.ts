@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Writable } from 'node:stream'
 
-import { serveStaticFile } from '../../packages/theo/src/server/static.js'
+import { serveStaticFile } from '../../packages/theo/src/server/http/static.js'
 
 /**
  * Direct unit tests for `serveStaticFile` — exercises the branches not

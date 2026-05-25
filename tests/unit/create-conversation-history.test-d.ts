@@ -4,7 +4,7 @@ import type {
   ConversationHistoryArgs,
   ConversationHistoryResult,
   createConversationHistory,
-} from '../../packages/theo/src/server/create-conversation-history.js'
+} from '../../packages/theo/src/server/agent/create-conversation-history.js'
 
 /**
  * T1.1 — createConversationHistory type tests.

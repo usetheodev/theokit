@@ -41,6 +41,7 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | app-router-not-found | `not-found.tsx` per segment | base |
 | basic-valid-app | minimal valid project structure | base |
 | batching | `createBatcher` + same-microtask collapse | full-cov |
+| cache-basic | All 5 cache primitives (defineCachedRoute, defineCachedFunction, revalidateTag, revalidatePath, updateTag) + routeRules + tags fan-out | caching-and-revalidation |
 | custom-transformer | `TheoTransformer` interface + Date round-trip | full-cov |
 | define-channel | `defineChannel` pub/sub over WebSocket rooms | full-cov |
 | define-integration | `defineTheoIntegration` + virtual module prefix | full-cov |
@@ -72,6 +73,11 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | upgrade-readiness-dirty | deliberate 0.3 violations (raw fetch POST, inline `<script>`, `dangerouslySetInnerHTML`) for the scanner | 0.3-cutover |
 | use-agent-stream-react | `useAgentStream` in plain React (no `@usetheo/ui`) | full-cov |
 | websocket-basic | `defineWebSocket` request handler | base |
+| cron-basic | `defineCron` with morning-summary cron + manifest emit | jobs-crons-webhooks |
+| jobs-basic | `defineJob` + `ctx.queue.enqueue` smoke | jobs-crons-webhooks |
+| webhook-stripe | `defineWebhook` + `stripe(secret)` helper roundtrip | jobs-crons-webhooks |
+| webhook-github | `defineWebhook` + `github(secret)` helper roundtrip | jobs-crons-webhooks |
+| webhook-slack | `defineWebhook` + `slack({signingSecret})` helper roundtrip | jobs-crons-webhooks |
 
 ## Notes on adapter fixtures
 

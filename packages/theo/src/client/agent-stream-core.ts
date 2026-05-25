@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../server/agent-types.js'
+import type { AgentEvent } from '../server/agent/agent-types.js'
 
 /**
  * T5.2 — Pure SSE consumer used by useAgentStream.

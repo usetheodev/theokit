@@ -7,7 +7,7 @@ import {
   type ConversationHistoryArgs,
   type SdkAgent,
   type SdkAgentOptions,
-} from '../../packages/theo/src/server/create-conversation-history.js'
+} from '../../packages/theo/src/server/agent/create-conversation-history.js'
 
 /**
  * T1.1 — createConversationHistory unit tests.
@@ -30,7 +30,10 @@ function mockSdkAgent(id = 'agent-1') {
   return { id, send: vi.fn(), dispose: vi.fn() }
 }
 
-type GetOrCreateFn = (agentId: string, options: unknown) => Promise<{
+type GetOrCreateFn = (
+  agentId: string,
+  options: unknown,
+) => Promise<{
   id?: string
   send?: unknown
   dispose?: unknown
@@ -167,9 +170,7 @@ describe('createConversationHistory', () => {
   // EC-1 — path traversal / CRLF / over-length
   it('EC-1 — rejects path-traversal explicit agentId, generates fresh UUID', async () => {
     withMockGetOrCreate(async (id) => mockSdkAgent(id))
-    const result = await createConversationHistory(
-      makeArgs({ agentId: '../../../etc/passwd' }),
-    )
+    const result = await createConversationHistory(makeArgs({ agentId: '../../../etc/passwd' }))
     expect(result.conversationId).toMatch(/^[0-9a-f-]{36}$/)
     expect(result.isNew).toBe(true)
   })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from 'node:path'
-import { scanWebSocketRoutes } from '../../packages/theo/src/server/ws-scan.js'
+import { scanWebSocketRoutes } from '../../packages/theo/src/server/scan/ws-scan.js'
 
 const fixtureDir = resolve(__dirname, '../../fixtures/websocket-basic/server')
 const noWsDir = resolve(__dirname, '../../fixtures/basic-valid-app/server')

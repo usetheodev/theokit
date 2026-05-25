@@ -9,6 +9,8 @@ dist/
 .output/
 .nitro/
 .cache/
+.vercel/
+.wrangler/
 *.tsbuildinfo
 
 # Environment

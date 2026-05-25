@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { streamAgentRun } from '../../packages/theo/src/server/stream-agent-run.js'
+import { streamAgentRun } from '../../packages/theo/src/server/agent/stream-agent-run.js'
 import type {
   AgentRunLike,
   AgentRunResult,
   AgentRunStreamMessage,
-} from '../../packages/theo/src/server/stream-agent-run.js'
-import type { AgentEvent } from '../../packages/theo/src/server/agent-types.js'
+} from '../../packages/theo/src/server/agent/stream-agent-run.js'
+import type { AgentEvent } from '../../packages/theo/src/server/agent/agent-types.js'
 
 /**
  * T2.1 — streamAgentRun unit tests.

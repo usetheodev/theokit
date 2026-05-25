@@ -6,8 +6,8 @@ import {
   CSRF_READINESS_PATH,
   CSRF_READINESS_RESET_PATH,
   handleCsrfReadiness,
-} from '../../packages/theo/src/server/csrf-readiness-endpoint.js'
-import { CsrfReadinessStore } from '../../packages/theo/src/server/csrf-readiness-store.js'
+} from '../../packages/theo/src/server/security/csrf-readiness-endpoint.js'
+import { CsrfReadinessStore } from '../../packages/theo/src/server/security/csrf-readiness-store.js'
 
 /**
  * T2.2 — `/__theo/csrf-readiness` endpoint contract tests.

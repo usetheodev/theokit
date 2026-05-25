@@ -37,6 +37,11 @@ export default tseslint.config(
       'fixtures/**/dist/**',
       'examples/**/dist/**',
       'my-test/**',
+      // Worktrees created by agent runtimes are sandboxes with their own
+      // checkout state and possibly stale TS project graphs. They are not
+      // shipping code; linting them inflates error counts and breaks the
+      // type-checked parser (no projectService entry).
+      '.claude/worktrees/**',
       // create-theo `templates/` are pristine scaffold blueprints that get
       // copied into the user's project. They are NOT framework code; they
       // exist as didactic starting points. Lint-checking them creates

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateNonce } from '../../packages/theo/src/server/nonce.js'
+import { generateNonce } from '../../packages/theo/src/server/auth/nonce.js'
 
 /**
  * T4.1 — Per-request nonce generation.

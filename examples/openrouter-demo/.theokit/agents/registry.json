@@ -1,0 +1,41 @@
+{
+  "_schemaVersion": 1,
+  "data": {
+    "d6f94ef1-6d96-4472-a200-1795f206e4aa": {
+      "agentId": "d6f94ef1-6d96-4472-a200-1795f206e4aa",
+      "runtime": "local",
+      "createdAt": 1779720570942,
+      "lastModified": 1779720570942,
+      "archived": false,
+      "options": {
+        "model": {
+          "id": "openrouter/openai/gpt-4o-mini"
+        }
+      },
+      "summary": "Local contract fixture",
+      "model": {
+        "id": "openrouter/openai/gpt-4o-mini"
+      },
+      "cwd": "/home/paulo/Projetos/usetheo/theokit/examples/openrouter-demo",
+      "status": "finished"
+    },
+    "e6f29a06-8e5d-43e9-be97-d6f927acd5a8": {
+      "agentId": "e6f29a06-8e5d-43e9-be97-d6f927acd5a8",
+      "runtime": "local",
+      "createdAt": 1779719889291,
+      "lastModified": 1779719889291,
+      "archived": false,
+      "options": {
+        "model": {
+          "id": "openrouter/openai/gpt-4o-mini"
+        }
+      },
+      "summary": "Local contract fixture",
+      "model": {
+        "id": "openrouter/openai/gpt-4o-mini"
+      },
+      "cwd": "/home/paulo/Projetos/usetheo/theokit/examples/openrouter-demo",
+      "status": "finished"
+    }
+  }
+}

@@ -17,17 +17,17 @@ import { generateEntryClient } from '../router/entry.js'
 import { generateRouteManifest } from '../router/generate.js'
 import { scanRoutes } from '../router/scan.js'
 import { isRouteFile } from '../router/types.js'
-import type { AuditLogger } from '../server/audit-log.js'
-import type { CorsConfig } from '../server/cors.js'
-import type { DisallowedConfig } from '../server/csrf.js'
-import { createPluginRunnerFromConfig } from '../server/load-plugins.js'
-import { generateNonce } from '../server/nonce.js'
-import type { PluginRunner } from '../server/plugin-runner.js'
-import type { RateLimitConfig } from '../server/rate-limit.js'
-import { applySecurityHeaders } from '../server/security-headers.js'
-import type { SecurityHeadersConfig } from '../server/security-headers.js'
+import { generateNonce } from '../server/auth/nonce.js'
+import type { CorsConfig } from '../server/http/cors.js'
+import type { AuditLogger } from '../server/observability/audit-log.js'
+import { createPluginRunnerFromConfig } from '../server/plugins/load-plugins.js'
+import type { PluginRunner } from '../server/plugins/plugin-runner.js'
+import type { RateLimitConfig } from '../server/rate-limit/rate-limit.js'
+import { scanWebSocketRoutes } from '../server/scan/ws-scan.js'
+import type { DisallowedConfig } from '../server/security/csrf.js'
+import { applySecurityHeaders } from '../server/security/security-headers.js'
+import type { SecurityHeadersConfig } from '../server/security/security-headers.js'
 import { resolveTransformer, type TheoTransformer } from '../server/transformer.js'
-import { scanWebSocketRoutes } from '../server/ws-scan.js'
 
 import { createActionMiddleware } from './action-middleware.js'
 import { createApiMiddleware } from './api-middleware.js'
@@ -238,9 +238,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
         envPrefix: 'THEO_PUBLIC_',
         optimizeDeps: optimizeDepsInclude.length > 0 ? { include: optimizeDepsInclude } : undefined,
         server: {
-          ...(warmupClientFiles.length > 0
-            ? { warmup: { clientFiles: warmupClientFiles } }
-            : {}),
+          ...(warmupClientFiles.length > 0 ? { warmup: { clientFiles: warmupClientFiles } } : {}),
           // Skip watching gitignored heavy dirs to avoid hitting ENOSPC
           // (inotify watcher exhaustion). `referencias/` are deep-research
           // clones; `.theokit/` is per-conversation cache; `.theo/` is
@@ -520,10 +518,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
                 ssrHtml = result
               } else if (isSsrRenderResult(result)) {
                 ssrHtml = result.html
-                const dataJson = JSON.stringify(result.hydrationData).replace(
-                  /</g,
-                  '\\u003c',
-                )
+                const dataJson = JSON.stringify(result.hydrationData).replace(/</g, '\\u003c')
                 hydrationScript = `<script nonce="${nonce}">window.__staticRouterHydrationData=${dataJson}</script>`
               } else {
                 ssrHtml = ''
@@ -537,10 +532,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
 
               const splitIdx = template.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
               const html =
-                template.slice(0, splitIdx) +
-                ssrHtml +
-                hydrationScript +
-                template.slice(splitIdx)
+                template.slice(0, splitIdx) + ssrHtml + hydrationScript + template.slice(splitIdx)
 
               res.writeHead(200, { 'Content-Type': 'text/html' })
               res.end(html)
