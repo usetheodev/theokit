@@ -72,6 +72,7 @@
     "@types/busboy": "^1.5.4",
     "@types/pg": "^8.20.0",
     "@types/picomatch": "^4.0.0",
+    "@usetheo/sdk": "workspace:*",
     "pg": "^8.21.0",
     "pg-mem": "^3.0.14"
   }

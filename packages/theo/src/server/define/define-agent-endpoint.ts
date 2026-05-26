@@ -43,6 +43,21 @@ export interface AgentEndpointHandlerArgs<TCtx = unknown, TBody = unknown> {
    * async generator runs. This is per HTTP semantics, not a wrapper choice.
    */
   cookieHeaders: Headers
+  /**
+   * Phase 3 (Production-Readiness #5) — request abort signal.
+   *
+   * Fires when the SSE client disconnects (browser closes tab, abort fetch,
+   * etc.). Thread this to `agent.send(msg, { signal })` so the SDK cancels
+   * the in-flight provider call — STOPS TOKENS FROM CHARGING for output
+   * the user will never receive.
+   *
+   * EC-1 (MUST FIX): the signal is derived via duck-type detection
+   * (`'aborted' in r.signal && typeof r.signal.addEventListener === 'function'`)
+   * to survive cross-realm scenarios (Node 18 polyfills, undici, Edge
+   * runtimes with their own AbortSignal globals). `instanceof AbortSignal`
+   * would fail in those cases.
+   */
+  signal: AbortSignal
 }
 
 export interface AgentEndpointConfig<TCtx = unknown, TBody = unknown> {
@@ -108,6 +123,7 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
   return {
     handler: async ({ request, ctx, body, query, params }) => {
       const cookieHeaders = new Headers()
+      const signal = resolveAbortSignal(request)
       const generator = config.handler({
         request,
         ctx: ctx,
@@ -115,9 +131,8 @@ export function defineAgentEndpoint<TBody = unknown, TCtx = unknown>(
         query: query,
         params: params,
         cookieHeaders,
+        signal,
       })
-
-      const signal = resolveAbortSignal(request)
 
       // Prime the generator to its first yield. This forces the handler's
       // synchronous + async setup (including `createConversationHistory` if

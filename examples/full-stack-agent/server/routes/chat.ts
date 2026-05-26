@@ -3,10 +3,17 @@ import {
   createConversationHistory,
   defineAgentEndpoint,
   streamAgentRun,
+  trackAgentTools,
+  InMemoryUsageStorage,
   type AgentEvent,
 } from 'theokit/server'
+import { InMemoryConversationStorage } from '@usetheo/sdk'
 
 import { buildTools } from '../tools/index.js'
+
+// Phase 8 — usage storage at module level (shared across requests).
+// Swap for PostgresUsageStorage in production (recipe in docs).
+const usageStorage = new InMemoryUsageStorage()
 
 /**
  * Chat endpoint — exercises every Phase B primitive of TheoKit:
@@ -32,10 +39,7 @@ import { buildTools } from '../tools/index.js'
  * adapter passes in — dev uses Node IncomingMessage, prod adapters may
  * pass Web Request.
  */
-function readConversationCookie(
-  request: { headers?: unknown },
-  name: string,
-): string | undefined {
+function readConversationCookie(request: { headers?: unknown }, name: string): string | undefined {
   const headers = request.headers
   let raw: string | undefined
   if (typeof headers === 'object' && headers !== null) {
@@ -87,7 +91,7 @@ function resolveProvider(): { apiKey: string; modelId: string } | null {
 }
 
 export const POST = defineAgentEndpoint({
-  async *handler({ body, request, cookieHeaders }): AsyncGenerator<AgentEvent> {
+  async *handler({ body, request, cookieHeaders, signal }): AsyncGenerator<AgentEvent> {
     const safeBody =
       body !== null && typeof body === 'object' && !Array.isArray(body)
         ? (body as { message?: string })
@@ -108,6 +112,17 @@ export const POST = defineAgentEndpoint({
     const probedId = readConversationCookie(request, 'theo_conversation') ?? crypto.randomUUID()
     const tools = buildTools(probedId)
 
+    // Phase 8 — SDK v1.1.0 primitives wired:
+    //  • InMemoryConversationStorage (swap for Postgres in production)
+    //  • trackAgentTools for per-tool latency + error metrics
+    //  • ctx.signal threaded for abort-on-disconnect
+    const conversationStorage = new InMemoryConversationStorage()
+    const toolHooks = trackAgentTools({
+      storage: usageStorage,
+      userId: 'anonymous',
+      conversationId: probedId,
+    })
+
     const { agent, conversationId } = await createConversationHistory({
       request,
       response: { headers: cookieHeaders },
@@ -116,6 +131,10 @@ export const POST = defineAgentEndpoint({
         apiKey: provider.apiKey,
         model: { id: provider.modelId },
         tools,
+        conversationStorage,
+        onToolStart: toolHooks.onToolStart,
+        onToolEnd: toolHooks.onToolEnd,
+        onToolError: toolHooks.onToolError,
       },
     })
 
@@ -131,7 +150,7 @@ export const POST = defineAgentEndpoint({
       )
     }
 
-    const run = await agent.send(message)
+    const run = await agent.send(message, { signal })
     yield* streamAgentRun(run)
     // Intentionally no agent.dispose() — continuity by design.
   },

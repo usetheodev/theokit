@@ -37,14 +37,45 @@ export interface SdkAgent {
 }
 
 /**
+ * Phase 2 — structural duck-type of `@usetheo/sdk`'s `ConversationStorageAdapter`.
+ *
+ * D2 (decoupling): we mirror the SDK's shape locally rather than hard-import
+ * the SDK type. This lets consumers pass any object matching the structural
+ * contract (own implementation, SDK's `FileSystemConversationStorage`,
+ * `InMemoryConversationStorage`, or a Postgres/Redis recipe).
+ *
+ * EC-5 (SHOULD TEST — sync drift detection): the SDK type MUST be assignable
+ * to this interface AND vice-versa. A contract test asserts both directions.
+ *
+ * `unknown` for the message payload avoids coupling to the SDK's `SDKMessage`
+ * shape. Real consumers cast at the call site if they need stricter types.
+ */
+export interface ConversationStorageLike {
+  getMessages(conversationId: string): Promise<readonly unknown[]>
+  appendMessage(conversationId: string, message: unknown): Promise<void>
+  deleteConversation(conversationId: string): Promise<void>
+  listConversationIds?(opts?: { limit?: number }): Promise<readonly string[] | undefined>
+  dispose?(): Promise<void>
+}
+
+/**
  * Minimum surface of `AgentOptions` accepted by `Agent.getOrCreate`. Forward-
  * compatible: callers pass whatever the SDK supports (memory, tools, etc.).
+ *
+ * Phase 2 adds typed `conversationStorage` slot. The index signature still
+ * passes everything else opaquely.
  */
 export interface SdkAgentOptions {
   apiKey?: string
   model?: { id: string }
   tools?: readonly unknown[]
   memory?: Record<string, unknown>
+  /**
+   * Phase 2 (Production-Readiness #1) — pluggable conversation persistence.
+   * Default (when omitted): SDK falls back to `FileSystemConversationStorage`.
+   * Required for serverless / multi-host deploys.
+   */
+  conversationStorage?: ConversationStorageLike
   [key: string]: unknown
 }
 

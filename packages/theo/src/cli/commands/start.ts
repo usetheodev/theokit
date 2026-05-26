@@ -37,6 +37,37 @@ import {
  * Exported so unit tests can pin the resolution order without booting the
  * full CLI.
  */
+interface SdkAgentRegistry {
+  configure?: (opts: { maxAgents?: number; idleTimeoutMs?: number }) => void
+}
+interface SdkModule {
+  Agent?: { registry?: SdkAgentRegistry }
+}
+
+async function configureAgentRegistryFromConfig(
+  registryConfig: { maxAgents: number; idleTimeoutMs: number } | undefined,
+): Promise<void> {
+  if (registryConfig === undefined) return
+  try {
+    const sdk = (await import('@usetheo/sdk').catch(() => null)) as SdkModule | null
+    const sdkConfigure = sdk?.Agent?.registry?.configure
+    if (sdkConfigure === undefined) return
+    const { configureAgentRegistryOnce } =
+      await import('../../server/agent/configure-agent-registry.js')
+    configureAgentRegistryOnce(
+      {
+        configure: (opts) => {
+          sdkConfigure(opts)
+        },
+      },
+      registryConfig,
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[theokit] Agent.registry configuration skipped: ${msg}`)
+  }
+}
+
 const SSR_EXTENSIONS = ['.mjs', '.js'] as const
 export function resolveSsrEntry(distDir: string): string | null {
   for (const ext of SSR_EXTENSIONS) {
@@ -57,6 +88,10 @@ export async function startCommand(options: StartOptions): Promise<void> {
   // Phase 1 (T1.2) — Load .env BEFORE config load.
   loadEnv({ cwd, mode: 'production' })
   const config = await loadConfig(cwd)
+
+  // Phase 6 — configure SDK's Agent.registry from theo.config.ts
+  // (lazy at boot; EC-3 sync flag flip prevents race under concurrent boot).
+  await configureAgentRegistryFromConfig(config.agents?.registry)
 
   const distDir = resolve(cwd, '.theo')
   const clientDir = resolve(distDir, 'client')
@@ -370,5 +405,51 @@ export async function startCommand(options: StartOptions): Promise<void> {
   server.listen(port, () => {
     console.log(`\n  Theo production server`)
     console.log(`  → http://localhost:${String(port)}\n`)
+  })
+
+  // Phase 6 — T6.2: graceful shutdown for K8s/PaaS pod termination.
+  //
+  // EC-13 (DOCUMENT): SIGTERM evicts agents IMMEDIATELY (no per-request drain).
+  // In-flight requests get aborted mid-stream — acceptable because the platform's
+  // load balancer already removed this pod from rotation BEFORE sending SIGTERM
+  // (K8s preStop hook + terminationGracePeriodSeconds; same on Vercel/CF/Render).
+  //
+  // Re-entry guard: multiple SIGTERMs in quick succession run shutdown ONCE.
+  let shuttingDown = false
+  const gracefulShutdown = (signal: NodeJS.Signals): void => {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.log(`\n  [theokit] ${signal} received — evicting agents`)
+    // Lazy-import SDK only at shutdown time to avoid forcing the dep on
+    // apps that don't use agents at all.
+    void (async () => {
+      try {
+        const sdk = (await import('@usetheo/sdk').catch(() => null)) as {
+          Agent?: { registry?: { evictAll?: () => Promise<void> } }
+        } | null
+        if (sdk?.Agent?.registry?.evictAll !== undefined) {
+          await sdk.Agent.registry.evictAll()
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.warn(`  [theokit] evictAll error (proceeding to exit): ${msg}`)
+      }
+      console.log(`  [theokit] shutdown complete`)
+      // Close the HTTP server so the event loop drains
+      server.close(() => {
+        process.exit(0)
+      })
+      // Force-exit after 25s (under K8s default 30s grace)
+      setTimeout(() => {
+        console.warn(`  [theokit] forced exit after 25s timeout`)
+        process.exit(0)
+      }, 25_000).unref()
+    })()
+  }
+  process.on('SIGTERM', () => {
+    gracefulShutdown('SIGTERM')
+  })
+  process.on('SIGINT', () => {
+    gracefulShutdown('SIGINT')
   })
 }

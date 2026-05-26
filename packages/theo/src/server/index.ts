@@ -285,8 +285,17 @@ export { trackAgentRun } from './cost/track-agent-run.js'
 export type { TrackAgentRunInput, TrackAgentRunOptions } from './cost/track-agent-run.js'
 export type {
   UsageRecord,
+  ToolUsageRecord,
   UsageQuery,
   UsageResult,
   UsageStorageAdapter,
 } from './cost/cost-types.js'
 export { InMemoryUsageStorage } from './cost/usage-storage-memory.js'
+
+// Phase 5 — tool lifecycle hooks for cost tracking (Production-Readiness #4)
+export { trackAgentTools } from './cost/track-agent-tools.js'
+export type {
+  TrackAgentToolsOptions,
+  TrackAgentToolsHooks,
+  ToolHookEvent,
+} from './cost/track-agent-tools.js'

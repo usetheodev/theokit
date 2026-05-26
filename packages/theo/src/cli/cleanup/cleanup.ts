@@ -29,7 +29,7 @@ import type {
 } from './cleanup-types.js'
 
 const DEFAULT_SKIP = ['.git', '.gitkeep', '.gitignore']
-const DEFAULT_MAX_AGENTS = 100
+// DEFAULT_MAX_AGENTS removed in Phase 7 — gcAgentRegistry is a tombstone.
 
 function normalizeSkipName(name: string): string {
   // EC-11 — strip trailing slash + leading `./`
@@ -99,53 +99,30 @@ export async function cleanOutDir(opts: CleanOutDirOptions): Promise<CleanOutDir
 }
 
 /**
- * LRU cleanup of `.theokit/agents/`. Keeps the `maxAgents` most-recent
- * (by mtime) and deletes the rest. No-op when count ≤ cap.
+ * Phase 7 — TOMBSTONE for backward-compat. The SDK v1.1.0's `Agent.registry`
+ * handles GC natively; this function is a no-op + emits a deprecation warning
+ * ONCE per process (EC-10).
+ *
+ * Will be deleted entirely in TheoKit 0.4.0. Marked deprecated via runtime
+ * warning rather than `@deprecated` JSDoc tag to avoid the eslint
+ * sonarjs/deprecation flagging our own internal symbols.
  */
+let warnedOnce = false
 export async function gcAgentRegistry(
-  opts: GcAgentRegistryOptions,
+  _opts: GcAgentRegistryOptions,
 ): Promise<GcAgentRegistryResult> {
-  const maxAgents = opts.maxAgents ?? DEFAULT_MAX_AGENTS
-
-  let entries: { name: string; isDirectory: () => boolean }[]
-  try {
-    entries = await fs.readdir(opts.dir, { withFileTypes: true })
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code
-    if (code === 'ENOENT') return { deleted: 0, kept: 0 }
-    throw err
+  if (!warnedOnce) {
+    warnedOnce = true
+    console.warn(
+      '[theokit] gcAgentRegistry is deprecated; SDK Agent.registry handles GC natively (configure via theo.config.ts > agents.registry)',
+    )
   }
+  return Promise.resolve({ deleted: 0, kept: 0 })
+}
 
-  const dirs = entries.filter((e) => e.isDirectory())
-  if (dirs.length <= maxAgents) {
-    return { deleted: 0, kept: dirs.length }
-  }
-
-  // EC-9 — handle mtime=0 gracefully via Promise.all + catch
-  const withMtime = await Promise.all(
-    dirs.map(async (d) => {
-      const fullPath = resolvePath(opts.dir, d.name)
-      const mtime = await fs
-        .stat(fullPath)
-        .then((s) => s.mtime.getTime())
-        .catch(() => 0)
-      return { path: fullPath, mtime }
-    }),
-  )
-
-  // Sort ascending — oldest first
-  withMtime.sort((a, b) => a.mtime - b.mtime)
-
-  const toDelete = withMtime.slice(0, withMtime.length - maxAgents)
-  let deleted = 0
-  for (const entry of toDelete) {
-    try {
-      await fs.rm(entry.path, { recursive: true, force: true, maxRetries: 3 })
-      deleted++
-    } catch {
-      // Race / permission — skip, will be retried next boot
-    }
-  }
-
-  return { deleted, kept: withMtime.length - deleted }
+/**
+ * @internal — testing helper. Resets the module-scoped warnedOnce flag.
+ */
+export function __resetGcDeprecationWarnedForTests(): void {
+  warnedOnce = false
 }

@@ -1,9 +1,9 @@
-import { mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { cleanOutDir, gcAgentRegistry } from '../../packages/theo/src/cli/cleanup/cleanup.js'
+import { cleanOutDir } from '../../packages/theo/src/cli/cleanup/cleanup.js'
 
 /**
  * T2.1 — cleanOutDir + gcAgentRegistry unit tests.
@@ -106,63 +106,6 @@ describe('cleanOutDir — Astro-pattern wipe with skip list', () => {
   })
 })
 
-describe('gcAgentRegistry — Nuxt-pattern LRU', () => {
-  it('under cap: no-op', async () => {
-    const dir = makeSubdir()
-    for (let i = 0; i < 5; i++) mkdirSync(join(dir, `agent${i}`), { recursive: true })
-    const result = await gcAgentRegistry({ dir, maxAgents: 100 })
-    expect(result).toEqual({ deleted: 0, kept: 5 })
-  })
-
-  it('LRU over cap: deletes oldest by mtime', async () => {
-    const dir = makeSubdir()
-    const base = Date.now() / 1000
-    for (let i = 0; i < 12; i++) {
-      const sub = join(dir, `agent${i}`)
-      mkdirSync(sub, { recursive: true })
-      // utimes: lower atime/mtime = older. agent0 oldest, agent11 newest.
-      utimesSync(sub, base - (12 - i) * 60, base - (12 - i) * 60)
-    }
-    const result = await gcAgentRegistry({ dir, maxAgents: 10 })
-    expect(result.deleted).toBe(2)
-    expect(result.kept).toBe(10)
-  })
-
-  it('ignores files (only directories)', async () => {
-    const dir = makeSubdir()
-    mkdirSync(join(dir, 'a'), { recursive: true })
-    writeFileSync(join(dir, 'b.txt'), 'x')
-    const result = await gcAgentRegistry({ dir, maxAgents: 100 })
-    expect(result.kept).toBe(1) // only the dir counted
-  })
-
-  it('missing dir: no throw', async () => {
-    const dir = join(TEST_ROOT, 'never-existed-gc')
-    const result = await gcAgentRegistry({ dir })
-    expect(result).toEqual({ deleted: 0, kept: 0 })
-  })
-
-  it('concurrent calls safe — no crash', async () => {
-    const dir = makeSubdir()
-    for (let i = 0; i < 12; i++) mkdirSync(join(dir, `agent${i}`), { recursive: true })
-    const [r1, r2] = await Promise.all([
-      gcAgentRegistry({ dir, maxAgents: 10 }),
-      gcAgentRegistry({ dir, maxAgents: 10 }),
-    ])
-    expect(r1.deleted + r1.kept).toBeGreaterThanOrEqual(10)
-    expect(r2.deleted + r2.kept).toBeGreaterThanOrEqual(0)
-  })
-
-  // EC-9
-  it('EC-9: handles dirs with mtime=0 (Docker overlay)', async () => {
-    const dir = makeSubdir()
-    for (let i = 0; i < 5; i++) {
-      const sub = join(dir, `agent${i}`)
-      mkdirSync(sub, { recursive: true })
-      utimesSync(sub, 0, 0)
-    }
-    const result = await gcAgentRegistry({ dir, maxAgents: 3 })
-    expect(result.deleted).toBe(2)
-    expect(result.kept).toBe(3)
-  })
-})
+// Phase 7 — gcAgentRegistry LRU tests retired: SDK v1.1.0's Agent.registry
+// handles GC natively. The tombstone contract (no-op + warn-once) is
+// covered by tests/unit/cleanup-gcagentregistry-tombstone.test.ts.

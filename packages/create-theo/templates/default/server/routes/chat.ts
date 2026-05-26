@@ -28,7 +28,7 @@ const currentTime = defineAgentTool({
 })
 
 export const POST = defineAgentEndpoint({
-  async *handler({ body, request, cookieHeaders }): AsyncGenerator<AgentEvent> {
+  async *handler({ body, request, cookieHeaders, signal }): AsyncGenerator<AgentEvent> {
     const safeBody =
       body !== null && typeof body === 'object' && !Array.isArray(body)
         ? (body as { message?: string })
@@ -57,7 +57,7 @@ export const POST = defineAgentEndpoint({
         tools: [currentTime],
       },
     })
-    const run = await agent.send(message)
+    const run = await agent.send(message, { signal })
     yield* streamAgentRun(run)
     // Intentionally NO agent.dispose() — the agent stays registered so the
     // next request from the same conversation resumes it (continuity).

@@ -1,4 +1,4 @@
-import type { AgentEvent } from './agent-types.js'
+import type { AgentEvent, AgentErrorEvent } from './agent-types.js'
 
 /**
  * Item #4 — `streamAgentRun`
@@ -163,6 +163,85 @@ function isToolCall(msg: { type: string }): msg is ToolCallLike {
   )
 }
 
+/**
+ * Phase 4 — Production-Readiness #3: structural mirror of SDK's AgentRunError.
+ *
+ * EC-6 (SHOULD TEST): we only require `code: string` to discriminate.
+ * Provider, retriable, retryAfterMs, requestId are all optional — SDK error
+ * paths may omit them (e.g., aborted before request, tool runtime error).
+ */
+interface AgentRunErrorLike {
+  message: string
+  code: string
+  provider?: string
+  retriable?: boolean
+  retryAfterMs?: number
+  requestId?: string
+  /**
+   * EC-15 (DOCUMENT) + invariant: `providerError` is QUARANTINED. We read it
+   * for type-narrowing but NEVER serialize into the AgentEvent — leaking the
+   * raw provider response could leak API keys, internal endpoints, or PII.
+   * Only sanitized fields above flow to the SSE wire. `error.message` is
+   * trusted to not contain secrets (SDK's responsibility per the v1.1.0
+   * release contract).
+   */
+  providerError?: unknown
+}
+
+/**
+ * EC-6 (SHOULD TEST): minimal type guard — only requires `code: string`.
+ * Does NOT require `'provider' in err` because the SDK throws AgentRunErrors
+ * without `provider` in local error paths (timeout, tool runtime error,
+ * aborted-before-call).
+ */
+function isAgentRunError(err: unknown): err is AgentRunErrorLike {
+  if (!(err instanceof Error)) return false
+  const e = err as { code?: unknown }
+  return 'code' in e && typeof e.code === 'string'
+}
+
+/**
+ * Map an SDK error to the AgentErrorEvent shape. Pure function — easy to test.
+ *
+ * Backward compat (D4): non-AgentRunError throws yield only `message` field
+ * (legacy shape); discriminated fields stay `undefined`.
+ *
+ * Return type is the specific `AgentErrorEvent` (not the union) for ergonomic
+ * call-site access — `errorToEvent(err).code` works without narrowing.
+ */
+export function errorToEvent(err: unknown, id?: string): AgentErrorEvent {
+  if (isAgentRunError(err)) {
+    const event: AgentErrorEvent = {
+      type: 'error',
+      message: err.message,
+      code: err.code,
+    }
+    if (err.provider !== undefined) event.provider = err.provider
+    if (err.retriable !== undefined) event.retriable = err.retriable
+    if (err.retryAfterMs !== undefined) event.retryAfterMs = err.retryAfterMs
+    if (id !== undefined) event.id = id
+    return event
+  }
+  // Fallback for non-AgentRunError throws (plain Error, string, plain object with message)
+  let message: string
+  if (err instanceof Error) {
+    message = err.message
+  } else if (typeof err === 'string') {
+    message = err
+  } else if (err !== null && typeof err === 'object' && 'message' in err) {
+    const candidate: unknown = (err as Record<string, unknown>).message
+    // Plain object with `message: string` — common for SDK status:error payloads
+    message = typeof candidate === 'string' ? candidate : '[object Object]'
+  } else if (err === null || err === undefined) {
+    message = String(err)
+  } else {
+    message = '[non-stringifiable error]'
+  }
+  const event: AgentErrorEvent = { type: 'error', message }
+  if (id !== undefined) event.id = id
+  return event
+}
+
 function yieldFromToolCall(msg: ToolCallLike): AgentEvent {
   if (msg.status === 'running') {
     return {
@@ -205,6 +284,6 @@ export async function* streamAgentRun(
 
   const result = await run.wait()
   if (result.status === 'error' && result.error !== undefined) {
-    yield { type: 'error', message: result.error.message }
+    yield errorToEvent(result.error)
   }
 }

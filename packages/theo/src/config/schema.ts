@@ -211,13 +211,35 @@ export const theoConfigSchema = z.object({
       'distDir must be a relative path inside the project root (e.g., ".theo")',
     ),
   /**
-   * T2.3 — Agent registry cleanup. Long-lived dev sessions accumulate
-   * `.theokit/agents/<id>/` directories. Each `theokit dev` startup runs
-   * an LRU cleanup keeping the N most recent (by mtime).
+   * Agent runtime configuration.
+   *
+   * - `maxRegistries` (T2.3, legacy): dev-mode cleanup of stale
+   *   `.theokit/agents/<id>/` dirs by mtime. Now superseded by SDK's
+   *   native registry GC but kept for backward-compat.
+   * - `registry` (Phase 6, Production-Readiness #2): forwarded to
+   *   `Agent.registry.configure()` lazily on first request.
+   *   * `maxAgents` — LRU cap. MUST be ≥ max-concurrent-active-conversations
+   *     (EC-17 DOCUMENT): with maxAgents:1 and 2 concurrent chats, LRU evicts
+   *     mid-stream → SDK aborts with code:'aborted'. Default 100 covers
+   *     indie/small-team; tune up for high-traffic.
+   *   * `idleTimeoutMs` — auto-evict idle agents (default 30 min). 0 disables
+   *     idle eviction (LRU only).
    */
   agents: z
     .object({
       maxRegistries: z.number().int().positive().default(100),
+      registry: z
+        .object({
+          /** LRU cap — MUST be ≥ max-concurrent-active-conversations. */
+          maxAgents: z.number().int().positive().max(10_000).default(100),
+          /** Idle eviction window in ms. 0 disables idle eviction (LRU only). */
+          idleTimeoutMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .default(30 * 60_000),
+        })
+        .optional(),
     })
     .optional(),
   port: z.number().int().min(1).max(65535).default(3000),

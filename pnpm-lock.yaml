@@ -41,6 +41,9 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
+      '@usetheo/sdk':
+        specifier: workspace:*
+        version: link:../theokit-sdk/packages/sdk
       '@vitest/coverage-v8':
         specifier: ^3
         version: 3.2.4(vitest@3.2.4(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4))
@@ -188,9 +191,6 @@ importers:
       croner:
         specifier: ^9.0.0
         version: 9.1.0
-      zod:
-        specifier: 3.25.76
-        version: 3.25.76
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.13
@@ -213,6 +213,9 @@ importers:
       typedoc:
         specifier: ^0.28.19
         version: 0.28.19(typescript@5.9.3)
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
 
   examples/deploy-vercel:
     dependencies:
@@ -480,6 +483,9 @@ importers:
       '@types/picomatch':
         specifier: ^4.0.0
         version: 4.0.3
+      '@usetheo/sdk':
+        specifier: workspace:*
+        version: link:../../../theokit-sdk/packages/sdk
       pg:
         specifier: ^8.21.0
         version: 8.21.0

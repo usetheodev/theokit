@@ -4,23 +4,30 @@ import {
   streamAgentRun,
   type AgentEvent,
 } from 'theokit/server'
+import { InMemoryConversationStorage } from '@usetheo/sdk'
 
 import { tools } from '../tools/index.js'
 
 /**
- * Chat endpoint — exercises every TheoKit-SDK integration primitive:
+ * Chat endpoint — exercises every TheoKit-SDK integration primitive from
+ * SDK v1.1.0:
  *
  *  • defineAgentEndpoint         → wraps the async generator into SSE wire
- *  • createConversationHistory   → bridges cookie ↔ Agent.getOrCreate(id),
- *                                  persists conversation in .theokit/agents/
- *  • streamAgentRun              → maps SDKMessage → AgentEvent (tokens,
- *                                  tool_call, tool_result, done)
+ *  • createConversationHistory   → bridges cookie ↔ Agent.getOrCreate(id)
+ *  • streamAgentRun              → maps SDKMessage → AgentEvent + structured
+ *                                  AgentRunError mapping (code/provider/retriable)
  *  • tools (3×)                  → defineAgentTool wrapped as CustomTool
+ *  • InMemoryConversationStorage → ephemeral storage suitable for demo;
+ *                                  swap to PostgresConversationStorage in
+ *                                  production (see docs/concepts/conversation-history.md)
+ *  • ctx.signal                  → propagated to agent.send for abort-on-disconnect
+ *                                  (stops token charges when browser closes)
  *
  * Provider: OPENROUTER_API_KEY required. Set MODEL_ID to override the default.
  *
- * No `agent.dispose()` call — continuity is the point. The SDK auto-persists
- * conversation turns in `.theokit/agents/<conversationId>/messages.jsonl`.
+ * Persistence: InMemoryConversationStorage resets per request — fine for
+ * demo. For real conversation continuity across requests, use a durable
+ * adapter (Postgres/Redis recipes in `docs/concepts/conversation-history.md`).
  */
 
 function readCookie(request: { headers?: unknown }, name: string): string | undefined {
@@ -50,7 +57,7 @@ function readCookie(request: { headers?: unknown }, name: string): string | unde
 }
 
 export const POST = defineAgentEndpoint({
-  async *handler({ body, request, cookieHeaders }): AsyncGenerator<AgentEvent> {
+  async *handler({ body, request, cookieHeaders, signal }): AsyncGenerator<AgentEvent> {
     const safeBody =
       body !== null && typeof body === 'object' && !Array.isArray(body)
         ? (body as { message?: string })
@@ -78,6 +85,11 @@ export const POST = defineAgentEndpoint({
 
     const probedId = readCookie(request, 'theo_conversation') ?? crypto.randomUUID()
 
+    // Phase 8 — SDK v1.1.0 InMemoryConversationStorage. For real persistence
+    // (serverless / multi-host deploys), swap for Postgres/Redis adapter
+    // (see docs/concepts/conversation-history.md).
+    const conversationStorage = new InMemoryConversationStorage()
+
     const { agent, conversationId } = await createConversationHistory({
       request,
       response: { headers: cookieHeaders },
@@ -86,6 +98,7 @@ export const POST = defineAgentEndpoint({
         apiKey,
         model: { id: modelId },
         tools,
+        conversationStorage,
       },
     })
 
@@ -98,7 +111,9 @@ export const POST = defineAgentEndpoint({
       )
     }
 
-    const run = await agent.send(message)
+    // Phase 8 — thread the request close signal so tokens stop being charged
+    // when the browser disconnects mid-stream.
+    const run = await agent.send(message, { signal })
     yield* streamAgentRun(run)
   },
 })
