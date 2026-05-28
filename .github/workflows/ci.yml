@@ -193,6 +193,11 @@ jobs:
           node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      # Required because playwright.config.ts boots ALL webServers (every
+      # project's fixture spawns a theokit dev), and many fixtures import
+      # `theokit` which resolves to `packages/theo/dist/`. tsup is lenient
+      # on type errors so build succeeds even when typecheck does not.
+      - run: pnpm build
       - run: npx playwright install --with-deps chromium
       - name: Provision postgres + saas databases
         env:
