@@ -55,6 +55,9 @@ Lead with the outcome. Anchor the technical term once in DEEP DIVE, then drop it
 | "Encrypted sessions (AES-256-GCM), `requireAuth()` with type narrowing" | "Sessions that just work" | DEEP DIVE: AES-256-GCM and `requireAuth()` belong here |
 | "`renderToPipeableStream` + `hydrateRoot`" | (Forbidden in HERO/BODY.) | DEEP DIVE only |
 | "Built with Vite 6 / React 19 / Zod / tsup / Vitest" | (Drop from HERO/BODY. List in DEEP DIVE only.) | DEEP DIVE: keep the "Built With" table |
+| "Multi-language framework with Python, Node, Go, .NET support" | "Your backend, your language. Ship the Python or Node service next to the app." | DEEP DIVE: `services: {}` in `theo.config.ts` orchestrates external processes via OpenAPI + proxy, Wave 1 supports Python (FastAPI) and Node (Hono/Fastify) |
+| "Polyglot framework" / "Run any backend stack" | (Banned in HERO. Allowed in BODY only as "polyglot services" feature name.) | DEEP DIVE: explain the Like-Vercel runtime contract — fetch handler universal, file-system routing build-time, env runtime, structured logs, healthcheck convention |
+| "Replaces TheoCreate" / "TheoKit + TheoCreate" | (TheoCreate is absorbed — say "scaffolding is in `create-theokit`".) | DEEP DIVE: `create-theokit my-app --backend python` generates TheoKit app + FastAPI service in one command |
 
 ### Storytelling rules (HERO and top of BODY)
 
@@ -70,7 +73,7 @@ HERO and the opening of BODY may use first-person storytelling about what the de
 
 1. **The HERO answers one question: "what do I get?"** Not "what is it?". Not "what features?". Just the outcome the reader is buying into.
 2. **One technical anchor per benefit, max.** A BODY bullet says what the dev *does*, then optionally how. "WebSocket as a file (`server/ws/chat.ts`)" — outcome + anchor. Not "WebSocket endpoints via `defineWebSocket` with file-based routing under `server/ws/`".
-3. **Banned in HERO and BODY:** `defineRoute`, `defineAction`, `defineWebSocket`, `theoFetch`, `requireAuth`, `createSessionManager`, `defineMiddleware`, `defineConfig`, `hydrateRoot`, `renderToPipeableStream`, AES-256-GCM, Drizzle ORM, Vite, Vitest, tsup, opinionated, polyglot, monorepo. Each has a benefit-shaped equivalent — find it. (Vite, Drizzle, Vitest etc. are allowed in DEEP DIVE.)
+3. **Banned in HERO and BODY:** `defineRoute`, `defineAction`, `defineWebSocket`, `theoFetch`, `requireAuth`, `createSessionManager`, `defineMiddleware`, `defineConfig`, `hydrateRoot`, `renderToPipeableStream`, AES-256-GCM, Drizzle ORM, Vite, Vitest, tsup, opinionated, monorepo. Each has a benefit-shaped equivalent — find it. (Vite, Drizzle, Vitest etc. are allowed in DEEP DIVE.) **Exception 2026-05-27:** `polyglot` is allowed in BODY/DEEP DIVE *only* in the phrase "polyglot services" (the formal feature name from Wave 2 mission). It remains banned in HERO and in any other framing.
 4. **Banned everywhere (HERO, BODY, DEEP DIVE):** "blazing fast", "robust", "powerful", "seamless", "enterprise-grade", "next-generation", "industry-leading", "battle-tested" (unless followed by an actual battle), and "production-ready" without a Status section to back it.
 5. **Numbers beat adjectives.** "4 templates" beats "multiple templates". "1 file = 1 WebSocket endpoint" beats "easy real-time setup". If you can't put a number on it, question whether the claim is real.
 6. **Verify before publishing.** Every named feature must exist in the TheoKit README or CHANGELOG. The voice gets aspirational; the facts stay honest.
@@ -110,15 +113,19 @@ The **vocabulary table** and **before/after examples** are living — add new en
 
 ---
 
-## Ecosystem — the three siblings, literally
+## Ecosystem — the five siblings, literally (one being absorbed)
 
-TheoKit lives next to three sibling projects under `/home/paulo/Projetos/usetheo/`. This table is the **source of truth** for what TheoKit actually integrates with. Any README claim, comparison table, or pitch deck that contradicts this is wrong and must be corrected to match the code.
+TheoKit lives next to five sibling projects under `/home/paulo/Projetos/usetheo/`. This table is the **source of truth** for what TheoKit actually integrates with. Any README claim, comparison table, or pitch deck that contradicts this is wrong and must be corrected to match the code.
 
-| Sibling | Sibling repo | Kind | TheoKit consumes via | Code wiring | Status |
-|---------|--------------|------|---------------------|-------------|:------:|
-| **`@usetheo/sdk`** + `@usetheo/gateway` + `@usetheo/gateway-telegram` | `../theokit-sdk/` (TypeScript) | Agent runtime: `Agent.create/send/getOrCreate`, `Run.stream`, providers (OpenAI/Anthropic/Ollama/OpenRouter), conversation persistence (`.theokit/agents/<id>/messages.jsonl`), custom-tool runtime | **Workspace protocol** — `pnpm-workspace.yaml` includes `../theokit-sdk/packages/{sdk,gateway,gateway-telegram}`. Local edits in the sibling reflect immediately. | 6 framework files: `server/agent/{create-conversation-history,stream-agent-run,agent-types}.ts`, `server/define/define-agent-tool.ts`, examples + templates `from '@usetheo/sdk'`. | ✅ Wired |
-| **`@usetheo/ui`** | `../theo-ui/` (TypeScript) | React component library: chat surface (`ChatMessage`, `ChatThread`, `ChatComposer`, `ToolCallCard`), theme system (`ThemeProvider`, `ThemeScript`, `TheoUIProvider`), design tokens, 50+ generic components | **npm dep** — published `@usetheo/ui` (`^0.11.0-next.0`) consumed via the npm registry. `pnpm-workspace.yaml` does **NOT** include `../theo-ui/`. Local edits in the sibling do NOT reflect — they require a npm publish first. | Framework auto-injects `<TheoUIProvider>` in SSR + client entries when the package is detected. 10+ files reference it: `vite-plugin/{inject-stylesheets,integrate-ui,theoui-detect}.ts`, `router/entry{,-server}.ts`, `config/schema.ts`, `cli/commands/{dev,upgrade-readiness}.ts`, `server/cost/track-agent-run.ts`. | ✅ Wired (npm) |
-| **`theo` → TheoCloud** (formerly "Theo PaaS") | `../theo/` (Go) | **The principal deploy target** — hosted product where TheoKit apps run in production. K8s operators (Crossplane-style), Helm charts, multi-tenant control plane, managed Postgres + Redis, secret rotation, audit log persistence, distributed rate-limiter store. Separate Go CLI named `theo`. | **Adapter not yet shipped** — `packages/theo/src/adapters/theo-cloud.ts` does not exist. However, the **architectural hooks are already in place**: `JobBackend` interface (ADR-0002), `UsageStorageAdapter` interface (R0.5.11 design), `RateLimitStorageAdapter` (security-hardening plan), structured logging to stdout. TheoCloud-side issues #58, #59, #60 interlock with TheoKit's security primitives. | The deploy adapter is the next major milestone after 0.4.0; pluggable interfaces are designed *for it*. | 🟡 **Primary target — adapter on roadmap, interfaces ready** |
+Three siblings flow **into** TheoKit (it consumes them). One sibling flows **out** of TheoKit (it consumes TheoKit's plugin SDK). One sibling is **being absorbed into** TheoKit (its scaffolding capabilities become part of `create-theokit`). The direction matters — see the "Direction" column.
+
+| Sibling | Sibling repo | Kind | Direction | TheoKit consumes via / is consumed via | Code wiring | Status |
+|---------|--------------|------|-----------|----------------------------------------|-------------|:------:|
+| **`@usetheo/sdk`** + `@usetheo/gateway` + `@usetheo/gateway-telegram` | `../theokit-sdk/` (TypeScript) | Agent runtime: `Agent.create/send/getOrCreate`, `Run.stream`, providers (OpenAI/Anthropic/Ollama/OpenRouter), conversation persistence (`.theokit/agents/<id>/messages.jsonl`), custom-tool runtime | **TheoKit ← sibling** (TheoKit consumes it) | **Workspace protocol** — `pnpm-workspace.yaml` includes `../theokit-sdk/packages/{sdk,gateway,gateway-telegram}`. Local edits in the sibling reflect immediately. | 6 framework files: `server/agent/{create-conversation-history,stream-agent-run,agent-types}.ts`, `server/define/define-agent-tool.ts`, examples + templates `from '@usetheo/sdk'`. | ✅ Wired |
+| **`@usetheo/ui`** | `../theo-ui/` (TypeScript) | React component library: chat surface (`ChatMessage`, `ChatThread`, `ChatComposer`, `ToolCallCard`), theme system (`ThemeProvider`, `ThemeScript`, `TheoUIProvider`), design tokens, 50+ generic components | **TheoKit ← sibling** (TheoKit consumes it) | **npm dep** — published `@usetheo/ui` (`^0.11.0-next.0`) consumed via the npm registry. `pnpm-workspace.yaml` does **NOT** include `../theo-ui/`. Local edits in the sibling do NOT reflect — they require a npm publish first. | Framework auto-injects `<TheoUIProvider>` in SSR + client entries when the package is detected. 10+ files reference it: `vite-plugin/{inject-stylesheets,integrate-ui,theoui-detect}.ts`, `router/entry{,-server}.ts`, `config/schema.ts`, `cli/commands/{dev,upgrade-readiness}.ts`, `server/cost/track-agent-run.ts`. | ✅ Wired (npm) |
+| **`theo` → TheoCloud** (formerly "Theo PaaS") | `../theo/` (Go) | **The principal deploy target** — hosted product where TheoKit apps run in production. K8s operators (Crossplane-style), Helm charts, multi-tenant control plane, managed Postgres + Redis, secret rotation, audit log persistence, distributed rate-limiter store. Separate Go CLI named `theo`. | **TheoKit → sibling** (TheoKit deploys to it) | **Adapter not yet shipped** — `packages/theo/src/adapters/theo-cloud.ts` does not exist. However, the **architectural hooks are already in place**: `JobBackend` interface (ADR-0002), `UsageStorageAdapter` interface (R0.5.11 design), `RateLimitStorageAdapter` (security-hardening plan), structured logging to stdout. TheoCloud-side issues #58, #59, #60 interlock with TheoKit's security primitives. | The deploy adapter is the next major milestone after 0.4.0; pluggable interfaces are designed *for it*. | 🟡 **Primary target — adapter on roadmap, interfaces ready** |
+| **`theokit-plugins`** — first-party plugin registry | `../theokit-plugins/` (TypeScript) | Container repo for official Fastify-style plugins that consume TheoKit's `TheoPlugin` SDK (ADR-0008). Today: **1 package shipping** — `@theokit/plugin-cors` v0.1.0 (CORS middleware, peerDep `theokit >= 0.1.0-alpha.5`); **2 proposed** — `@theokit/plugin-sentry` (ADR-0012 there, ≤ 2 weeks after cors release) and `@theokit/plugin-i18n` (ADR-0013 there, ≤ 6 weeks after cors release). "Moderate roadmap" strategy per ADR-0011 D4 (in this repo). | **TheoKit → sibling** (sibling consumes TheoKit — direction INVERTED) | **Zero code wiring in framework core.** TheoKit does not import, dynamic-resolve, or auto-load anything from `theokit-plugins`. The sibling consumes TheoKit via npm `peerDependencies` + the `TheoPlugin { name, register(app) }` interface re-exported from `theokit/server`. Apps install plugins explicitly (`pnpm add @theokit/plugin-cors`) and pass them to `defineConfig({ plugins: [...] })`. | **Anchors live here, not there:** [ADR-0011](docs/adr/0011-moderate-plugin-roadmap-strategy.md) (strategy + temporal gates); [`docs/concepts/plugins.md`](docs/concepts/plugins.md) §7 (authoring guide); [`docs/adr/0008-theoplugin-is-the-canonical-sdk.md`](docs/adr/0008-theoplugin-is-the-canonical-sdk.md) (the SDK they consume). | 🌱 **Sibling — first plugin (`plugin-cors` v0.1.0) shipping 2026-Q3** |
+| **`theo-stacks` → `create-theo`** (being absorbed into `create-theokit`) | `../theo-stacks/` (TypeScript) | Standalone polyglot scaffolder published as `create-theo` on npm. Today ships **19 templates in 7 languages** (Node · Go · Python · Rust · Java · Ruby · PHP — `node-express`, `node-fastify`, `node-nestjs`, `go-api`, `python-fastapi`, `rust-axum`, `java-spring`, `ruby-sinatra`, `php-slim`, `node-nextjs`, `fullstack-nextjs`, 7 monorepo-* variants, `node-worker`) with health probes, graceful shutdown, Dockerfile, CI per template. | **TheoKit ← (absorbing) sibling** | **Decision 2026-05-27 (ADR-0013 in this repo, to be drafted):** TheoCreate's scaffolding role is folded into `create-theokit`. Wave 1: TS templates already in `packages/create-theo/templates/`. Wave 2: import `python-fastapi` + `node-fastify` (or `node-hono`) templates, adapt to live next to TheoKit as `services/*/`. Other 5 languages deferred to future ADRs with demand evidence. Standalone `theo-stacks` repo + `create-theo` npm package go into deprecation. | Templates to absorb: `python-fastapi` (priority), `node-hono` (to be added — new, replaces `node-fastify`/`node-express` for fetch-handler shape). Existing TheoKit templates (default/dashboard/api-only/postgres/saas) gain a `--backend` flag that wires `services: {}` in `theo.config.ts`. | 🟡 **Being absorbed — Wave 2 milestone; standalone repo enters deprecation when absorption completes** |
 
 ### Rules that derive from this table
 
@@ -126,23 +133,102 @@ TheoKit lives next to three sibling projects under `/home/paulo/Projetos/usetheo
 2. **TheoCloud-shaped surfaces in framework code use neutral interfaces, not direct TheoCloud calls.** `JobBackend`, `UsageStorageAdapter`, `RateLimitStorageAdapter`, structured-logging-to-stdout — all designed so TheoCloud "slots in as a third backend" (per ADR-0002) without coupling the framework to a single platform. Same interface lets Postgres/Redis/SQS/Cloudflare Queues plug in.
 3. **`@usetheo/sdk` is the agent runtime — always.** The locked premise (`[[project-stack-deps]]` memory) stands: defaults, docs, examples wire `@usetheo/sdk`. New agent primitives are *sugar over the SDK*, not parallel implementations.
 4. **`@usetheo/ui` is a published npm dep** — if you need to evolve it alongside TheoKit, the cross-repo PR flow is: (a) ship the change in `../theo-ui/`, (b) publish `^0.X.Y-next.Z`, (c) bump TheoKit consumers. **Do not** add `theo-ui/` to `pnpm-workspace.yaml` casually — that's a strategic-review-worthy decision (would unify the monorepo at the cost of slower published-package iteration cycles).
-5. **The TheoKit framework remains self-contained for non-TheoCloud deploys.** A user cloning this repo and running `pnpm install && pnpm dev` does not need to clone the `theo` Go sibling at all. They can deploy to any of the 8 in-tree adapters (Node, Vercel, Cloudflare Workers, AWS Lambda, Bun, Deno Deploy, Netlify, Static). The TheoCloud adapter, when it lands, is opt-in — not a hard dependency.
+5. **TheoCloud is the only deploy target the team validates end-to-end.** A user cloning this repo and running `pnpm install && pnpm dev` does not need to clone the `theo` Go sibling — local dev works standalone. The 6 non-TheoCloud adapters (Vercel, Cloudflare Workers, AWS Lambda, Bun, Deno Deploy, Netlify, Static) and the Node adapter are kept **in-tree as opt-in compatibility surfaces** (per Wave 2 design: they reject `services: {}` non-empty and accept empty config for SPA-only deploys). Apps may use them at their own risk; the team does NOT validate them against real production environments. Marketing copy must not claim "8 adapters production-ready" — the honest framing is "TheoCloud is the principal deploy target; non-TheoCloud adapters are opt-in compatibility surfaces without team validation." Re-introducing team validation for any non-TheoCloud target requires a fresh ADR with demand evidence (3+ production apps explicitly blocked). See TheoCloud-first re-lock 2026-05-27 in the Roadmap section.
 6. **Renaming "Theo PaaS" → "TheoCloud" in user-facing copy** — README, marketing surfaces, comparison tables, status banners. Internal ADRs and historical plans retain "Theo PaaS" with `(formerly)` annotation when re-edited — do not rewrite history that says "Theo PaaS" inside completed plans.
+7. **`theokit-plugins` is a DOWNSTREAM sibling, not an upstream dependency.** The framework core ships zero coupling to it — no auto-load, no preset, no convention. Apps install individual plugins (`@theokit/plugin-cors` etc.) and wire them via `defineConfig({ plugins: [...] })`. The strategy that governs which plugins ship lives in TheoKit's ADR-0011, not in the sibling — because the gate (community demand) is observed from TheoKit core, where the `TheoPlugin` SDK lives. **Do not** add `theokit-plugins` to `pnpm-workspace.yaml` — the per-plugin `devDependency: "theokit": "link:../../../theokit/packages/theo"` is the local-dev link, by design.
+8. **Plugin-shaped features ship in this repo (core) only if they pass ADR-0011 gates.** Otherwise they belong in `theokit-plugins` (first-party) or as community packages (`@<scope>/theokit-plugin-<name>`). A plugin proposal lands as a TheoKit-core ADR first (defining whether the surface deserves core OR plugin status), then the plugin author creates the package in `theokit-plugins/packages/`.
+9. **`theo-stacks` / `create-theo` is being absorbed, not deleted in fragments.** All polyglot scaffolding becomes a flag on `create-theokit` (e.g., `create-theokit my-app --backend python`). The standalone `create-theo` npm package enters formal deprecation only after Wave 2 ships and the equivalent flags work end-to-end. **Do not** publish patches to `create-theo` in parallel — that creates two scaffold sources of truth. Bug fixes go straight into the absorbed templates inside `theokit/packages/create-theo/templates/`.
+10. **Wave 2 backends are Python + Node ONLY.** The `theo-stacks` repo shipped 7 languages; absorbtion intentionally narrows to 2. Go/Rust/Java/Ruby/PHP scaffolding is **archived**, not migrated. Reopening any of those requires a fresh ADR with demand evidence (matches ADR-0011 gates: 1+ app in production using a community/draft template, 3+ requests, doesn't duplicate a core primitive, maintainable, tests + fixture).
 
 ### Future evolution of these relationships
 
-Changes to the table above (e.g., upgrading `theo-ui` to a workspace link, shipping the `theo-cloud` adapter, deprecating `gateway-telegram`) are **architectural decisions** — they require:
+Changes to the table above (e.g., upgrading `theo-ui` to a workspace link, shipping the `theo-cloud` adapter, deprecating `gateway-telegram`, adding a new sibling, promoting a `theokit-plugins` package into core) are **architectural decisions** — they require:
 1. An ADR in `docs/adr/`
 2. A migration plan in `docs/plans/`
 3. An explicit update to this Ecosystem table
 
-Inserting a new sibling in copy without doing the wiring is not allowed. **For TheoCloud specifically:** copy *may* state "TheoCloud is the principal deploy target" (truthful — it is the strategic target with pluggable-interface preparation already in place), but copy *must not* state "deploys to TheoCloud" until the adapter file exists and a structural smoke test passes.
+Inserting a new sibling in copy without doing the wiring is not allowed. **For TheoCloud specifically:** copy *may* state "TheoCloud is the principal deploy target" (truthful — it is the strategic target with pluggable-interface preparation already in place), but copy *must not* state "deploys to TheoCloud" until the adapter file exists and a structural smoke test passes. **For `theokit-plugins` specifically:** copy *may* state "first-party plugin registry, 1 package shipping (`plugin-cors`)" and link the repo; copy *must not* claim TheoKit "auto-loads" plugins or "ships with built-in CORS/Sentry/i18n" — apps install and wire each plugin explicitly.
 
 ---
 
-## Macro Roadmap — "Next.js for agents" delivery
+## Macro Roadmap — agent products on Like-Vercel runtime
 
-**Mission (locked 2026-05-21):** TheoKit is the Next.js for agents. The framework where someone builds *their own* agent app. Not a coding agent itself. See [[project-theokit-purpose]] in memory.
+**Mission (re-locked 2026-05-27):** TheoKit is the framework for **agent products**. It ships three things, in this order of strategic weight:
+
+1. **The app the agent lives in** — file-based routing, auth, sessions, realtime, deploy. TypeScript-first. Built around `@usetheo/sdk` (agent runtime) + `@usetheo/ui` (UI).
+2. **The scaffolding for the full project** — `create-theokit` absorbs the role of the standalone `create-theo` (in `../theo-stacks/`). One CLI generates the TheoKit app PLUS optional polyglot services (Python, Node). The standalone `create-theo` is **superseded** by `create-theokit`.
+3. **The polyglot services orchestration contract** — `theo.config.ts > services: {}` declares external processes (FastAPI / Hono / Express / etc.) that ship next to the TheoKit app, validated against a **Like-Vercel runtime contract**. The same `services` config drives dev (Vite proxy + docker-compose), build (`.theo/services.json` manifest), and deploy (adapter consumes the manifest). **TheoCloud is the principal target adapter** but is NOT a precondition — local dev uses a "TheoCloud-shaped" docker-compose harness so the contract is validated before TheoCloud is provisioned.
+
+**The Like-Vercel runtime contract** (governs both TheoKit core and polyglot services):
+
+- **Fetch handler is the universal entry.** Each service (TS or Python or Node-sidecar) exposes a `(Request) => Promise<Response>`-shaped handler. Adapter wraps the platform-native shape (Vercel function / CF Workers / TheoCloud K8s pod / Node local) around the same handler. "Just swap the server" works.
+- **File-system routing is build-time.** Routes scanned once, baked into manifest, zero filesystem scans on hot path.
+- **Env vars are runtime, not build-time.** `process.env` / `os.environ` read on cold start, not bundled.
+- **Healthchecks are conventional.** `GET /health` → 200/503. Every service template ships it.
+- **Logs are structured stdout.** JSON lines. Trace propagation via W3C `traceparent` (already shipped in TheoKit).
+- **Graceful shutdown is the adapter's problem in serverless, the service's problem on long-running runtimes.** TheoKit doesn't try to unify these — it documents the contract.
+
+**Four invariants that survive the expansion (do not violate without an ADR):**
+
+1. **Multi-runtime is NEVER embedded in TheoKit core** (absolute). Polyglot services run as **external processes**, wired via proxy / manifest / typed client. `services: {}` configures orchestration of OS-level processes; it does NOT host Python in Node's event loop.
+2. **`@usetheo/sdk` is the priority agent runtime for Wave 2** (priority, not permanent). Python/Node services in Wave 2 are tool-providers / data-providers / job-workers — not parallel `Agent` runtimes. Future `@usetheo/sdk-<lang>` SDKs are DEFERRED, not banned — require fresh ADR with demand evidence (3+ production apps needing native agent runtime in `<lang>`) per [ADR-0012](docs/adr/0012-mission-expansion-agent-products-on-like-vercel-runtime.md) invariant #2.
+3. **Wave 2 polyglot backends are Python + Node ONLY** (priority, not permanent). Go, .NET, Rust, Java, Ruby, PHP (which `theo-stacks` shipped) are deferred to future ADRs with demand evidence. We are NOT recreating JHipster's matrix.
+4. **The cross-product Like-Vercel contract is global** (absolute). The contract runs unchanged across `create-theokit` + TheoKit + TheoCloud. Any per-surface relaxation destroys the moat — see [ADR-0012](docs/adr/0012-mission-expansion-agent-products-on-like-vercel-runtime.md) invariant #4.
+
+See [[project-theokit-purpose]], [[project-mission-relock-2026-05-27]], [[project-polyglot-is-the-theo-moat]] in memory.
+
+### TheoKit `server/` covers end-to-end; polyglot sidecars are OPTIONAL
+
+**Critical positioning to keep clear in docs, READMEs, and conversation:**
+
+A TheoKit user can ship an agent product **end-to-end** (auth, users, sessions, billing, admin, agent chat, jobs, crons, webhooks, Telegram bot) using **only TheoKit's `server/` directory in TypeScript**. The polyglot services capability (`services: {}` in `theo.config.ts`) is **OPT-IN** — empty by default, used only for specific cases.
+
+**Default mental model:**
+
+```
+my-agent-app/
+├── app/                          # Frontend (React + Vite)
+└── server/                       # TS backend — covers everything
+    ├── routes/auth/{login,register,logout}.ts   # encrypted sessions
+    ├── routes/users/{me,[id]}.ts                # CRUD users + admin
+    ├── routes/chat.ts                           # @usetheo/sdk agent endpoint
+    ├── routes/billing/webhook.ts                # defineWebhook (Stripe)
+    ├── actions/*.ts                             # defineAction (CSRF)
+    ├── middleware.ts                            # requireAuth()
+    ├── jobs/*.ts                                # defineJob (workers)
+    └── crons/*.ts                               # defineCron
+```
+
+```ts
+// theo.config.ts — default config
+export default defineConfig({
+  storage: { postgres: { url: process.env.DATABASE_URL! } },
+  services: {}  // empty — 90% of agent products live here
+})
+```
+
+**When sidecars enter (Wave 2 `services: {}`) — concrete cases ONLY:**
+
+| Scenario | `server/` covers? | Sidecar entry |
+|---|:---:|---|
+| Login + encrypted sessions | ✅ | — |
+| CRUD users + admin panel | ✅ | — |
+| Agent chat via `@usetheo/sdk` | ✅ | — |
+| Stripe billing + webhooks | ✅ | — |
+| `defineJob` + `defineCron` | ✅ | Node sidecar ONLY if operational isolation matters |
+| Bot Telegram (`@usetheo/gateway-telegram`) | ✅ | — |
+| ML inference (sentence-transformers, scikit-learn) | ⚠️ painful TS | ✅ Python sidecar via `--backend python` |
+| OCR / PDF heavy parsing | ⚠️ painful TS | ✅ Python sidecar |
+| Legacy company API (existing Node monolith integration) | ❌ | ✅ Node sidecar as reverse proxy `/api/legacy/*` |
+| Microservice isolation (billing detached from app) | depends | ✅ Node sidecar if isolation matters |
+
+**The rule:** if the use case is comfortable in TS, use `server/`. If it needs another language's library ecosystem OR operational isolation, add a sidecar. **Sidecars complement; they do not substitute.**
+
+**Documentation gates that must hold:**
+
+- Public copy (README, docs, marketing) MUST NOT imply polyglot is required to build an agent product on TheoKit.
+- Public copy MUST NOT imply `server/` is for "simple cases" and sidecars are for "real cases". The opposite is true — `server/` is the default for ALL cases that comfortably fit TS, including billing, admin, multi-tenant, agent chat. Sidecars are for SPECIFIC cases.
+- The Voice and Tone vocabulary table (above) MUST be re-read before writing any new polyglot-related copy.
 
 Where we stand today: the primitives ship (`defineAgentEndpoint`, `useAgentStream`, `AgentEvent`, default agent-shaped scaffold). What separates the current state from "anyone builds their agent in 5 minutes" are the convergence layers below — ordered by ROI, ~3 weeks of focused work.
 
@@ -159,18 +245,35 @@ Where we stand today: the primitives ship (`defineAgentEndpoint`, `useAgentStrea
 
 **Total budget:** ~3 weeks of focused work. **Dependencies:** Phase A unblocks the 0.3.0 cutover; Phase B can run in parallel with the 0.3.0 warn-mode telemetry window; Phase C ships alongside or after 0.3.0.
 
-**Done definition for "Next.js for agents":**
+**Done definition for the "agent products" mission (Wave 1 — TheoKit-only):**
 
 - `npm create theokit my-app` → chat thread (rendered with `@usetheo/ui` components) live in <30 seconds
 - Replace `server/routes/chat.ts` mock with 5 lines of `@usetheo/sdk` `createAgentFactory` + `Agent.send` → working LLM chat (SDK handles the provider — Anthropic, OpenAI, Ollama, etc.)
 - Add a tool via `defineAgentTool` → wraps SDK `defineTool`; agent uses it without manual `tool_call` plumbing
 - Add conversation history via `createConversationHistory` → wraps SDK `Agent.getOrCreate(sessionId)` + Memory; persistence across reloads is zero-config
 - README has a guided "5 minutes to first agent" path that a new developer can follow without reading the rest of the docs
-- 8 deploy adapters proven by `examples/chat-anthropic` deployed to at least 2 platforms (Node + one of Vercel/CF Workers)
+- `examples/chat-anthropic` runs on **Node (local)** and is deployment-ready for **TheoCloud** (validated end-to-end once R0.6.1/R0.6.2 ship). The 6 non-TheoCloud adapters (Vercel, CF Workers, AWS Lambda, Bun, Deno Deploy, Netlify, Static) are listed as **opt-in compatibility surfaces** without team validation — see TheoCloud-first re-lock 2026-05-27.
 
-**Locked stack assumption:** every deliverable above wires `@usetheo/ui` (UI surface) + `@usetheo/sdk` (agent runtime). Not "evaluate vs alternatives" — premise. New TheoKit primitives are sugar/wrappers over what the SDK / UI already ship, never parallel implementations.
+**Done definition for Wave 2 — polyglot services on Like-Vercel runtime:**
 
-Anything beyond this list is **out of scope** for the "Next.js for agents" milestone. Built-in agent orchestration, embedded coding agents (the Studio detour), agent marketplaces, hosted memory — all explicitly out of scope per `## Architectural decisions on record` below.
+- `npm create theokit my-app --backend python` → TheoKit TS frontend + FastAPI service under `services/agent-python/`, with `theo.config.ts > services: { agent: { runtime: 'python', port: 8001, openapi: '...', proxy: '/api/agent' } }` already wired.
+- `npm create theokit my-app --backend node` → TheoKit TS frontend + Hono (or Fastify) sidecar service under `services/agent-node/`, same `services: {}` shape.
+- `pnpm dev` boots TheoKit + service(s) + Postgres + Redis via a generated `docker-compose.yml` that mimics a TheoCloud-shaped environment (Like-Vercel ingress contract: structured logs, env vars, healthcheck at `/health`, traceparent propagation).
+- OpenAPI auto-discovered from the service exposes a typed client at `clients/agent.ts` — `services.agent.chat({ message })` is fully typed on the frontend.
+- The Wave 1 TheoKit Done definition continues to pass with `services: {}` left empty (zero impact on TS-only apps).
+
+**Done definition for Wave 3 — TheoCloud adapter consumes the same manifest:**
+
+- `packages/theo/src/adapters/theo-cloud.ts` reads `.theo/services.json` (same manifest Wave 2 generates for local dev) and produces TheoCloud-compatible deployment artifacts.
+- A real (or staging) TheoCloud env runs an `examples/full-stack-agent` deploy end-to-end; the smoke test asserts the TS app + Python service interoperate via the proxy contract.
+
+**Locked stack assumptions:**
+
+1. Every TheoKit deliverable wires `@usetheo/ui` (UI surface) + `@usetheo/sdk` (agent runtime). Premise. Sugar over the SDK, not parallel implementations.
+2. Polyglot services in Wave 2+ are **external processes** consuming/exposing HTTP+OpenAPI. The agent runtime stays in TS via `@usetheo/sdk`. Python/Node sidecars provide tools/data/workers, not parallel `Agent` runtimes.
+3. Wave 1 backends are TS (in-tree). Wave 2 backends are **Python + Node ONLY**. Anything else requires a fresh ADR with demand evidence.
+
+Anything beyond this list is **out of scope**: built-in agent orchestration, embedded coding agents (the Studio detour), agent marketplaces, hosted memory, embedded multi-runtime (Pyodide / WASI), Go/Rust/Java/Ruby/PHP backends — all explicitly out of scope per `## Architectural decisions on record` below.
 
 ### Frictions surfaced by item #2 (RESOLVED by item #3 — 2026-05-22 dogfood)
 
@@ -280,12 +383,14 @@ What ships in this version is everything the `nextjs-maturity` plan closed. The 
 
 The honest gaps after 0.2.0. Closing these moves us from "ready for indie devs and small teams" to "ready for startups scaling to 10k MAU."
 
+> **🎯 TheoCloud-first re-lock (2026-05-27).** All non-TheoCloud deploy-target validation (Vercel/Cloudflare/Deno/AWS-Lambda/Bun/Netlify/Static in real prod environments) is **DROPPED** from this milestone and the runway. The 6 non-TheoCloud adapters are kept in-tree as **opt-in compatibility surfaces** (they reject `services: {}` non-empty per Wave 2 design and accept empty config for SPA-only deploys). They are NOT promoted, NOT marketing, NOT priority. **TheoCloud is the principal target — and the ONLY deploy target the team validates end-to-end.** Validating other clouds dilutes the moat (the cross-product Like-Vercel contract running uniformly from `create-theokit` → TheoKit → TheoCloud, per [ADR-0012](docs/adr/0012-mission-expansion-agent-products-on-like-vercel-runtime.md) invariant #4). Re-listing non-TheoCloud validation requires a fresh ADR with demand evidence (3+ production apps explicitly blocked by missing validation).
+
 - [ ] **Playwright for the other four templates** (`dashboard`, `api-only`, `postgres`, `saas`) — same fixture pattern as `template-default`. T10.2 (agent-saas full flow) needs a Postgres instance in CI.
-- [ ] **Validate at least one deploy adapter end-to-end in real production** — Vercel is the lowest-friction path. Goal: deploy `create-theokit my-app` output to vercel.app, hit the live URL, walk through chat flow, verify SSE roundtrip and security headers in real prod.
 - [x] **Minimum devtools overlay** — request log + error panel + matched-route info + settings in dev. **DONE 2026-05-19** (commit `e369f4a`). Auto-injected floating chip + expandable 4-tab panel (Requests / Routes / Errors / Settings), data flows server→client via Vite HMR WebSocket, privacy redaction at dispatcher level, light/dark/system theme, drag-to-corner with spring-snap, localStorage persistence with schema versioning, `theo.config.ts.devtools = false` opt-out. Tree-shaken in prod (verified by `tests/unit/devtools-treeshake.test.ts` — fresh build + grep `theo-devtools|goober` in `dist/assets/index-*.js`, zero matches). Artifacts: [`docs/plans/devtools-plan.md`](docs/plans/devtools-plan.md), [`.claude/knowledge-base/reference/devtools.md`](.claude/knowledge-base/reference/devtools.md), live demo at [`examples/devtools-demo/`](examples/devtools-demo/). 13 Playwright scenarios + 12 unit-test files + 1 integration test. 29 edge cases catalogued and mitigated (EC-1 through EC-29).
 - [ ] **Load test the SSR streaming path** — 1000 concurrent connections, leaky generators, slow LLM streams. Measure shell-flush TTFB, abort-on-disconnect behavior, memory pressure.
 - [ ] **WebSocket Playwright spec** — `defineWebSocket` has unit tests but no real-browser test exercises the full upgrade + bidi + reconnect flow.
 - [ ] **Bundle budget asserted in CI** — fail the build if `index-*.js` gzipped exceeds 350 KB for the default template.
+- ~~Validate at least one deploy adapter end-to-end in real production (Vercel)~~ — **DROPPED 2026-05-27 (TheoCloud-first re-lock).** Validation budget goes entirely to TheoCloud (see new 0.6.0 below).
 
 ### 0.5.0 — Background work + external integration
 
@@ -293,13 +398,13 @@ The honest gaps after 0.2.0. Closing these moves us from "ready for indie devs a
 >
 > **Scope analysis:** see ultrathink turn 2026-05-24 (`docs/analysis/2026-05-24-five-gaps-to-100-percent.md` — to write) for the gap audit. After framework-scope-guardian review + ultrathink critique, the verdict is **5 primitives + 1 manifest schema in one coherent onda**. `defineWorker` (stream consumer) was explicitly REJECTED and stays out of scope per the 3 conditions documented below.
 >
-> **Prerequisites (BLOCKING):** items #7 (deploy validation) + #8 (Playwright templates) + bundle CI gate from 0.4.0 MUST land before 0.5.0 starts. Otherwise jobs+crons are theoretical work on an unvalidated foundation.
+> **Prerequisites (BLOCKING — updated 2026-05-27 TheoCloud-first re-lock):** Playwright templates (R0.5.2) + bundle CI gate (R0.5.3) from 0.4.0 MUST land before 0.5.0 starts. **Vercel/CF deploy validation (R0.5.1) is REMOVED from the prerequisite list** — TheoCloud-shaped harness local (`docker compose up` with Caddyfile + tracing, per Wave 2) validates the Like-Vercel contract without depending on non-TheoCloud cloud sign-off. R0.5.1 is dropped and tracked under "Dropped from roadmap" below.
 
 #### Roadmap items — 0.5.0
 
 | # | Item | Description | Acceptance criteria | References |
 |---|---|---|---|---|
-| **R0.5.1** | **Vercel/CF SSE deploy validation** (0.4.0 prereq) | Deploy `create-theokit my-app` output to vercel.app + workers.dev; hit live URL; verify SSE roundtrip + security headers in real production. Replicates item #7 of macro roadmap as a 0.5.0 blocker. | (a) live URL committed to repo (b) Playwright spec hitting prod URL passes (c) latency telemetry committed | `examples/deploy-vercel/` + `scripts/deploy-smoke-vercel.sh` |
+| ~~R0.5.1~~ | ~~**Vercel/CF SSE deploy validation**~~ | **DROPPED 2026-05-27** (TheoCloud-first re-lock). The TheoCloud-shaped harness local already validates the Like-Vercel contract bytewise. Validating Vercel/CF in real prod consumes ≥4 dev-days that go entirely to TheoCloud adapter ship (0.6.0). | — | — |
 | **R0.5.2** | **Playwright for 3 remaining templates** (0.4.0 prereq) | Cover `dashboard`, `api-only`, `postgres`+`saas` with the same fixture pattern as `template-default`. Saas needs Postgres in CI. | 100% template coverage in CI matrix; 4 spec files green | `fixtures/template-default/` + `tests/e2e/template-default.spec.ts` |
 | **R0.5.3** | **Bundle budget asserted in CI** (0.4.0 prereq) | Fail build if `index-*.js` gzipped > 350 KB for default template. Today: 193.90 KB; want a regression gate, not a recurring measure. | `pnpm check:bundle` exit 1 on overshoot; GH Actions step | `scripts/check-bundle-budget.sh` |
 | **R0.5.4** | **`defineCron(name, { schedule, handler })`** | Time-triggered handlers. Schedule = 5-field cron string, UTC. Each adapter translates to platform-native (vercel.json crons, wrangler.toml triggers, EventBridge). | (a) Zod-validated config (b) build emits `.theo/crons.json` (c) 8 adapters translate or document N/A (d) fixture | plan TBD: `docs/plans/jobs-crons-plan.md` + reference TBD: `.claude/knowledge-base/reference/cron-primitives.md` |
@@ -340,20 +445,42 @@ These ARE tempting and would naturally come up during implementation. They are N
 | Vector store integration | SDK concern, not framework. | `@usetheo/sdk` |
 | Multi-agent orchestration | Categoria diferente. Near agent-layer (out of scope per locked mission). | External: Mastra, LangGraph |
 
-### 0.6.0+ — Runway (post-0.5.0, no commitment yet)
+### 0.6.0 — TheoCloud adapter ship (the only deploy-target target we validate end-to-end)
 
-These items widen the framework's reach but require strategic decisions before scoping. They survive past 0.5.0 because the agent app categories above can ship without them. Listed so the team has shared visibility.
+> **🎯 Re-locked theme 2026-05-27 — TheoCloud-first.** 0.6.0 is **NOT** "various polish items"; it is **the milestone where TheoKit + TheoCloud finally close the loop**. The 6 non-TheoCloud adapters stay where they are (opt-in compatibility, empty `services: {}`, no team validation). All deploy-target engineering budget goes to TheoCloud.
 
-| # | Item | Description | Why deferred |
+**What ships in 0.6.0:**
+
+| # | Item | Description | Acceptance criteria |
 |---|---|---|---|
-| R0.6.1 | **`BlobStorageAdapter` interface** (S3/R2/disk) | Pluggable blob storage analog to `CacheStorageAdapter`. Enables agent apps that generate large outputs (HTML reports, PDFs, images). In-memory default + filesystem adapter + 3rd-party recipes (S3/R2). | Useful but not blocking: report agents can write directly via `fs.writeFile` today. |
-| R0.6.2 | **`next/image`-equivalent** | Image optimization primitive (resize, format conversion, srcset). Avatars, generated images. | Bonito-de-ter, NÃO essencial para agent apps. Vendor lock-in concern (sharp ≠ vips ≠ wasm). |
-| R0.6.3 | **`next/font`-equivalent** | Self-hosted font loading. TheoUI ships bundled Geist today; this is the generic surface for apps that need other fonts. | TheoUI cobre 80% dos casos. Generic surface is post-1.0. |
-| R0.6.4 | **Edge runtime adapter parity** | Validate all 8 adapters end-to-end on real edge runtimes (Vercel Edge, CF Workers, Deno Deploy). Currently declared, not validated. | High effort, each adapter is its own deployment story. Item #7 of macro roadmap covers Vercel only. |
-| R0.6.5 | **Plugin ecosystem incubation** | `definePlugin` exists; 3 plugins shipped (web-shim, ws-shim, batching). Real ecosystem growth needs a registry, docs site, and 1+ community plugin we proudly link. | Bottom-up — needs community demand signal first. |
-| R0.6.6 | **Production debugging story** | Source maps in adapters, traceId correlation with downstream services (OpenTelemetry exporter? Sentry integration?), structured error pages with actionable hints. **Foundation already in place:** 0.4.0 devtools' `dispatcher` + `broadcastToDevtools` (`packages/theo/src/devtools/server-side/broadcast.ts`). A prod exporter is an additive sink — swap the WS target for OTel/Sentry; existing data shape (`RequestRecord` + `ErrorRecord` + redaction) is the same contract. | Foundation exists; production hardening is a separate workstream. |
-| R0.6.7 | **`UsageStorageAdapter`** Redis recipe + theo platform integration | Once R0.5.11 (trackAgentRun) lands with in-memory default, recipes for Redis/Postgres + theo platform hosted storage. | Sequenced after the primitive exists in 0.5.0. |
-| R0.6.8 | **Metadata API** (`defineMetadata`) + OG image generation | `app/page.tsx` exports metadata declaration; framework injects into `<head>`. OG images server-rendered. Lower-priority gap vs Next.js. | Per honesty chart (2026-05-23): "OG images = adoption boost, fácil em Vite, ~3 dias". Defer until 0.5.0 lands. |
+| **R0.6.1** | **TheoCloud deploy adapter ship** — `packages/theo/src/adapters/theo-cloud.ts` becomes real (currently a Wave 2 stub) | Reads `.theo/services.json` (Wave 2 manifest) and emits TheoCloud-shaped deployment artifacts: K8s manifests (Deployment/Service/Ingress per service), Caddy/ingress config, environment surfaces, secret mounts. Consumes the same Like-Vercel runtime contract validated locally by `docker compose up`. | (a) stub becomes real adapter; (b) `theokit build --target theo-cloud` emits artifact set; (c) Wave 3 K8s manifest emission complete; (d) [ADR-0012](docs/adr/0012-mission-expansion-agent-products-on-like-vercel-runtime.md) invariant #4 (cross-product Like-Vercel) preserved bytewise |
+| **R0.6.2** | **End-to-end staging validation** — deploy `examples/full-stack-agent` to a real (staging) TheoCloud environment | Smoke test: TS app + Python service interoperate via the proxy contract. Verify SSE roundtrip, healthchecks, structured logs flow, `traceparent` propagation, graceful shutdown on pod terminate. | (a) live staging URL committed; (b) Playwright spec hits staging URL passes; (c) latency telemetry committed; (d) ADR-0015 invariants verified live |
+| **R0.6.3** | **`UsageStorageAdapter` TheoCloud recipe** | `trackAgentRun` (R0.5.11) primitive consumed by TheoCloud hosted storage. Per-user usage flows through managed Postgres/Redis. | (a) recipe documented; (b) fixture proves tier enforcement works against TheoCloud-shaped backend |
+| **R0.6.4** | **Production debugging — OTel/Sentry exporter** triggered by first real customer | Foundation exists (devtools `dispatcher` + `broadcastToDevtools`). Adds prod exporter sink: structured logs + traces flow to OTel collector that TheoCloud runs. **Triggered by user demand, not built speculatively.** | (a) at least 1 production app reports prod error and the team can trace it via TheoCloud observability surface |
+| **R0.6.5** | **Migration guide 0.3 → 1.0** | Audit every breaking change in the 0.3 → 1.0 chain, document codemod or manual migration steps. | `docs/migration/0.3-to-1.0.md` lands; verified by upgrading `examples/full-stack-agent` from a frozen 0.3 snapshot |
+
+**Total estimated effort:** ~15 dev-days (1 focused sprint).
+
+#### Dropped from the roadmap 2026-05-27 (TheoCloud-first re-lock)
+
+These items are NOT shipping in 0.6.0+ and are NOT scheduled. Reopening requires a fresh ADR with demand evidence (3+ production apps explicitly blocked).
+
+| Item | Why dropped |
+|---|---|
+| **Edge runtime adapter parity** (Vercel Edge, CF Workers, Deno Deploy real-prod validation) | Drains 4+ dev-days from TheoCloud ship. The 6 non-TheoCloud adapters remain in-tree as opt-in compatibility; team does not validate them. **TheoCloud is the only deploy target the team validates.** |
+| **Vercel deploy validation** (formerly item #7 of macro roadmap + R0.5.1) | Same reason. |
+| **`BlobStorageAdapter`** (S3/R2/disk) | `fs.writeFile` + AWS SDK / R2 client (5 LOC each) cover the use case today. Adding 3 implementations + recipes + maintenance is over-engineering. Reopen when 3+ apps need migration between providers. |
+| **`next/image`-equivalent** | Vendor lock-in (sharp ≠ vips ≠ wasm). Solved-problem-in-CSS (`<img loading="lazy">` + Cloudinary/imgix for the 20% that needs more). |
+| **`next/font`-equivalent** | TheoUI ships Geist; other fonts = 3 lines of `@font-face`. Generic surface is post-1.0 if at all. |
+| **Plugin ecosystem incubation** (registry + docs site + community plugin) | Bottom-up. 0 community plugins shipped today; investing without demand signal produces orphan artefacts. Reopen when 5+ apps in prod + 3+ "how do I write a plugin?" pedidos. |
+| **Metadata API + OG image generation** | Agent dashboards aren't content sites (no social-share value). Metadata API is trivial (~1d) and may land later as a tiny PR; OG generation has vendor lock-in (`@vercel/og` vs satori vs wasm canvas) — dropped. |
+
+**Why drop these now:**
+
+1. **Moat clarity.** The Theo product-mark moat is the **cross-product Like-Vercel contract** running uniformly from `create-theokit` → TheoKit → TheoCloud (per [ADR-0012](docs/adr/0012-mission-expansion-agent-products-on-like-vercel-runtime.md) invariant #4). Validating Vercel/CF dilutes that — every dev-day spent on non-TheoCloud validation is a dev-day NOT spent on the moat.
+2. **Honest framing.** Marketing "8 adapters production-ready" without team validation is vapor. Marketing "TheoCloud is the principal deploy target — validated end-to-end" is true.
+3. **YAGNI applied to scope.** BlobStorage / image / font / plugin ecosystem are speculative wide-ness. TheoKit's value is being **vertical for agent products**, not horizontal-and-thin.
+4. **0.5.0 already shipped what matters.** Jobs/crons/webhooks/cost — the primitives that agent apps actually need in production — are in. Adding more primitives before TheoCloud ships is premature.
 
 ### 1.0 — Stability lock (target: post-0.6.0)
 

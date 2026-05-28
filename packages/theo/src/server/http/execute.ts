@@ -2,18 +2,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { AuthRequiredError } from '../auth/auth.js'
 import { DuplicateContextKeyError } from '../jobs/duplicate-context-key-error.js'
-import type { JobBackend } from '../jobs/job-backend.js'
 import { createOutbox } from '../jobs/outbox.js'
 import { createOutboxDispatcher, createQueueClient } from '../jobs/queue-client.js'
 import { warnOnce } from '../observability/logger.js'
 import type { PluginContext } from '../plugin-types.js'
 import type { PluginRunner } from '../plugins/plugin-runner.js'
-import type { ServerRouteNode } from '../scan/match.js'
-import type { LoadModule } from '../scan/module-loader.js'
 import { dispatchCsrfWarn } from '../security/csrf-warn-dispatch.js'
-import { enforceCsrf, type CsrfMode, type DisallowedConfig } from '../security/csrf.js'
-import type { TheoTransformer } from '../transformer.js'
+import { enforceCsrf } from '../security/csrf.js'
 
+import type { ExecuteRouteContext } from './execute-context.js'
 import { parseQueryAndBody, runZodValidation } from './execute-stages.js'
 import { runMiddlewareAndContext } from './middleware-runner.js'
 import { sendError, sendJson } from './send-response.js'
@@ -26,6 +23,8 @@ const CSRF_PROTECTED_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 // backward compat.
 export { sendJson, sendError } from './send-response.js'
 export type { SendErrorOptions, SendErrorInput } from './send-response.js'
+// T3.1 — ExecuteRouteContext (ADR-0016)
+export type { ExecuteRouteContext } from './execute-context.js'
 
 interface StreamPipeCtx {
   buildPluginCtx: (ctxObj: Record<string, unknown>) => PluginContext
@@ -86,25 +85,24 @@ async function pipeWebStreamToResponse(
 // `parseRequestBody` (multipart + JSON) directly. Removed to shrink the
 // public surface and remove the duplicated METHODS_WITH_BODY constant.
 
-// eslint-disable-next-line max-params, max-lines-per-function, complexity, sonarjs/cognitive-complexity -- public API; `executeRoute` is the framework's central request pipeline and stays in one place by design (its 12 positional args + branch density mirror the actual request lifecycle; refactoring across modules would obscure the flow more than the cyclomatic count alone suggests). Internal helpers `runCsrfStage`, `parseQueryAndBody`, `runHandlerStage`, etc. have been extracted in other waves; what remains here is the orchestration spine.
-export async function executeRoute(
-  route: ServerRouteNode,
-  method: string,
-  params: Record<string, string>,
-  req: IncomingMessage,
-  res: ServerResponse,
-  loadModule: LoadModule,
-  serverDir?: string,
-  requestId?: string,
-  pluginRunner?: PluginRunner,
-  transformer?: TheoTransformer,
-  csrfMode: CsrfMode = 'strict',
-  disallowed?: DisallowedConfig,
-  // T2.1: when `jobBackend` is provided, ctx.queue auto-injects + outbox
-  // lifecycle hooks attach. ADR D3 + EC-202 (collision detection) +
-  // EC-206 (long-poll memory safety).
-  jobBackend?: JobBackend,
-): Promise<void> {
+// eslint-disable-next-line max-lines-per-function, sonarjs/cognitive-complexity, complexity -- `executeRoute` is the framework's central request pipeline; its body length + branch density mirror the actual request lifecycle. T3.1 / ADR-0016 retired `max-params` (context object replaces 12 positional args). Branch complexity remains intentional: the request lifecycle has irreducible state machine arms (CSRF stage → Zod validate → middleware → handler → stream/JSON response). Remaining helpers `runCsrfStage`, `parseQueryAndBody`, `runHandlerStage`, etc. were extracted in earlier waves.
+export async function executeRoute(ctx: ExecuteRouteContext): Promise<void> {
+  // T3.1 — destructure the context with defaults applied
+  const {
+    route,
+    method,
+    params,
+    req,
+    res,
+    loadModule,
+    serverDir,
+    requestId,
+    pluginRunner,
+    transformer,
+    csrfMode = 'strict',
+    disallowed,
+    jobBackend,
+  } = ctx
   const buildPluginCtx = (ctxObj: Record<string, unknown>): PluginContext => ({
     request: req,
     response: res,

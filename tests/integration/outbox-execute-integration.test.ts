@@ -60,21 +60,23 @@ const startServer = (handler: (ctx: Record<string, unknown>) => unknown): Promis
   return new Promise((resolveStart) => {
     server = createServer(async (req, res) => {
       const routeNode = buildRouteNode((opts) => handler(opts.ctx))
-      await executeRoute(
-        routeNode,
-        (req.method ?? 'GET').toUpperCase(),
-        {},
+      await executeRoute({
+        route: routeNode,
+        method: (req.method ?? 'GET').toUpperCase(),
+        params: {},
         req,
         res,
-        mockLoadModule((opts) => handler(opts.ctx)),
-        undefined, // serverDir
-        undefined, // requestId
-        undefined, // pluginRunner
-        undefined, // transformer
-        'off',
-        undefined,
-        backend,
-      )
+        loadModule: mockLoadModule((opts) => handler(opts.ctx)),
+        // serverDir
+        requestId: undefined,
+        // requestId
+        pluginRunner: undefined,
+        // pluginRunner
+        transformer: undefined,
+        // transformer
+        csrfMode: 'off',
+        jobBackend: backend,
+      })
     })
     server.listen(0, () => {
       port = (server.address() as AddressInfo).port
@@ -155,26 +157,22 @@ describe('outbox + ctx.queue integration via executeRoute (T2.1)', () => {
   it('outbox does NOT dispatch when no jobBackend provided', async () => {
     // backend stays as configured but we won't pass it to executeRoute
     server = createServer(async (req, res) => {
-      await executeRoute(
-        buildRouteNode(() => ({ ok: true })),
-        'GET',
-        {},
+      await executeRoute({
+        route: buildRouteNode(() => ({ ok: true })),
+        method: 'GET',
+        params: {},
         req,
         res,
-        mockLoadModule((opts) => {
+        loadModule: mockLoadModule((opts) => {
           // ctx.queue should be undefined
           ;(opts as { ctx: { _captured?: unknown } }).ctx._captured = (
             opts as { ctx: { queue?: unknown } }
           ).ctx.queue
           return { ok: true }
         }),
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        'off',
+        csrfMode: 'off',
         // jobBackend INTENTIONALLY OMITTED
-      )
+      })
     })
     await new Promise<void>((r) => {
       server.listen(0, () => {

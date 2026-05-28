@@ -18,11 +18,12 @@ const SRC = resolve(__dirname, '../../packages/theo/src')
  * This test pins the rationale in code so future audits don't re-flag.
  */
 describe('dead-code audit decisions (T6.5)', () => {
-  it('PV-14: asSsrRenderResult is referenced in start.ts (active type helper, not dead)', () => {
-    const start = readFileSync(resolve(SRC, 'cli/commands/start.ts'), 'utf8')
-    expect(start).toMatch(/function asSsrRenderResult/)
-    // Must have at least 1 caller (otherwise it WOULD be dead)
-    const callerMatches = start.match(/asSsrRenderResult\(/g) ?? []
+  it('PV-14: asSsrRenderResult is referenced in start-request-handler.ts (active type helper, not dead)', () => {
+    // T4.2 (architecture-cleanup) — SSR helpers moved out of start.ts.
+    // asSsrRenderResult lives in start-request-handler.ts (consumer of isSsrRenderResult).
+    const handler = readFileSync(resolve(SRC, 'cli/commands/start-request-handler.ts'), 'utf8')
+    expect(handler).toMatch(/function asSsrRenderResult/)
+    const callerMatches = handler.match(/asSsrRenderResult\(/g) ?? []
     expect(callerMatches.length).toBeGreaterThanOrEqual(2) // declaration + ≥1 call
   })
 

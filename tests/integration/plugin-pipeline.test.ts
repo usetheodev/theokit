@@ -86,17 +86,16 @@ describe('executeRoute — plugin pipeline (T4.2 + T4.3 + T4.4)', () => {
     })
 
     const res = createMockRes()
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-1',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-1',
+      pluginRunner: runner,
+    })
 
     expect(calls).toEqual(['onRequest', 'preHandler', 'handler', 'onResponse'])
     expect(res._getStatus()).toBe(200)
@@ -127,17 +126,16 @@ describe('executeRoute — plugin pipeline (T4.2 + T4.3 + T4.4)', () => {
     const loader = async () => ({ GET: { handler } })
 
     const res = createMockRes()
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-2',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-2',
+      pluginRunner: runner,
+    })
 
     expect(calls).toEqual(['onRequest'])
     expect(handler).not.toHaveBeenCalled()
@@ -168,17 +166,16 @@ describe('executeRoute — plugin pipeline (T4.2 + T4.3 + T4.4)', () => {
     })
 
     const res = createMockRes()
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-3',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-3',
+      pluginRunner: runner,
+    })
 
     expect(capturedErrors).toEqual([err])
     expect(res._getStatus()).toBe(500)
@@ -206,17 +203,16 @@ describe('executeRoute — plugin pipeline (T4.2 + T4.3 + T4.4)', () => {
     })
 
     const res = createMockRes()
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-4',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-4',
+      pluginRunner: runner,
+    })
 
     expect(observedDb).toBeTruthy()
     const body = JSON.parse(res._getBody())
@@ -229,7 +225,15 @@ describe('executeRoute — plugin pipeline (T4.2 + T4.3 + T4.4)', () => {
     })
 
     const res = createMockRes()
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-5')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-5',
+    })
 
     expect(res._getStatus()).toBe(200)
     const body = JSON.parse(res._getBody())

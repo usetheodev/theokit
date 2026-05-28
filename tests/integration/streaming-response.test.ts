@@ -77,7 +77,14 @@ describe('Streaming Response via ReadableStream', () => {
     const route = createRoute('/test')
     const loader = createStreamingLoader(['chunk1', 'chunk2', 'chunk3'])
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.write).toHaveBeenCalledTimes(3)
     expect(res.end).toHaveBeenCalledTimes(1)
@@ -88,7 +95,14 @@ describe('Streaming Response via ReadableStream', () => {
     const route = createRoute('/test')
     const loader = createStreamingLoader(['a', 'b'])
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.end).toHaveBeenCalledTimes(1)
   })
@@ -101,7 +115,14 @@ describe('Streaming Response via ReadableStream', () => {
       'Cache-Control': 'no-cache',
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(
       200,
@@ -128,7 +149,14 @@ describe('Streaming Response via ReadableStream', () => {
       },
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.write).not.toHaveBeenCalled()
     expect(res.end).toHaveBeenCalledTimes(1)
@@ -143,7 +171,14 @@ describe('Streaming Response via ReadableStream', () => {
       },
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(204, expect.anything())
     expect(res.write).not.toHaveBeenCalled()
@@ -163,7 +198,14 @@ describe('Streaming Response via ReadableStream', () => {
       },
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(
       200,
@@ -200,7 +242,14 @@ describe('Streaming Response via ReadableStream', () => {
     })
 
     // Should NOT throw — error is caught internally
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.write).toHaveBeenCalledTimes(1) // first chunk written
     expect(res.end).toHaveBeenCalledTimes(1) // response closed gracefully

@@ -6,9 +6,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
 
 import { nodeAdapter } from './node.js'
-import type { DeployAdapter } from './types.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 export class NetlifyConflictError extends Error {
   constructor(path: string, currentTo: string) {
@@ -22,7 +23,7 @@ export class NetlifyConflictError extends Error {
 }
 
 export interface NetlifyBuildDeps {
-  runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
+  runNodeBuild?: (config: TheoConfig, cwd: string, ctx?: AdapterBuildContext) => Promise<void>
   writeFile?: (path: string, content: string) => void
   ensureDir?: (path: string) => void
   readTomlIfExists?: () => string | null
@@ -61,7 +62,7 @@ export function renderNetlifyFunction(): string {
     `  const { req, res, toResponse } = createWebShim(request)`,
     `  const requestId = randomUUID()`,
     `  const method = request.method.toUpperCase()`,
-    `  await executeRoute(match.route, method, match.params, req, res, loaderCache, serverDir, requestId)`,
+    `  await executeRoute({ route: match.route, method, params: match.params, req, res, loadModule: loaderCache, serverDir, requestId })`,
     `  return toResponse()`,
     `}`,
   ].join('\n')
@@ -156,9 +157,13 @@ export async function buildNetlify(
   config: TheoConfig,
   cwd: string,
   deps: NetlifyBuildDeps = {},
+  ctx?: AdapterBuildContext,
 ): Promise<void> {
+  // Wave 2 (T2.2) — reject polyglot services on this adapter.
+  assertServicesUnsupported('netlify', readManifest(cwd))
+
   const runNodeBuild = deps.runNodeBuild ?? nodeAdapter.build.bind(nodeAdapter)
-  await runNodeBuild(config, cwd)
+  await runNodeBuild(config, cwd, ctx)
 
   const ensureDir = deps.ensureDir ?? ((p: string) => mkdirSync(p, { recursive: true }))
   const writeFile =
@@ -187,7 +192,7 @@ export async function buildNetlify(
 
 export const netlifyAdapter: DeployAdapter = {
   name: 'netlify',
-  build(config, cwd) {
-    return buildNetlify(config, cwd)
+  build(config, cwd, ctx) {
+    return buildNetlify(config, cwd, {}, ctx)
   },
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { AgentEvent } from '../server/agent/agent-types.js'
+import type { AgentEvent } from '../core/contracts/agent-events.js'
 
 import { consumeAgentStream } from './agent-stream-core.js'
 

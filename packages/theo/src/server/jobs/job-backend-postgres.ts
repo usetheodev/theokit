@@ -1,3 +1,6 @@
+import type { PostgresFactory, StorageManager } from '../storage/storage-manager.js'
+import type { PoolLike } from '../storage/storage-types.js'
+
 import type { JobBackend, JobEnqueueInput, JobLease } from './job-backend.js'
 
 /**
@@ -22,21 +25,12 @@ import type { JobBackend, JobEnqueueInput, JobLease } from './job-backend.js'
  */
 
 /**
- * Minimal subset of `pg.Pool` we depend on. Accepting this narrower
- * interface lets us:
- *   - test with `pg-mem` (in-memory) without dragging real Postgres into CI
- *   - swap to any wire-compatible client (postgres.js, slonik, etc.)
+ * `PoolLike` moved to `../storage/storage-types.ts` (T0.2 / ADR-0007 D7) to
+ * deduplicate the shape across multiple adapters. Re-exported here so existing
+ * `import { PoolLike } from 'theokit/server'` (which routes through the jobs
+ * barrel today) continues to compile unchanged.
  */
-export interface PoolLike {
-  // The generic R is intentionally used once — callers narrow row shape
-  // per-query via `pool.query<MyRowShape>(...)`. Suppressing TS lint;
-  // ergonomics > theoretical purity here.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
-  query<R = Record<string, unknown>>(
-    sql: string,
-    params?: unknown[],
-  ): Promise<{ rows: R[]; rowCount?: number | null }>
-}
+export type { PoolLike } from '../storage/storage-types.js'
 
 export interface PostgresJobBackendOptions {
   pool: PoolLike
@@ -64,6 +58,32 @@ export class PostgresJobBackend implements JobBackend {
     }
     this.#pool = opts.pool
     this.#table = opts.tableName ?? DEFAULT_TABLE
+  }
+
+  /**
+   * T2.1 — Construct a `PostgresJobBackend` using a pool managed by the
+   * shared `StorageManager`. The manager caches the pool per `dbName`, so
+   * repeated calls (in the same process) re-use the same connection pool.
+   *
+   * Equivalent to:
+   *   ```ts
+   *   const pool = manager.usePostgres(dbName, factory)
+   *   new PostgresJobBackend({ pool, ...options })
+   *   ```
+   *
+   * Errors thrown by the manager (unknown dbName, dangling server reference,
+   * manager already disposed) propagate to the caller with actionable text.
+   *
+   * @see ADR-0007
+   */
+  static fromStorageManager(
+    manager: StorageManager,
+    dbName: string,
+    factory: PostgresFactory,
+    options?: Omit<PostgresJobBackendOptions, 'pool'>,
+  ): PostgresJobBackend {
+    const pool = manager.usePostgres(dbName, factory)
+    return new PostgresJobBackend({ pool, ...options })
   }
 
   /**

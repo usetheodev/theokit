@@ -6,7 +6,7 @@
  *
  * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
  */
-import type { RouteNode } from '../../router/types.js'
+import type { RouteNode } from '../../core/contracts/route-node.js'
 import type { RouteInfo, RouteManifest } from '../shared.js'
 
 import { broadcastToDevtools } from './broadcast.js'

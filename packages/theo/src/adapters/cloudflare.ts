@@ -6,9 +6,10 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
 
 import { nodeAdapter } from './node.js'
-import type { DeployAdapter } from './types.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 /**
  * T2.1 — Cloudflare adapter rewritten to consume `theokit/adapters/web-shim`
@@ -88,10 +89,10 @@ export function renderCloudflareWorkerEntry(opts: { ssrStreaming?: boolean } = {
     `    const { req, res, toResponse } = createWebShim(request, { trustedProxy: 'platform' })`,
     `    const requestId = crypto.randomUUID()`,
     `    const method = request.method.toUpperCase()`,
-    `    await executeRoute(`,
-    `      match.route, method, match.params,`,
-    `      req, res, loaderCache, serverDir, requestId,`,
-    `    )`,
+    `    await executeRoute({`,
+    `      route: match.route, method, params: match.params,`,
+    `      req, res, loadModule: loaderCache, serverDir, requestId,`,
+    `    })`,
     `    return toResponse()`,
     `  },`,
     `}`,
@@ -117,9 +118,12 @@ export function renderWranglerToml(): string {
 export const cloudflareAdapter: DeployAdapter = {
   name: 'cloudflare',
 
-  async build(config: TheoConfig, cwd: string): Promise<void> {
-    // 1. Run the standard Node build first
-    await nodeAdapter.build(config, cwd)
+  async build(config: TheoConfig, cwd: string, ctx?: AdapterBuildContext): Promise<void> {
+    // Wave 2 (T2.2) — reject polyglot services on this adapter.
+    assertServicesUnsupported('cloudflare', readManifest(cwd))
+
+    // 1. Run the standard Node build first (ctx forwarded so nodeAdapter has makeVitePlugins)
+    await nodeAdapter.build(config, cwd, ctx)
 
     const outputDir = resolve(cwd, '.theo/cloudflare')
     mkdirSync(outputDir, { recursive: true })

@@ -93,17 +93,16 @@ describe('executeRoute — error-path plugin hooks', () => {
       },
     })
 
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-auth-plugin',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-auth-plugin',
+      pluginRunner: runner,
+    })
 
     expect(res._getStatus()).toBe(401)
     // onError fires first (from the catch); then onResponse(inErrorPath).
@@ -129,19 +128,16 @@ describe('executeRoute — error-path plugin hooks', () => {
       'x-theo-action': '1',
     }
 
-    await executeRoute(
-      createRoute(),
-      'POST',
-      {},
-      stream,
+    await executeRoute({
+      route: createRoute(),
+      method: 'POST',
+      params: {},
+      req: stream,
       res,
-      loader,
-      undefined,
-      'req-bad-ct',
-      undefined,
-      undefined,
-      'off', // csrfMode — skip CSRF entirely for this test
-    )
+      loadModule: loader,
+      requestId: 'req-bad-ct',
+      csrfMode: 'off', // skip CSRF entirely for this test
+    })
 
     expect(res._getStatus()).toBe(415)
     expect(JSON.parse(res._getBody()).error.code).toBe('VALIDATION_ERROR')
@@ -162,7 +158,15 @@ describe('executeRoute — error-path plugin hooks', () => {
     // The router-side query parsing happens before executeRoute; pass the
     // already-parsed query map directly. Empty query is enough — Zod will
     // still reject because `page: number` is missing.
-    await executeRoute(createRoute(), 'GET', {}, req, res, loader, undefined, 'req-bad-query')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req,
+      res,
+      loadModule: loader,
+      requestId: 'req-bad-query',
+    })
 
     expect(res._getStatus()).toBe(400)
     expect(JSON.parse(res._getBody()).error.code).toBe('VALIDATION_ERROR')
@@ -179,16 +183,15 @@ describe('executeRoute — error-path plugin hooks', () => {
       },
     })
 
-    await executeRoute(
-      createRoute(),
-      'GET',
-      { id: 'not-a-number' },
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: { id: 'not-a-number' },
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-bad-params',
-    )
+      loadModule: loader,
+      requestId: 'req-bad-params',
+    })
 
     expect(res._getStatus()).toBe(400)
     const body = JSON.parse(res._getBody())
@@ -217,17 +220,16 @@ describe('executeRoute — error-path plugin hooks', () => {
       },
     })
 
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-null',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-null',
+      pluginRunner: runner,
+    })
 
     expect(res._getStatus()).toBe(204)
     expect(calls).toEqual(['onResponse'])
@@ -263,17 +265,16 @@ describe('executeRoute — error-path plugin hooks', () => {
       },
     })
 
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-ec9',
-      runner,
-    )
+      loadModule: loader,
+      requestId: 'req-ec9',
+      pluginRunner: runner,
+    })
 
     // The hook took over the response (503), the inErrorPath onResponse still ran.
     expect(res._getStatus()).toBe(503)

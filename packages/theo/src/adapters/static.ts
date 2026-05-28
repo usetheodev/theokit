@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url'
 import type { TheoConfig } from '../config/schema.js'
 import { scanRoutes } from '../router/scan.js'
 import type { RouteNode } from '../router/types.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
 
 import { nodeAdapter } from './node.js'
 import {
@@ -25,7 +26,7 @@ import {
   type LoadStaticPaths,
   type ResolvedPath,
 } from './static-paths.js'
-import type { DeployAdapter } from './types.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 export class StaticApiRoutesDetectedError extends Error {
   constructor(routes: string[]) {
@@ -57,7 +58,7 @@ export interface StaticBuildDeps {
   renderHtml?: (url: string, cwd: string) => Promise<string>
   ensureDir?: (path: string) => Promise<void>
   writeFile?: (path: string, content: string) => Promise<void>
-  runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
+  runNodeBuild?: (config: TheoConfig, cwd: string, ctx?: AdapterBuildContext) => Promise<void>
 }
 
 export function detectApiRoutes(serverDir: string): string[] {
@@ -173,7 +174,11 @@ export async function buildStatic(
   config: TheoConfig,
   cwd: string,
   deps: StaticBuildDeps = {},
+  ctx?: AdapterBuildContext,
 ): Promise<void> {
+  // Wave 2 (T2.2) — reject polyglot services on this adapter.
+  assertServicesUnsupported('static', readManifest(cwd))
+
   const detect = deps.detectApiRoutes ?? detectApiRoutes
   const apiRoutes = detect(resolve(cwd, 'server'))
   if (apiRoutes.length > 0) {
@@ -181,7 +186,7 @@ export async function buildStatic(
   }
 
   const runNodeBuild = deps.runNodeBuild ?? nodeAdapter.build.bind(nodeAdapter)
-  await runNodeBuild(config, cwd)
+  await runNodeBuild(config, cwd, ctx)
 
   const scan = deps.scanAppRoutes ?? scanRoutes
   const appDir = resolve(cwd, 'app')
@@ -214,7 +219,7 @@ export async function buildStatic(
 
 export const staticAdapter: DeployAdapter = {
   name: 'static',
-  build(config, cwd) {
-    return buildStatic(config, cwd)
+  build(config, cwd, ctx) {
+    return buildStatic(config, cwd, {}, ctx)
   },
 }

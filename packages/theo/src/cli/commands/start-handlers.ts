@@ -160,20 +160,21 @@ export async function tryServeApiRoute(c: RequestHandlerCtx): Promise<boolean> {
     return true
   }
   const method = (c.req.method ?? 'GET').toUpperCase()
-  await executeRoute(
-    match.route,
+  // T3.1 (ADR-0016) — context object replaces 12 positional args
+  await executeRoute({
+    route: match.route,
     method,
-    match.params,
-    c.req,
-    c.res,
-    c.loadModule,
-    c.serverDir,
-    c.requestId,
-    c.pluginRunner,
-    c.transformer,
-    c.csrfMode,
-    c.disallowed,
-  )
+    params: match.params,
+    req: c.req,
+    res: c.res,
+    loadModule: c.loadModule,
+    serverDir: c.serverDir,
+    requestId: c.requestId,
+    pluginRunner: c.pluginRunner,
+    transformer: c.transformer,
+    csrfMode: c.csrfMode,
+    disallowed: c.disallowed,
+  })
   logRequest({
     method,
     url: c.url,

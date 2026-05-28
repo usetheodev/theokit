@@ -5,12 +5,13 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
 
 import { nodeAdapter } from './node.js'
-import type { DeployAdapter } from './types.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 export interface DenoBuildDeps {
-  runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
+  runNodeBuild?: (config: TheoConfig, cwd: string, ctx?: AdapterBuildContext) => Promise<void>
   writeEntry?: (path: string, content: string) => void
   ensureDir?: (path: string) => void
 }
@@ -76,7 +77,7 @@ export function renderDenoEntry(port: number): string {
     `  const { req, res, toResponse } = createWebShim(request)`,
     `  const requestId = crypto.randomUUID()`,
     `  const method = request.method.toUpperCase()`,
-    `  await executeRoute(match.route, method, match.params, req, res, loaderCache, serverDir, requestId)`,
+    `  await executeRoute({ route: match.route, method, params: match.params, req, res, loadModule: loaderCache, serverDir, requestId })`,
     `  return toResponse()`,
     `})`,
     ``,
@@ -88,9 +89,13 @@ export async function buildDeno(
   config: TheoConfig,
   cwd: string,
   deps: DenoBuildDeps = {},
+  ctx?: AdapterBuildContext,
 ): Promise<void> {
+  // Wave 2 (T2.2) — reject polyglot services on this adapter.
+  assertServicesUnsupported('deno-deploy', readManifest(cwd))
+
   const runNodeBuild = deps.runNodeBuild ?? nodeAdapter.build.bind(nodeAdapter)
-  await runNodeBuild(config, cwd)
+  await runNodeBuild(config, cwd, ctx)
 
   const outputDir = resolve(cwd, '.theo/deno')
   const ensureDir = deps.ensureDir ?? ((p: string) => mkdirSync(p, { recursive: true }))
@@ -110,7 +115,7 @@ export async function buildDeno(
 
 export const denoDeployAdapter: DeployAdapter = {
   name: 'deno-deploy',
-  build(config, cwd) {
-    return buildDeno(config, cwd)
+  build(config, cwd, ctx) {
+    return buildDeno(config, cwd, {}, ctx)
   },
 }

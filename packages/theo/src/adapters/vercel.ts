@@ -6,9 +6,10 @@ import { existsSync, mkdirSync, writeFileSync, cpSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
 
 import { nodeAdapter } from './node.js'
-import type { DeployAdapter } from './types.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 /**
  * T2.2 — Vercel adapter rewritten to consume `theokit/adapters/web-shim`
@@ -74,10 +75,10 @@ export function renderVercelFunctionEntry(): string {
     ``,
     `  const { req, res, toResponse } = createWebShim(webRequest)`,
     `  const requestId = randomUUID()`,
-    `  await executeRoute(`,
-    `    match.route, method, match.params,`,
-    `    req, res, loaderCache, serverDir, requestId,`,
-    `  )`,
+    `  await executeRoute({`,
+    `    route: match.route, method, params: match.params,`,
+    `    req, res, loadModule: loaderCache, serverDir, requestId,`,
+    `  })`,
     `  const webResponse = await toResponse()`,
     ``,
     `  nodeRes.statusCode = webResponse.status`,
@@ -125,9 +126,15 @@ export function renderVercelVcConfigJson(): {
 export const vercelAdapter: DeployAdapter = {
   name: 'vercel',
 
-  async build(config: TheoConfig, cwd: string): Promise<void> {
-    // 1. Run the standard Node build first
-    await nodeAdapter.build(config, cwd)
+  async build(config: TheoConfig, cwd: string, ctx?: AdapterBuildContext): Promise<void> {
+    // Wave 2 (T2.2) — reject polyglot services on this adapter.
+    // Per 2026-05-27 owner decision, polyglot is wired via `node` (local
+    // docker-compose harness) + `theo-cloud` (Wave 3). Vercel adapter
+    // wire-up is deferred to a fresh ADR with demand evidence.
+    assertServicesUnsupported('vercel', readManifest(cwd))
+
+    // 1. Run the standard Node build first (ctx forwarded so nodeAdapter has makeVitePlugins)
+    await nodeAdapter.build(config, cwd, ctx)
 
     const clientDir = resolve(cwd, '.theo/client')
     const outputDir = resolve(cwd, '.vercel/output')

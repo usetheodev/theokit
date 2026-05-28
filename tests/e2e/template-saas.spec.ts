@@ -30,8 +30,9 @@ test.describe('Template saas — auth flow', () => {
     const password = 'demo'
     const res = await request.post('/api/login', {
       headers: { 'X-Theo-Action': '1', 'content-type': 'application/json' },
-      data: { username: 'alice', password },
+      data: { email: 'alice@example.com', password },
     })
+    // 200 = stub login accepts any password; 401 = real impl rejects unknown email
     expect([200, 401]).toContain(res.status())
   })
 

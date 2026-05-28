@@ -8,6 +8,10 @@
 # Run: pnpm check:naming
 # CI:  .github/workflows/architecture-guards.yml
 
+# See `.claude/rules/architecture.md` v3.1 § Naming convention exceptions for
+# the rationale behind the regex unions (React components PascalCase + hooks
+# camelCase + type-tests acronym-prefix).
+
 ls:
   packages/theo/src:
     # TypeScript source files — kebab-case (with hook + type-test exceptions)

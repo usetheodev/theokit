@@ -1,33 +1,11 @@
 import type { z } from 'zod'
 
-export interface RouteConfig<
-  TQuery extends z.ZodType = z.ZodUndefined,
-  TBody extends z.ZodType = z.ZodUndefined,
-  TParams extends z.ZodType = z.ZodUndefined,
-  TCtx = unknown,
-  TResponse = unknown,
-> {
-  query?: TQuery
-  body?: TBody
-  params?: TParams
-  status?: number
-  /**
-   * Opt out of CSRF enforcement for this route. Use for endpoints that
-   * legitimately receive third-party POSTs (Stripe webhooks, GitHub
-   * webhooks, OAuth callbacks). Defaults to enforced per `config.security.csrf`.
-   *
-   * Setting `csrf: false` only disables the per-route check — it does NOT
-   * disable the global mode setting for other routes.
-   */
-  csrf?: false
-  handler: (ctx: {
-    query: z.infer<TQuery>
-    body: z.infer<TBody>
-    params: z.infer<TParams>
-    request: Request
-    ctx: TCtx
-  }) => TResponse | Promise<TResponse>
-}
+// T2.2 (architecture-cleanup) — RouteConfig type moved to core/contracts/
+// (canonical home per ADR-0001 v3). Re-export preserves the public path
+// `import { type RouteConfig } from 'theokit/server'`.
+export type { RouteConfig } from '../../core/contracts/route-config.js'
+
+import type { RouteConfig } from '../../core/contracts/route-config.js'
 
 /**
  * Define a typed HTTP route.

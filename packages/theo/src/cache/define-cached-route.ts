@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 
-import type { RouteConfig } from '../server/define/define-route.js'
+import type { RouteConfig } from '../core/contracts/route-config.js'
 
 import { getCacheControlHeader } from './cache-control-header.js'
 import type { CacheEngine, CacheStatus } from './cache-engine.js'

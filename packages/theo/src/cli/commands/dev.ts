@@ -4,6 +4,7 @@ import { createServer, type ViteDevServer } from 'vite'
 import { loadConfig } from '../../config/load-config.js'
 import { loadEnv } from '../../config/load-env.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
+import { orchestrateDev } from '../../services/index.js'
 import { theoPluginAsync } from '../../vite-plugin/index.js'
 
 interface DevOptions {
@@ -18,6 +19,21 @@ export async function startDevServer(cwd: string, options?: DevOptions): Promise
 
   const config = await loadConfig(cwd)
   validateProjectStructure(cwd)
+
+  // Wave 2 (T1.1) — spawn polyglot services BEFORE Vite. Healthcheck gates
+  // readiness. Empty `services: {}` → early return (Wave 1 BC preserved).
+  const orchestration = await orchestrateDev({
+    cwd,
+    services: config.services,
+  })
+  if (!orchestration.allHealthy) {
+    await orchestration.stop()
+    throw new Error(
+      `[services] services failed healthcheck: ${orchestration.unhealthy.join(', ')}. ` +
+        `Check that each declared service binds its port and responds 200 on its ` +
+        `healthcheck path within 30s.`,
+    )
+  }
 
   // Phase 7 — legacy fs-mtime sweep removed: SDK's Agent.registry handles
   // LRU + idle eviction natively (configurable via theo.config.ts >
@@ -36,19 +52,37 @@ export async function startDevServer(cwd: string, options?: DevOptions): Promise
   // top-level Plugin[] return (sync `theoPlugin()` factory's config()
   // hook returning {plugins:[...]} is silently dropped by Vite — see
   // commit history). Spread the result so Vite flattens them.
-  const theoPlugins = await theoPluginAsync({
-    root: cwd,
-    rateLimit: flatRateLimit,
-    ssr: config.ssr,
-  })
-  const server = await createServer({
-    root: cwd,
-    plugins: [react(), ...theoPlugins],
-    server: { port },
-    logLevel: options?.port === 0 ? 'silent' : undefined,
+  let server: ViteDevServer
+  try {
+    const theoPlugins = await theoPluginAsync({
+      root: cwd,
+      rateLimit: flatRateLimit,
+      ssr: config.ssr,
+      // Wave 2 (T3.1) — wire typed-client plugin when services declared.
+      services: config.services,
+    })
+    server = await createServer({
+      root: cwd,
+      plugins: [react(), ...theoPlugins],
+      server: { port },
+      logLevel: options?.port === 0 ? 'silent' : undefined,
+    })
+
+    await server.listen()
+  } catch (err) {
+    // EC-1 / try-finally pattern: if Vite create/listen fails AFTER services
+    // started, stop them so we don't leak child processes.
+    await orchestration.stop()
+    throw err
+  }
+
+  // EC-1 fix: attach orchestration.stop() to the underlying HTTP server's
+  // close event via Node-native API. We do NOT mutate `server.close`
+  // (fragile across Vite upgrades). httpServer is `http.Server | null`.
+  server.httpServer?.on('close', () => {
+    void orchestration.stop()
   })
 
-  await server.listen()
   return server
 }
 

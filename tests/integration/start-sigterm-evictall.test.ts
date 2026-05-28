@@ -15,10 +15,15 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const START_SOURCE = readFileSync(
-  resolve(__dirname, '../../packages/theo/src/cli/commands/start.ts'),
-  'utf8',
-)
+// T4.2 (architecture-cleanup) — graceful-shutdown logic moved to
+// start-graceful-shutdown.ts. Tests assert both files combined cover the wiring.
+const START_SOURCE = [
+  readFileSync(resolve(__dirname, '../../packages/theo/src/cli/commands/start.ts'), 'utf8'),
+  readFileSync(
+    resolve(__dirname, '../../packages/theo/src/cli/commands/start-graceful-shutdown.ts'),
+    'utf8',
+  ),
+].join('\n\n')
 
 describe('theokit start — SIGTERM/SIGINT handlers (T6.2)', () => {
   it('test_sigterm_handler_registered', () => {
@@ -46,7 +51,8 @@ describe('theokit start — SIGTERM/SIGINT handlers (T6.2)', () => {
   it('test_evict_all_error_does_not_block_exit', () => {
     // catch block must exist around evictAll
     expect(START_SOURCE).toMatch(/catch\s*\(\s*err\s*\)/)
-    expect(START_SOURCE).toMatch(/proceeding to exit|evictAll error/)
+    // T4.3 (architecture-cleanup) — replaced console.warn with warnOnce({ event: 'shutdown.evict_error' })
+    expect(START_SOURCE).toMatch(/shutdown\.evict_error|evictAll error/)
   })
 
   it('test_sdk_import_is_lazy (only at shutdown time)', () => {

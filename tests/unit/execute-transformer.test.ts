@@ -90,18 +90,17 @@ describe('executeRoute with transformer (T1.2)', () => {
     const loader = async () => ({
       GET: { handler: () => ({ ok: true }) },
     })
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    // T3.1 (ADR-0016) — context object
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-1',
-      undefined,
-      superjsonTransformer,
-    )
+      loadModule: loader,
+      requestId: 'req-1',
+      transformer: superjsonTransformer,
+    })
     expect(res._getHeader('x-theo-transformer')).toBe('superjson')
   })
 
@@ -110,18 +109,16 @@ describe('executeRoute with transformer (T1.2)', () => {
     const loader = async () => ({
       GET: { handler: () => ({ ok: true }) },
     })
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-2',
-      undefined,
-      jsonTransformer,
-    )
+      loadModule: loader,
+      requestId: 'req-2',
+      transformer: jsonTransformer,
+    })
     expect(res._getHeader('x-theo-transformer')).toBeUndefined()
   })
 
@@ -131,18 +128,16 @@ describe('executeRoute with transformer (T1.2)', () => {
     const loader = async () => ({
       GET: { handler: () => ({ when: d }) },
     })
-    await executeRoute(
-      createRoute(),
-      'GET',
-      {},
-      createMockReq(),
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
       res,
-      loader,
-      undefined,
-      'req-3',
-      undefined,
-      superjsonTransformer,
-    )
+      loadModule: loader,
+      requestId: 'req-3',
+      transformer: superjsonTransformer,
+    })
     const body = JSON.parse(res._getBody())
     expect(body.json.when).toBe(d.toISOString())
     expect(body.meta).toBeDefined()
@@ -153,7 +148,14 @@ describe('executeRoute with transformer (T1.2)', () => {
     const loader = async () => ({
       GET: { handler: () => ({ ok: true, n: 42 }) },
     })
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
     expect(JSON.parse(res._getBody())).toEqual({ ok: true, n: 42 })
     expect(res._getHeader('x-theo-transformer')).toBeUndefined()
   })

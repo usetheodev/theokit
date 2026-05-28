@@ -42,7 +42,15 @@ beforeAll(async () => {
           return
         }
         const method = (req.method ?? 'GET').toUpperCase()
-        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir)
+        await executeRoute({
+          route: match.route,
+          method,
+          params: match.params,
+          req,
+          res,
+          loadModule,
+          serverDir,
+        })
         return
       }
       if (serveStaticFile(req, res, clientDir)) return

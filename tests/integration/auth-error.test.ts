@@ -49,7 +49,15 @@ describe('Auth Error Handling in executeRoute', () => {
       },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-123')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-123',
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(401, expect.anything())
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)
@@ -67,7 +75,15 @@ describe('Auth Error Handling in executeRoute', () => {
       },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-456')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-456',
+    })
 
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)
     expect(body.error.requestId).toBe('req-456')
@@ -83,7 +99,15 @@ describe('Auth Error Handling in executeRoute', () => {
       },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-789')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-789',
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(500, expect.anything())
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)
@@ -102,7 +126,14 @@ describe('Auth Error Handling in executeRoute', () => {
       },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(200, expect.anything())
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)

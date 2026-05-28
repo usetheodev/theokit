@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-import { nodeAdapter } from '../../adapters/node.js'
-import { VALID_TARGETS, type BuildTarget } from '../../adapters/types.js'
+// T1.1 (architecture-medium-deferrals) — nodeAdapter no longer static-imported.
+// All adapters dispatch via `adapterRegistry` (lazy-imported within runAdapterBuild).
+import { VALID_TARGETS, type BuildTarget, type AdapterBuildContext } from '../../adapters/types.js'
 import { loadConfig } from '../../config/load-config.js'
 import { loadEnv } from '../../config/load-env.js'
 import { validateProjectStructure } from '../../core/validate-structure.js'
@@ -18,6 +19,10 @@ import { scanCrons } from '../../server/cron/cron-scan.js'
 import { writeJobManifest } from '../../server/jobs/job-manifest.js'
 import { scanJobs } from '../../server/jobs/job-scan.js'
 import { generateManifest, writeManifest } from '../../server/scan/manifest.js'
+import {
+  buildManifest as buildServicesManifest,
+  writeManifest as writeServicesManifest,
+} from '../../services/index.js'
 import { cleanOutDir } from '../cleanup/cleanup.js'
 
 // Adapters that do NOT support cron triggers natively. Build still
@@ -80,6 +85,18 @@ export async function buildCommand(options?: { target?: string }): Promise<void>
   // T1.2 — job scan + manifest (no per-target translation needed)
   await emitJobArtifacts({ cwd, serverDir, distDir })
 
+  // Wave 2 (T1.2) — services manifest at <cwd>/.theo/services.json. Always
+  // emit (empty array when services: {} is empty) so adapters can rely on
+  // the file existing. Topological order preserved by buildServicesManifest.
+  const servicesManifest = buildServicesManifest(config.services)
+  writeServicesManifest(cwd, servicesManifest)
+  if (servicesManifest.services.length > 0) {
+    console.log(
+      `  ✓ Services manifest: ${String(servicesManifest.services.length)} service(s) ` +
+        `(${servicesManifest.services.map((s) => s.name).join(', ')})`,
+    )
+  }
+
   // Now run the adapter-specific bundling (Vite + adapter-specific work).
   await runAdapterBuild(target, config, cwd)
 
@@ -92,46 +109,28 @@ async function runAdapterBuild(
   config: Awaited<ReturnType<typeof loadConfig>>,
   cwd: string,
 ): Promise<void> {
-  switch (target) {
-    case 'node':
-      await nodeAdapter.build(config, cwd)
-      return
-    case 'vercel': {
-      const { vercelAdapter } = await import('../../adapters/vercel.js')
-      await vercelAdapter.build(config, cwd)
-      return
-    }
-    case 'cloudflare': {
-      const { cloudflareAdapter } = await import('../../adapters/cloudflare.js')
-      await cloudflareAdapter.build(config, cwd)
-      return
-    }
-    case 'static': {
-      const { staticAdapter } = await import('../../adapters/static.js')
-      await staticAdapter.build(config, cwd)
-      return
-    }
-    case 'bun': {
-      const { bunAdapter } = await import('../../adapters/bun.js')
-      await bunAdapter.build(config, cwd)
-      return
-    }
-    case 'deno-deploy': {
-      const { denoDeployAdapter } = await import('../../adapters/deno-deploy.js')
-      await denoDeployAdapter.build(config, cwd)
-      return
-    }
-    case 'netlify': {
-      const { netlifyAdapter } = await import('../../adapters/netlify.js')
-      await netlifyAdapter.build(config, cwd)
-      return
-    }
-    case 'aws-lambda': {
-      const { awsLambdaAdapter } = await import('../../adapters/aws-lambda.js')
-      await awsLambdaAdapter.build(config, cwd)
-      return
-    }
+  // T1.1 (architecture-cleanup) — CLI composes the Vite Plugin[] and INJECTS it into
+  // the adapter via ctx.makeVitePlugins. This inverts the previous `adapters → vite-plugin`
+  // edge — adapters no longer import from vite-plugin/ directly.
+  //
+  // theoPlugin AND `@vitejs/plugin-react` are dynamically imported so the deps are
+  // materialized only when needed (adapter is `node`). This keeps the CLI's startup
+  // path independent of optional build-time deps (so e.g. `theokit build --target=static`
+  // does not need react installed). dep-cruiser's per-module rule allows `cli → vite-plugin`.
+  const { theoPlugin } = await import('../../vite-plugin/index.js')
+  const { default: react } = await import('@vitejs/plugin-react')
+  const ctx: AdapterBuildContext = {
+    // `react()` may return Plugin or Plugin[] depending on version; flatten so the
+    // contract returns a flat Plugin[] as declared in AdapterBuildContext.
+    makeVitePlugins: (opts) => [react(), theoPlugin(opts)].flat(),
   }
+
+  // T1.1 (architecture-medium-deferrals, ADR D1) — Adapter Registry replaces
+  // the previous 9-case switch. New adapters add 1 line in `adapters/registry.ts`;
+  // CLI is closed for modification (OCP).
+  const { resolveAdapter } = await import('../../adapters/registry.js')
+  const adapter = await resolveAdapter(target)
+  await adapter.build(config, cwd, ctx)
 }
 
 async function emitCronArtifacts(opts: {

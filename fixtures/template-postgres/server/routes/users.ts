@@ -4,8 +4,10 @@ import { users } from '../../db/schema.js'
 
 export const GET = defineRoute({
   handler: async ({ ctx }) => {
+    // Align with api-only template — return array directly so consumers can
+    // map without an extra unwrap. Playwright spec asserts Array.isArray.
     const allUsers = await (ctx as any).db.select().from(users)
-    return { users: allUsers }
+    return allUsers
   },
 })
 

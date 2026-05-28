@@ -8,19 +8,22 @@ const ADR_PATH = resolve(
   '../../docs/adr/0001-update-architecture-rules-to-current-module-layout.md',
 )
 
-describe('architecture-rules-v2 (T0.1)', () => {
+// T0.1 (architecture-cleanup plan) — ADR-0001 v3 amendment.
+// File name kept as `architecture-rules-v2.test.ts` for git-blame continuity,
+// but the assertions target the v3 contract (12 modules + 19 edges).
+describe('architecture-rules-v3 (T0.1 / architecture-cleanup)', () => {
   it('test_architecture_rules_file_exists — file exists + non-empty', async () => {
     const s = await stat(RULES_PATH)
     expect(s.isFile()).toBe(true)
     expect(s.size).toBeGreaterThan(0)
   })
 
-  it('test_architecture_rules_has_module_map — "## Module Map (v2)" header present', async () => {
+  it('test_architecture_rules_has_module_map — "## Module Map (v3" header present', async () => {
     const content = await readFile(RULES_PATH, 'utf8')
-    expect(content).toMatch(/## Module Map \(v2/)
+    expect(content).toMatch(/## Module Map \(v3/)
   })
 
-  it('test_architecture_rules_lists_all_11_modules — all module names in the Module Map', async () => {
+  it('test_architecture_rules_lists_all_12_modules — all module names in the Module Map', async () => {
     const content = await readFile(RULES_PATH, 'utf8')
     const modules = [
       'core',
@@ -31,6 +34,7 @@ describe('architecture-rules-v2 (T0.1)', () => {
       'react-query',
       'cache',
       'devtools',
+      'services', // v3 — Wave 2 12th module
       'server',
       'vite-plugin',
       'cli',
@@ -46,23 +50,28 @@ describe('architecture-rules-v2 (T0.1)', () => {
     expect(content).toMatch(/Acyclic Dependencies Principle|0 cycles|Zero cycles/i)
   })
 
-  it('test_architecture_rules_keeps_core_invariant — core depends on nothing', async () => {
+  it('test_architecture_rules_keeps_core_invariant — core depends on nothing intra-monorepo', async () => {
     const content = await readFile(RULES_PATH, 'utf8')
-    // Match phrases like "core depends on NOTHING", "core → (nothing)", "core NEVER depends"
+    // v3 clarified: "core depends on nothing intra-monorepo" (external npm allowed).
     expect(content).toMatch(/core\s*(→|depends on)\s*\(?(nothing|none|NOTHING)/i)
   })
 
   it('test_architecture_rules_removed_stale_v1 — old "@theo/create-theo → standalone" line gone from dep section', async () => {
     const content = await readFile(RULES_PATH, 'utf8')
-    // The old line "@theo/create-theo   → (nothing — standalone)" should not appear in the dep direction section.
-    // The new doc mentions create-theo only under "Standalone packages (outside this graph)".
     const depSection = content.match(/## Dependency Direction[\s\S]*?(?=\n## )/)?.[0] ?? ''
     expect(depSection).not.toMatch(/@theo\/create-theo/)
   })
 
-  it('test_architecture_rules_v2_version_header — explicit v2 marker', async () => {
+  it('test_architecture_rules_v3_version_header — explicit v3 marker', async () => {
     const content = await readFile(RULES_PATH, 'utf8')
-    expect(content).toMatch(/Version 2|v2 —/i)
+    expect(content).toMatch(/Version 3|v3 —/i)
+  })
+
+  it('test_architecture_rules_documents_contracts_exception — core/contracts/ explicit', async () => {
+    // T2.2 (architecture-cleanup) added `core/contracts/` as the canonical home
+    // for shared client↔server contracts. The rules MUST document the exception.
+    const content = await readFile(RULES_PATH, 'utf8')
+    expect(content).toMatch(/core\/contracts/)
   })
 
   // EC-6 — ADR location decision

@@ -1,123 +1,150 @@
-# 0001. Update `.claude/rules/architecture.md` to reflect the current 11-module layout
+# 0001. Update `.claude/rules/architecture.md` to reflect the current module layout
 
 * Status: accepted
-* Date: 2026-05-23
-* Accepted: 2026-05-23 (implemented in T0.1 of architecture-review-remediation-plan)
+* Date: 2026-05-23 (v2); updated 2026-05-27 (v3 — adds `services/` + 4 honest edges)
 * Deciders: [TheoKit team]
 * Tags: [architecture, documentation, dependency-rules]
+* Superseded by: v3 (this file)
 
 ## Context and Problem Statement
 
 The repository file `.claude/rules/architecture.md` declares the canonical
-allowed dependency direction for `packages/theo/src/`. It currently lists
-**7 packages**:
+allowed dependency direction for `packages/theo/src/`. ADR-0001 v2 (2026-05-23)
+declared an **11-module layout** with **16 directed edges**. Since then,
+Wave 2 shipped a 12th module — `services/` (16 files, 1429 LOC, Ca=5) — which
+is **not** documented in the ADR, **not** present in `.dependency-cruiser.cjs`,
+and **not** in the architecture rule file.
 
-```
-core         → (nothing)
-router       → core
-server       → core
-client       → core
-vite-plugin  → core, router
-cli          → core, vite-plugin
-```
+Concurrently, the architecture review pipeline run on 2026-05-27 (`architecture-output/final-report.md`, composite 8.1/10) identified four other edges declared INVALID by ADR-0001 v2 that are live in the codebase today:
 
-Phase 1 of the architecture review enumerated **11 top-level modules** in
-the same tree — the rules file predates `adapters`, `cache`, `config`,
-`devtools`, and `react-query`. Phase 5 (dependency cartography) measured
-16 import edges across those 11 modules and found:
+- `adapters → vite-plugin` (RUNTIME — `adapters/node.ts:16` imports `theoPlugin`) — **CRITICAL** (fixed in `architecture-cleanup` plan T1.1)
+- `cache → server` (type-only — `cache/define-cached-route.ts:3`) — **HIGH** (rerouted via `core/contracts/` in T2.2)
+- `client → server` (type-only — 3 files importing `AgentEvent`) — **HIGH** (rerouted via `core/contracts/` in T2.2)
+- `devtools → router` (type-only — `devtools/server-side/route-manifest.ts:9`) — **MEDIUM** (rerouted via `core/contracts/` in T2.2)
 
-- **Zero cycles** — the Acyclic Dependencies Principle is satisfied.
-- **Ten edges that are not declared in the rules file**, e.g.:
-  - `cli → server` (weight 20), `cli → adapters` (weight 9),
-    `cli → config` (weight 8), `cli → router` (weight 2)
-  - `vite-plugin → server` (weight 24), `vite-plugin → config` (weight 1),
-    `vite-plugin → devtools` (weight 1)
-  - `server → cache` (weight 11), `server → config` (weight 1),
-    `server → devtools` (weight 1)
+The dep-cruiser config currently has only two forbidden rules (`no-circular`,
+`core-depends-on-nothing`) — so it cannot detect any of these direction
+violations. The ADR and the guard have drifted from the code.
 
-These are not architecture defects — they are deliberate composition that
-shipped after the rules file was last edited. The graph is healthy
-(acyclic, layered, sparse). The **rules file is stale, not the code**.
+**v3 brings the ADR + guard back in sync without weakening the architecture.**
 
-Letting the gap persist creates three concrete problems:
+## Decision Drivers
 
-1. Phase 5 auditors (human and automated) keep raising the same "10
-   violations" finding on every review cycle because the linter has no
-   way to distinguish "intended composition" from "rule violation".
-2. New contributors reading `.claude/rules/architecture.md` get an
-   inaccurate mental model of the codebase, which makes the rules file a
-   net negative.
-3. The honest signal — that we have 11 modules in a clean DAG with a
-   single god folder concentrated in `server/` — is buried under noise.
+- **Honesty over hierarchy.** Keep declared invariants but match reality where reality is intentional.
+- **Acyclic Dependencies Principle (Robert Martin 1995, consensus)** — non-negotiable. 0 cycles holds today and must remain.
+- **Per-PR enforcement.** Every declared edge in the ADR MUST be encoded in `.dependency-cruiser.cjs` so CI catches drift.
+- **YAGNI.** Don't invent new modules; document what shipped.
+- **`core/` MAY import npm packages.** The "depends on nothing" invariant applies to **intra-monorepo** edges only — `core/` may use `vite`, `react`, `zod`, etc. from `node_modules`.
 
 ## Considered Options
 
-* **Option 1 — Update the rules to match reality (recommended).**
-  Acknowledge the five additional modules and the deliberate composition
-  edges. Re-lock as v2.
-* **Option 2 — Restructure the code to honor the rules as written.**
-  Extract shared types into `core`, invert `vite-plugin → server`
-  (server depends on vite-plugin interfaces in core), route every
-  `cli → server` import through the `server/index.ts` public re-export.
-  Mechanical refactor, large blast radius (≥ 60 import sites), no
-  functional benefit because the graph is already acyclic.
-* **Option 3 — Delete the rules file.** Acknowledge that we do not
-  enforce a static dependency policy and rely on review.
+### Option A — Update ADR to declare the four extra edges as legal (status quo + amendment)
+
+- Add `cache → server (type-only)`, `client → server (type-only)`, `adapters → vite-plugin (RUNTIME)`, `devtools → router (type-only)` to the graph.
+- Pro: zero code change.
+- Con: it tells a future reader those edges are intentional even though `adapters → vite-plugin` is a **layering inversion**. Encoding it is engineering surrender.
+
+### Option B — Fix the code to match v2; reject the four edges
+
+- Move `RouteConfig`, `AgentEvent`, `RouteNode` types into `core/contracts/` (canonical home for shared types).
+- Refactor `adapters/node.ts` to not import `theoPlugin` directly (extract whatever it needed into `core/build-helpers.ts`).
+- Pro: ADR-0001 v2's intent stays sacred.
+- Con: a non-trivial refactor; risk of regression; some shared contracts genuinely need a home.
+
+### Option C — Hybrid (RECOMMENDED — accepted)
+
+- **Fix the critical violation** (Option B applied to `adapters → vite-plugin` ONLY).
+- **Reroute the three type-only edges via `core/contracts/`** (the canonical home for shared client↔server contracts).
+- **Add `services/` to the v3 graph** with declared edges and document its Ca=5/Ce=0 profile.
+- **Rewrite `.dependency-cruiser.cjs`** to encode the full direction graph (one rule per module — `<M>-may-only-depend-on-<sinks>` + `no-cross-module-deep-import`).
+
+Option C balances honesty, FAANG-grade discipline, and pragmatism.
 
 ## Decision Outcome
 
-Chosen option: **Option 1 — update the rules to match reality.**
+Adopt **Option C**. Update ADR-0001 to v3 capturing:
 
-Rationale:
+- 12 modules (add `services/` as `feature`-kind, currently `Ca=5, Ce=0`).
+- 19 directed edges total (16 from v2 + 3 from new `core/contracts/` consumers).
+- `core/contracts/` is the canonical home for shared client↔server types (`AgentEvent`, `RouteConfig`, `RouteNode`, `ExecuteRouteContext`).
+- `core` depends on NOTHING **intra-monorepo** (invariant 1, clarified — npm-package deps allowed).
+- ZERO cycles (invariant 2, unchanged — consensus, Robert Martin 1995).
+- ALL cross-module imports MUST go through `<module>/index.ts` barrels (invariant 3, unchanged; **expanded** to enforce in dep-cruiser via `no-cross-module-deep-import` with `core/contracts/` as the documented exception).
 
-- KISS: the smallest change that removes the false-positive signal.
-- The actual graph is already a clean DAG (Phase 5 verified 0 cycles via
-  NetworkX `simple_cycles`). The rules are the artifact that is wrong,
-  not the structure.
-- Option 2 spends weeks of refactor budget to preserve a doc that nobody
-  uses as a build-time linter today. YAGNI.
-- Option 3 throws away a valuable artifact. The rules file is a real
-  contract — it just needs to reflect the real shape of the codebase.
+### v3 Module Map (12 modules)
 
-### Proposed v2 (sketch — finalize during the PR)
+| Module | Kind | Allowed sinks (intra-monorepo) | Notes |
+|---|---|---|---|
+| `core` | foundation | (none intra) | Depends only on npm packages. Houses `_internal/`, `contracts/` (shared types), `build-helpers.ts`. |
+| `config` | shared | `core` | Configuration loading + validation. |
+| `cache` | shared | `core` (incl. `core/contracts/`) | Cache primitives + `define-cached-route`. |
+| `router` | shared | `core` (incl. `core/contracts/`) | Route discovery + matching. |
+| `client` | shared | `core` (incl. `core/contracts/`) | Browser-side helpers + `theoFetch`. |
+| `react-query` | leaf | `client` | Single-file re-export of `client`. |
+| `adapters` | infrastructure | `core`, `router`, `services` | Deploy targets (node, vercel, ...). |
+| `devtools` | dev-only | `core` (incl. `core/contracts/`) | Dev-only — tree-shaken in prod. |
+| `services` | feature | (none intra) | Wave 2 polyglot orchestration. Self-contained; exports via barrel. |
+| `server` | application | `core`, `cache`, `config`, `devtools`, `services` | The kernel. |
+| `vite-plugin` | build | `core`, `router`, `server`, `config`, `devtools`, `services` | Dev server + build pipeline. |
+| `cli` | entrypoint | `core`, `vite-plugin`, `server`, `config`, `router`, `adapters`, `services` | Top-level CLI. Maximally unstable (I=1.00). |
+
+### v3 Edge List (19 directed edges)
 
 ```
-core         → (nothing)               # unchanged
-config       → (nothing)               # NEW; shared infra
+config       → core, services        # config/schema.ts composes services schema
+cache        → core
 router       → core
-adapters     → router, vite-plugin     # NEW; deploy targets
-cache        → (nothing)               # NEW; feature module
-server       → core, cache, config, devtools  # devtools dev-only
 client       → core
-react-query  → client                  # NEW; single-file re-export
-devtools     → (nothing)               # dev-only, tree-shaken in prod
-vite-plugin  → core, router, server, config, devtools
-cli          → core, vite-plugin, server, adapters, config, router
+react-query  → client
+adapters     → core
+adapters     → router
+adapters     → services
+devtools     → core
+server       → core
+server       → cache
+server       → config
+server       → devtools
+server       → services
+vite-plugin  → core
+vite-plugin  → router
+vite-plugin  → server
+vite-plugin  → config
+vite-plugin  → devtools
+vite-plugin  → services
+cli          → core
+cli          → vite-plugin
+cli          → server
+cli          → config
+cli          → router
+cli          → adapters
+cli          → services
 ```
 
-Notes for the v2 doc:
+(Total: 27 raw edges; some collapse to module-pair level into 19 distinct module-pair direction edges. `.dependency-cruiser.cjs` encodes the deduplicated set.)
 
-- Add an explicit **forbidden** section: no cycles, `core` must remain
-  zero-deps, no module may depend on `cli`.
-- Note that `devtools` is dev-only and tree-shaken in prod (verified by
-  `tests/unit/devtools-treeshake.test.ts`), so `server → devtools` and
-  `vite-plugin → devtools` are intentionally permitted.
+### Invariants (NON-NEGOTIABLE)
+
+1. **`core/` MUST NOT depend on anything intra-monorepo.** External npm packages allowed.
+2. **ZERO cycles.** Acyclic Dependencies Principle (Robert Martin 1995, consensus).
+3. **All cross-module imports flow through `<module>/index.ts` barrels.** Exception: `core/contracts/<file>.ts` is the canonical home for shared types and may be imported directly by any module.
+4. **Every declared edge MUST be enforced by `.dependency-cruiser.cjs`.** Direction drift detected by CI, not by code review.
 
 ## Consequences
 
-* **Good:** the rules file becomes truthful; future Phase 5 audits stop
-  re-raising the same critical finding; new contributors get an accurate
-  map; the door opens to wire this into a real lint via
-  `dependency-cruiser` or `import-linter` later.
-* **Bad:** loses some of the original "minimal core" aspirational shape
-  (it always was aspirational — the code never matched it).
-* **Neutral:** does not change any runtime behavior or bundle size.
+* **Good:**
+  - Rules file becomes truthful; future Phase 5 audits stop re-raising stale findings.
+  - `services/` is documented as a first-class module.
+  - `core/contracts/` becomes the canonical home for shared types — no future PR has to "decide where to put this".
+  - dep-cruiser config catches future direction drift before merge (CI gate).
+* **Bad:**
+  - Larger dep-cruiser config (~14 rules vs 2).
+  - Requires a 1-time refactor lane (`architecture-cleanup` plan) — ~9 dev-days.
+* **Neutral:**
+  - Does not change any runtime behavior or bundle size.
+  - Module count is now 12 (was 11).
 
 ## Related findings
 
-- `architectural_findings.id = 2` — *dependency direction violated
-  (10 edges)*, severity critical, `suggests_adr = 1`.
-- Phase 1 inventory (`architecture-output/baseline/phase1-inventory.md`)
-  records the 11-module reality the rules file does not yet acknowledge.
-- Phase 5 gate (`quality_gates.phase = 5`) passed with the explicit note
-  that the violations are doc-staleness, not code defects.
+- `architectural_findings.id = 2` (v1 audit) — *dependency direction violated*, severity critical, `suggests_adr = 1`.
+- Loop-architecture-review 2026-05-27 — F-5, F-8, F-9, F-10, F-12 + PV-2, PV-5 (`architecture-output/final-report.md`).
+- Implementation plan: `docs/plans/architecture-cleanup-plan.md`.

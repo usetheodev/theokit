@@ -52,6 +52,32 @@ export interface ApiMiddlewareOptions {
    * production hosts opt in via config.security.csrfTelemetry.exposeReadinessEndpoint.
    */
   csrfReadinessStore?: CsrfReadinessStore
+  /**
+   * Wave 2 completion (T1.1 vite-proxy) — list of services-proxy path prefixes
+   * (e.g. `['/api/agent', '/api/worker']`). Requests whose path starts with
+   * any of these prefixes bypass the api-middleware (call `next()`) so the
+   * later proxyMiddleware (installed by Vite from `server.proxy`) can forward
+   * them to the polyglot sidecar. Empty / undefined preserves Wave 1 BC.
+   */
+  servicesProxyPrefixes?: readonly string[]
+}
+
+/**
+ * Wave 2 completion — true when `url` is OUTSIDE TheoKit's API namespace,
+ * either because it doesn't start with `/api/` OR because it matches a
+ * services-proxy prefix. In both cases the middleware should call `next()`
+ * so the request reaches Vite's proxyMiddleware / static fallback. Combining
+ * both checks into one helper keeps the main arrow function's cyclomatic
+ * complexity within the eslint ceiling.
+ */
+function shouldBypassApiMiddleware(url: string, prefixes: readonly string[]): boolean {
+  if (!url.startsWith('/api/')) return true
+  if (prefixes.length === 0) return false
+  const path = url.split('?')[0]
+  for (const prefix of prefixes) {
+    if (path === prefix || path.startsWith(`${prefix}/`)) return true
+  }
+  return false
 }
 
 async function handleCspReportIfMatch(
@@ -194,6 +220,7 @@ export function createApiMiddleware(
   const auditLogger = opts.auditLogger
   const onCspViolation = opts.onCspViolation
   const csrfReadinessStore = opts.csrfReadinessStore
+  const servicesProxyPrefixes = opts.servicesProxyPrefixes ?? []
 
   return (req, res, next) => {
     void (async () => {
@@ -212,7 +239,7 @@ export function createApiMiddleware(
         return
       }
 
-      if (!url.startsWith('/api/')) {
+      if (shouldBypassApiMiddleware(url, servicesProxyPrefixes)) {
         next()
         return
       }
@@ -268,10 +295,11 @@ export function createApiMiddleware(
       }
 
       const method = (req.method ?? 'GET').toUpperCase()
-      await executeRoute(
-        match.route,
+      // T3.1 (ADR-0016) — context object replaces 12 positional args
+      await executeRoute({
+        route: match.route,
         method,
-        match.params,
+        params: match.params,
         req,
         res,
         loadModule,
@@ -281,7 +309,7 @@ export function createApiMiddleware(
         transformer,
         csrfMode,
         disallowed,
-      )
+      })
       logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
     })()
   }

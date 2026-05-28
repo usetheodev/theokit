@@ -24,13 +24,14 @@ export { consumeAgentStream, parseSSEChunk } from './agent-stream-core.js'
 export type { ConsumeOptions } from './agent-stream-core.js'
 
 // T1.1 — Re-export AgentEvent for client consumers (useAgentStream, etc.)
+// T2.2 (architecture-cleanup) — types now live in core/contracts/ (per ADR-0001 v3).
 export type {
   AgentEvent,
   AgentMessageEvent,
   AgentToolCallEvent,
   AgentToolResultEvent,
   AgentErrorEvent,
-} from '../server/agent/agent-types.js'
+} from '../core/contracts/agent-events.js'
 export type {
   Fetcher,
   FetchOptionsLike,

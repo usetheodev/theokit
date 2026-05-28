@@ -25,6 +25,17 @@
  * shape works. `send` returns a `SdkRunLike` (a Run-shaped object) that
  * `streamAgentRun` can consume. Permissive `unknown` for now; consumers
  * who want stricter types can cast to the SDK's own types.
+ *
+ * **T5.2 (architecture-cleanup) — DP-7 decision: KEEP (Opt B).** The 5 duck-typed
+ * mirrors below were flagged as "over-engineered" by the 2026-05-27 architecture
+ * review. Decision: KEEP them because `@usetheo/sdk` is `devDependency` (not
+ * required at runtime for consumers that don't use agent features). Removing
+ * the mirrors would force a hard runtime dep on the SDK, breaking consumers
+ * who build TheoKit apps without the agent layer.
+ *
+ * @kept Defensive duck-type. Do NOT replace with direct SDK type imports unless
+ *   `@usetheo/sdk` is promoted from devDependency to dependency. If promoting,
+ *   ALSO drop the mirrors (Opt A from the architecture-cleanup plan T5.2).
  */
 export interface SdkRunLike {
   stream: () => AsyncIterable<{ type: string }>

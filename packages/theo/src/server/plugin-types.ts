@@ -47,3 +47,24 @@ export interface TheoPlugin {
   name: string
   register(app: TheoApp): void | Promise<void>
 }
+
+/**
+ * Identity function for plugin authors. Provides auto-completion + type
+ * inference at the call site (TanStack/Vite/Astro pattern). Pure runtime
+ * no-op — returns the input unchanged.
+ *
+ * @example
+ *   import { definePlugin } from 'theokit/server'
+ *   export default definePlugin({
+ *     name: 'my-plugin',
+ *     register(app) {
+ *       app.addHook('onRequest', (req) => { ... })
+ *     },
+ *   })
+ *
+ * Equivalent to `const p: TheoPlugin = {...}` but more ergonomic. See
+ * ADR-0008 (D1 + D6) for the rationale.
+ */
+export function definePlugin(plugin: TheoPlugin): TheoPlugin {
+  return plugin
+}

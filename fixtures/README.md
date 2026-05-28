@@ -59,6 +59,9 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | react-query-integration | `theokit/react-query` driving `@tanstack/react-query` | full-cov |
 | server-actions-basic | `defineAction` with Zod and form submit | base |
 | server-routes-basic | `defineRoute` with Zod query/body/params | base |
+| services-both | polyglot Python + Node services with `dependsOn` topological order | wave-2-completion |
+| services-node-basic | polyglot Node (Hono) sidecar via `services: {}` orchestration | wave-2-completion |
+| services-python-basic | polyglot Python (FastAPI) sidecar via `services: {}` orchestration | wave-2-completion |
 | sessions-auth | `createSessionManager` + `requireAuth` + EC-2 secret guard | full-cov |
 | ssr-basic | single-shot server-side rendering | base |
 | ssr-streaming | `renderToPipeableStream` + Suspense progressive flush | full-cov |

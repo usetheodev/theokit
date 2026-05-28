@@ -119,6 +119,7 @@ Open http://localhost:3000, type a message, hit Send. The chat thread renders th
 - **Server rendering on demand** — opt in with one flag.
 - **Rate limiting built in** — off by default, one config away.
 - **Generators that scaffold** — `theokit generate route users`, done.
+- **Add a Python or Node service when you actually need one** — opt-in, not required. The TS `server/` already ships login, users, sessions, billing, jobs, crons, and the agent endpoint. A sidecar enters only when the use case needs another language's library ecosystem (ML inference, OCR) or operational isolation. See [Polyglot services — when to use them](#polyglot-services--opt-in).
 - **Deploys anywhere, lands on TheoCloud** — 8 adapters shipped today (Node, Vercel, Cloudflare Workers, AWS Lambda, Bun, Deno Deploy, Netlify, Static) plus Docker via `theokit docker`. **TheoCloud** is the principal target — managed runtime with hosted Postgres, Redis, secret rotation, audit log; pluggable interfaces (`JobBackend`, `UsageStorageAdapter`) already designed for it. TheoCloud adapter ships with the next milestone.
 - **Real starting templates** — default, dashboard, API-only, Postgres.
 
@@ -377,6 +378,33 @@ npx create-theokit my-app --template=api-only     # API routes only
 npx create-theokit my-app --template=postgres     # Drizzle ORM + PostgreSQL
 ```
 
+> **Coming in Wave 2** (next major after 0.4.0): `--backend python` and `--backend node` flags will scaffold an optional sidecar service next to the TS app. See the section below for when sidecars make sense — and when they don't.
+
+## Polyglot services — opt-in
+
+**The TS `server/` directory ships everything you need for an agent product end-to-end.** Auth, users, sessions, billing webhooks, jobs, crons, agent endpoint, Telegram bot — all in TypeScript, all in one process, all already wired today. **90% of agent products live entirely in `server/`.**
+
+A polyglot sidecar (Python or Node service, declared via `services: {}` in `theo.config.ts`) is **opt-in**. It enters only when the use case **needs** another language's ecosystem or operational isolation — not as a default architecture.
+
+**Concrete decision table:**
+
+| Scenario | Stays in TS `server/` | Sidecar makes sense |
+|---|:---:|---|
+| Login, sessions, encrypted cookies | ✅ | — |
+| CRUD users + admin panel | ✅ | — |
+| Agent chat via `@usetheo/sdk` | ✅ | — |
+| Stripe billing + webhooks | ✅ | — |
+| Jobs (`defineJob`) + crons (`defineCron`) | ✅ | Node sidecar **only** if you need workers scaled independently from the app |
+| Telegram / Discord bot (via `@usetheo/gateway-*`) | ✅ | — |
+| ML inference (sentence-transformers, scikit-learn, PyTorch) | ⚠️ painful in TS | ✅ Python sidecar |
+| OCR / heavy PDF parsing (Tesseract, pdfplumber) | ⚠️ painful in TS | ✅ Python sidecar |
+| Integrating an existing Node monolith / legacy API | ❌ | ✅ Node sidecar as reverse proxy `/api/legacy/*` |
+| Microservice isolation (separate scaling, separate deploy) | depends | ✅ Node sidecar if isolation matters |
+
+**The rule:** if the use case is comfortable in TS, use `server/`. If it needs another language's library ecosystem or operational isolation, add a sidecar. **Sidecars complement the TS app; they do not substitute it.** The agent runtime stays in TS via `@usetheo/sdk` in all cases (Wave 2 priority — additional language-native SDKs are deferred, not banned, per [ADR-0012](docs/adr/0012-mission-expansion-agent-products-on-like-vercel-runtime.md)).
+
+**`services: {}` is empty by default.** A user who never opens that key in `theo.config.ts` gets a full agent product end-to-end with the existing TheoKit primitives — same as today.
+
 ## Configuration
 
 ```typescript
@@ -414,11 +442,12 @@ import { theoFetch, TheoFetchError } from 'theokit/client'
 
 TheoKit sits inside the [`usetheo`](https://usetheo.dev) product family. It is **self-contained** for any deploy (builds, ships, and runs without any sibling on any of the 8 in-tree adapters), and **TheoCloud is its principal strategic target** — the hosted product where TheoKit apps are designed to run in production. The relationships below are stated literally, against the code.
 
-| Sibling | Repo | How TheoKit consumes it | Status |
-|---------|------|------------------------|:------:|
-| **`@usetheo/sdk`** — agent runtime (`Agent.create`, `Agent.send`, `Run.stream`, provider abstraction, tool runtime, conversation persistence) | `theokit-sdk/packages/sdk` | **Workspace dep** via `pnpm-workspace.yaml` → `../theokit-sdk/packages/sdk`. Six framework files consume it (`server/agent/*`, `server/define/define-agent-tool.ts`). Locked premise in `CLAUDE.md` — not "evaluate vs alternatives". | ✅ Wired |
-| **`@usetheo/ui`** — React component library (chat surface, theme system, design tokens) | `theo-ui/` | **npm dep** via published `@usetheo/ui` package (`^0.11.0-next.0`). Framework auto-injects `<TheoUIProvider>` via `theokit/vite-plugin` when the package is detected. Ten+ files consume it. **Not** linked as a workspace package — local edits to `theo-ui/` require a publish to land in TheoKit. | ✅ Wired (npm) |
-| **`theo` → TheoCloud** — managed platform / control plane (Go-based: K8s operators, Helm charts, hosted Postgres + Redis, secret rotation, audit log persistence, distributed rate-limiter store) | `theo/` | **The principal deploy target.** The `theo-cloud` deploy adapter does not exist yet (`packages/theo/src/adapters/theo-cloud.ts` is the next milestone after 0.4.0). **However:** TheoKit's pluggable interfaces (`JobBackend`, `UsageStorageAdapter`, `RateLimitStorageAdapter`, structured logging to stdout) were designed specifically so TheoCloud "slots in" without modifying framework code — per `docs/adr/0002-job-backend-interface-neutral-contract.md`. TheoCloud-side issues #58, #59, #60 interlock with TheoKit's security primitives. | 🟡 **Primary target — adapter on roadmap, interfaces ready** |
+| Sibling | Repo | Direction | How it relates | Status |
+|---------|------|-----------|----------------|:------:|
+| **`@usetheo/sdk`** — agent runtime (`Agent.create`, `Agent.send`, `Run.stream`, provider abstraction, tool runtime, conversation persistence) | `theokit-sdk/packages/sdk` | TheoKit ← sibling | **Workspace dep** via `pnpm-workspace.yaml` → `../theokit-sdk/packages/sdk`. Six framework files consume it (`server/agent/*`, `server/define/define-agent-tool.ts`). Locked premise — not "evaluate vs alternatives". | ✅ Wired |
+| **`@usetheo/ui`** — React component library (chat surface, theme system, design tokens) | `theo-ui/` | TheoKit ← sibling | **npm dep** via published `@usetheo/ui` package (`^0.11.0-next.0`). Framework auto-injects `<TheoUIProvider>` via `theokit/vite-plugin` when the package is detected. Ten+ files consume it. **Not** linked as a workspace package — local edits to `theo-ui/` require a publish to land in TheoKit. | ✅ Wired (npm) |
+| **`theo` → TheoCloud** — managed platform / control plane (Go-based: K8s operators, Helm charts, hosted Postgres + Redis, secret rotation, audit log persistence, distributed rate-limiter store) | `theo/` | TheoKit → sibling | **The principal deploy target.** The `theo-cloud` deploy adapter does not exist yet (`packages/theo/src/adapters/theo-cloud.ts` is the next milestone after 0.4.0). **However:** TheoKit's pluggable interfaces (`JobBackend`, `UsageStorageAdapter`, `RateLimitStorageAdapter`, structured logging to stdout) were designed specifically so TheoCloud "slots in" without modifying framework code — per [ADR-0002](docs/adr/0002-job-backend-interface-neutral-contract.md). | 🟡 **Primary target — adapter on roadmap, interfaces ready** |
+| **`theokit-plugins`** — first-party plugin registry. Today: **1 package shipping** (`@theokit/plugin-cors` v0.1.0, 2026-Q3). Two proposed: `@theokit/plugin-sentry` + `@theokit/plugin-i18n`. Six more demand-gated. | `theokit-plugins/` | TheoKit → sibling (the sibling consumes the framework, not the other way around) | **Zero coupling in framework core.** Apps install plugins explicitly (`pnpm add @theokit/plugin-cors`) and wire them via `defineConfig({ plugins: [...] })`. The sibling consumes TheoKit via npm `peerDependencies` + the `TheoPlugin { name, register(app) }` SDK ([ADR-0008](docs/adr/0008-theoplugin-is-the-canonical-sdk.md)). The "moderate roadmap" strategy that governs which plugins ship lives in [ADR-0011](docs/adr/0011-moderate-plugin-roadmap-strategy.md) here, and the authoring guide in [`docs/concepts/plugins.md`](docs/concepts/plugins.md) §7. | 🌱 **First plugin shipping** |
 
 **What this means in practice:**
 
@@ -427,6 +456,7 @@ TheoKit sits inside the [`usetheo`](https://usetheo.dev) product family. It is *
 - The agent runtime (`@usetheo/sdk`) is required for any agent feature — if you only need routing/auth/SSR/jobs, you don't have to use it.
 - The UI library (`@usetheo/ui`) is opt-in but the default scaffold bundles it; if you swap it out, the framework's auto-injection becomes a no-op.
 - A user can clone TheoKit and run `pnpm install && pnpm dev` without cloning the `theo` (Go) sibling — non-TheoCloud paths are fully self-contained.
+- **Plugins are opt-in additions, not framework features.** `theokit-plugins` lives next to TheoKit, not inside it. Install only what you need; the framework core ships nothing from this repo. The plugin SDK they consume (`TheoPlugin`, `definePlugin`) is in `theokit/server` — you can author your own under `@<scope>/theokit-plugin-<name>` without permission.
 
 ## Status
 
