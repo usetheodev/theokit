@@ -246,7 +246,9 @@ jobs:
         run: |
           SCHEME='post'; SCHEME="${SCHEME}gres"
           DATABASE_URL="${SCHEME}://${PG_USER}:${PG_PASS}@${PG_HOST}:${PG_PORT}/${PG_DB}" \
-            npx playwright test --project=template-postgres --reporter=line
+            npx playwright test \
+              --config playwright.postgres-templates.config.ts \
+              --project=template-postgres --reporter=line
       - name: Run template-saas spec
         env:
           PG_USER: postgres
@@ -257,7 +259,9 @@ jobs:
         run: |
           SCHEME='post'; SCHEME="${SCHEME}gres"
           DATABASE_URL="${SCHEME}://${PG_USER}:${PG_PASS}@${PG_HOST}:${PG_PORT}/${PG_DB}" \
-            npx playwright test --project=template-saas --reporter=line
+            npx playwright test \
+              --config playwright.postgres-templates.config.ts \
+              --project=template-saas --reporter=line
 
   secret-scan:
     name: Secret scan
