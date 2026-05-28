@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  bunAdapter,
-  buildBun,
-  renderBunEntry,
-} from '../../packages/theo/src/adapters/bun.js'
+import { bunAdapter, buildBun, renderBunEntry } from '../../packages/theo/src/adapters/bun.js'
 import { VALID_TARGETS } from '../../packages/theo/src/adapters/types.js'
 import type { TheoConfig } from '../../packages/theo/src/config/schema.js'
 

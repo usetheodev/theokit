@@ -31,10 +31,7 @@ beforeAll(async () => {
   </body>
 </html>`,
   )
-  writeFileSync(
-    join(tmpRoot, 'theo.config.ts'),
-    `export default {}`,
-  )
+  writeFileSync(join(tmpRoot, 'theo.config.ts'), `export default {}`)
   writeFileSync(join(tmpRoot, 'package.json'), JSON.stringify({ name: 'tmp' }))
   // Empty app/page.tsx so the framework boots
   mkdirSync(join(tmpRoot, 'app'), { recursive: true })

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   createBatchTransport,
   __resetGlobalBatcherForTests,
@@ -6,13 +6,14 @@ import {
 
 describe('createBatchTransport — default HTTP transport (T1.5)', () => {
   it('posts to /api/__theo_batch__ with payload', async () => {
-    const fetchSpy = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          results: [{ data: { ok: true } }, { data: { ok: true } }],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            results: [{ data: { ok: true } }, { data: { ok: true } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     )
     const transport = createBatchTransport({ fetchImpl: fetchSpy })
     const results = await transport([
@@ -31,22 +32,18 @@ describe('createBatchTransport — default HTTP transport (T1.5)', () => {
       throw new Error('network')
     })
     const transport = createBatchTransport({ fetchImpl: fetchSpy })
-    await expect(
-      transport([{ path: '/api/a', method: 'GET' }]),
-    ).rejects.toThrow(/network/)
+    await expect(transport([{ path: '/api/a', method: 'GET' }])).rejects.toThrow(/network/)
   })
 
   it('reports per-item errors from server response', async () => {
-    const fetchSpy = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          results: [
-            { data: { ok: true } },
-            { error: { message: 'not found' } },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            results: [{ data: { ok: true } }, { error: { message: 'not found' } }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     )
     const transport = createBatchTransport({ fetchImpl: fetchSpy })
     const results = await transport([
@@ -58,13 +55,11 @@ describe('createBatchTransport — default HTTP transport (T1.5)', () => {
   })
 
   it('throws when batch endpoint returns 404 (fallback signal)', async () => {
-    const fetchSpy = vi.fn(async () =>
-      new Response('{"error":{"code":"NOT_FOUND"}}', { status: 404 }),
+    const fetchSpy = vi.fn(
+      async () => new Response('{"error":{"code":"NOT_FOUND"}}', { status: 404 }),
     )
     const transport = createBatchTransport({ fetchImpl: fetchSpy })
-    await expect(
-      transport([{ path: '/api/a', method: 'GET' }]),
-    ).rejects.toThrow()
+    await expect(transport([{ path: '/api/a', method: 'GET' }])).rejects.toThrow()
   })
 })
 

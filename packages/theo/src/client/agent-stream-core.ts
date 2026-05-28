@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../server/agent-types.js'
+import type { AgentEvent } from '../core/contracts/agent-events.js'
 
 /**
  * T5.2 — Pure SSE consumer used by useAgentStream.
@@ -25,6 +25,20 @@ export interface ConsumeOptions<TBody = unknown> {
 }
 
 /**
+ * Dispatch SSE events from a list of `\n\n`-separated chunk parts.
+ * Extracted to keep the streaming loop under the max-depth ceiling.
+ */
+function dispatchSseParts(parts: string[], onEvent: (event: AgentEvent) => void): void {
+  for (const part of parts) {
+    // A chunk may contain multiple lines; keep only the data: line.
+    for (const line of part.split('\n')) {
+      const evt = parseSSEChunk(line)
+      if (evt) onEvent(evt)
+    }
+  }
+}
+
+/**
  * Parse a single SSE line of the form `data: <json>`.
  * Returns null for non-data lines, comments, or malformed JSON.
  */
@@ -43,6 +57,10 @@ export function parseSSEChunk(line: string): AgentEvent | null {
  * POSTs to `path` with `body`, reads the SSE response, and invokes
  * `onEvent` for each parsed AgentEvent. Resolves when the server
  * closes the stream or the signal aborts.
+ *
+ * T1.1 — Attaches `X-Theo-Action: '1'` so 0.3.0 strict CSRF mode accepts
+ * the request. The user can override (or suppress) by passing the header
+ * in `options.headers` — spread order ensures their value wins.
  */
 export async function consumeAgentStream<TBody = unknown>(
   path: string,
@@ -54,6 +72,7 @@ export async function consumeAgentStream<TBody = unknown>(
     headers: {
       'content-type': 'application/json',
       accept: 'text/event-stream',
+      'X-Theo-Action': '1',
       ...options.headers,
     },
     body: JSON.stringify(options.body),
@@ -67,22 +86,18 @@ export async function consumeAgentStream<TBody = unknown>(
   let buf = ''
 
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
+    let done = false
+    while (!done) {
+      const chunk = await reader.read()
+      done = chunk.done
+      if (done) continue
+      buf += decoder.decode(chunk.value, { stream: true })
 
       // SSE separates events with a blank line: `\n\n`.
       // Split, keep the trailing partial in buf.
       const parts = buf.split('\n\n')
       buf = parts.pop() ?? ''
-      for (const part of parts) {
-        // A chunk may contain multiple lines; keep only the data: line.
-        for (const line of part.split('\n')) {
-          const evt = parseSSEChunk(line)
-          if (evt) options.onEvent(evt)
-        }
-      }
+      dispatchSseParts(parts, options.onEvent)
     }
   } finally {
     try {

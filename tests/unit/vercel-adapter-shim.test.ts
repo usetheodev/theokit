@@ -47,9 +47,7 @@ describe('renderVercelConfigJson — routing rules', () => {
     const cfg = renderVercelConfigJson()
     expect(cfg.version).toBe(3)
     expect(cfg.routes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ src: '/api/(.*)' }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ src: '/api/(.*)' })]),
     )
   })
 })

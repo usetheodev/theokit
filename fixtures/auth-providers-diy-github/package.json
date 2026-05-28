@@ -1,0 +1,5 @@
+{
+  "name": "auth-providers-diy-github",
+  "private": true,
+  "type": "module"
+}

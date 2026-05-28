@@ -1,25 +1,40 @@
-import { createServer } from 'node:http'
-import { randomUUID } from 'node:crypto'
+/**
+ * theokit start — production server orchestration spine.
+ *
+ * T4.2 (architecture-cleanup, ADR-0017): stages extracted to sibling modules.
+ *   - start-bootstrap-stages.ts   — config/registry/storage bootstrap + resolveSsrEntry
+ *   - start-manifest-loader.ts    — manifest.json or scan fallback
+ *   - start-ssr-setup.ts          — SSR entry-server + HTML template split
+ *   - start-handlers.ts           — branch handlers (action/route/static/404)
+ *   - start-request-handler.ts    — request lifecycle wiring
+ *   - start-websocket-handler.ts  — WS upgrade (opt-in)
+ *   - start-graceful-shutdown.ts  — SIGTERM/SIGINT drain
+ */
+
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve, join, extname } from 'node:path'
+import { createServer } from 'node:http'
+import { join, resolve } from 'node:path'
+
 import { loadConfig } from '../../config/load-config.js'
-import { scanServerRoutes } from '../../server/scan.js'
-import { scanServerActions } from '../../server/action-scan.js'
-import { matchRoute } from '../../server/match.js'
-import { executeRoute, sendError } from '../../server/execute.js'
-import { executeAction } from '../../server/action-execute.js'
-import { createProductionLoader } from '../../server/module-loader.js'
-import { serveStaticFile } from '../../server/static.js'
-import { logRequest } from '../../server/logger.js'
-import { createRateLimiter } from '../../server/rate-limit.js'
-import { findSuggestion } from '../../server/suggest.js'
-import { scanWebSocketRoutes } from '../../server/ws-scan.js'
-import { loadManifest } from '../../server/manifest.js'
-import { createPluginRunnerFromConfig } from '../../server/load-plugins.js'
+import { loadEnv } from '../../config/load-env.js'
+import { createPluginRunnerFromConfig } from '../../server/plugins/load-plugins.js'
+import { createRateLimiter } from '../../server/rate-limit/rate-limit.js'
+import { createProductionLoader } from '../../server/scan/module-loader.js'
 import { resolveTransformer } from '../../server/transformer.js'
-import type { ServerRouteNode } from '../../server/match.js'
-import type { ActionNode } from '../../server/action-scan.js'
-import type { WebSocketRouteNode } from '../../server/ws-scan.js'
+
+import {
+  configureAgentRegistryFromConfig,
+  configureStorageManagerFromConfig,
+} from './start-bootstrap-stages.js'
+import { installGracefulShutdown } from './start-graceful-shutdown.js'
+import type { RequestHandlerCtx } from './start-handlers.js'
+import { loadRoutesAndActions } from './start-manifest-loader.js'
+import { createRequestHandler } from './start-request-handler.js'
+import { setupSsr } from './start-ssr-setup.js'
+import { attachWebSocketHandler } from './start-websocket-handler.js'
+
+// Backwards-compat: external test fixtures may import resolveSsrEntry from here.
+export { resolveSsrEntry } from './start-bootstrap-stages.js'
 
 interface StartOptions {
   port?: number
@@ -27,7 +42,11 @@ interface StartOptions {
 
 export async function startCommand(options: StartOptions): Promise<void> {
   const cwd = process.cwd()
+  loadEnv({ cwd, mode: 'production' })
   const config = await loadConfig(cwd)
+
+  await configureAgentRegistryFromConfig(config.agents?.registry)
+  await configureStorageManagerFromConfig(config.storage)
 
   const distDir = resolve(cwd, '.theo')
   const clientDir = resolve(distDir, 'client')
@@ -43,262 +62,69 @@ export async function startCommand(options: StartOptions): Promise<void> {
   const pluginRunner = await createPluginRunnerFromConfig(config.plugins)
   const transformer = resolveTransformer(config.serialization)
 
-  // Custom error pages (optional)
   const custom404Path = join(clientDir, '404.html')
   const custom500Path = join(clientDir, '500.html')
   const custom404Html = existsSync(custom404Path) ? readFileSync(custom404Path, 'utf-8') : null
   const custom500Html = existsSync(custom500Path) ? readFileSync(custom500Path, 'utf-8') : null
 
-  // Load routes/actions from manifest (built at build time) or fallback to scan
-  let cachedRoutes: ServerRouteNode[]
-  let cachedActions: ActionNode[]
-  let cachedWsRoutes: WebSocketRouteNode[]
+  const {
+    routes: cachedRoutes,
+    actions: cachedActions,
+    wsRoutes: cachedWsRoutes,
+  } = loadRoutesAndActions(distDir, serverDir)
 
-  const manifestPath = join(distDir, 'manifest.json')
-  if (existsSync(manifestPath)) {
-    const manifest = loadManifest(distDir, serverDir)
-    cachedRoutes = manifest.routes
-    cachedActions = manifest.actions
-    cachedWsRoutes = manifest.websockets
-  } else {
-    console.warn('  ⚠ No manifest found, scanning routes at startup. Run "theo build" to generate manifest.')
-    cachedRoutes = scanServerRoutes(serverDir)
-    cachedActions = scanServerActions(serverDir)
-    cachedWsRoutes = scanWebSocketRoutes(serverDir)
-  }
+  // Rate limiter (legacy flat form only — per-route variant is handled in
+  // api-middleware integration path, not this fallback).
+  const flatRateLimit =
+    config.rateLimit && 'windowMs' in config.rateLimit && 'max' in config.rateLimit
+      ? config.rateLimit
+      : undefined
+  const rateLimiter = flatRateLimit ? createRateLimiter(flatRateLimit) : null
 
-  // Rate limiter (opt-in)
-  const rateLimiter = config.rateLimit
-    ? createRateLimiter(config.rateLimit)
-    : null
-
-  // SSR setup (opt-in)
-  const ssrServerPath = resolve(distDir, 'server/entry-server.js')
-  const ssrEnabled = config.ssr && existsSync(ssrServerPath)
-  const ssrStreamingEnabled = ssrEnabled && config.ssrStreaming === true
-  let ssrRender: ((url: string) => Promise<string | { redirect: Response }>) | null = null
-  let ssrRenderStreaming:
-    | ((
-        url: string,
-        response: import('node:http').ServerResponse,
-        options?: { signal?: AbortSignal },
-      ) => Promise<{ redirect: Response } | { streaming: true } | void>)
-    | null = null
-  let htmlHead = ''
-  let htmlTail = ''
-
-  if (ssrEnabled) {
-    const mod = await import(ssrServerPath)
-    ssrRender = mod.render
-    // T6.1: renderStreaming is only exported when ssrStreaming was enabled
-    // at build time. Capture both so we can switch per request without re-importing.
-    ssrRenderStreaming = typeof mod.renderStreaming === 'function' ? mod.renderStreaming : null
-    // Split HTML template on root div
-    const rootDivMatch = indexHtml.match(/<div id=["']root["'][^>]*>/)
-    if (rootDivMatch) {
-      const splitIdx = indexHtml.indexOf(rootDivMatch[0]) + rootDivMatch[0].length
-      htmlHead = indexHtml.slice(0, splitIdx)
-      htmlTail = indexHtml.slice(splitIdx)
-    }
-  }
-
-  const server = createServer(async (req, res) => {
-    const url = req.url ?? '/'
-    const requestId = randomUUID()
-    const start = Date.now()
-
-    try {
-      // 1. Action routes
-      if (url.startsWith('/api/__actions/')) {
-        res.setHeader('x-request-id', requestId)
-
-        // Rate limit check
-        if (rateLimiter) {
-          const check = rateLimiter(req)
-          for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
-          if (check.limited) {
-            sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
-            logRequest({ method: req.method ?? 'POST', url, status: 429, duration: Date.now() - start, requestId })
-            return
-          }
-        }
-
-        const pathAfterPrefix = url.slice('/api/__actions/'.length).split('?')[0]
-        const segments = pathAfterPrefix.split('/').filter(Boolean)
-        if (segments.length < 2) {
-          sendError(res, 'BAD_REQUEST', 'Action URL must be /api/__actions/{file}/{exportName}', 400, undefined, requestId)
-          logRequest({ method: req.method ?? 'POST', url, status: 400, duration: Date.now() - start, requestId })
-          return
-        }
-        const exportName = segments[segments.length - 1]
-        const actionPath = segments.slice(0, -1).join('/')
-        const action = cachedActions.find((a) => a.actionPath === actionPath)
-        if (!action) {
-          const actionPaths = cachedActions.map((a) => a.actionPath)
-          const suggestion = findSuggestion(actionPath, actionPaths)
-          const msg = suggestion
-            ? `Action "${actionPath}" not found. Did you mean: ${suggestion}?`
-            : `Action "${actionPath}" not found`
-          sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
-          logRequest({ method: req.method ?? 'POST', url, status: 404, duration: Date.now() - start, requestId })
-          return
-        }
-        await executeAction(action.filePath, exportName, req, res, loadModule, serverDir, requestId)
-        logRequest({ method: req.method ?? 'POST', url, status: res.statusCode, duration: Date.now() - start, requestId })
-        return
-      }
-
-      // 2. API routes
-      if (url.startsWith('/api/')) {
-        res.setHeader('x-request-id', requestId)
-
-        // Rate limit check
-        if (rateLimiter) {
-          const check = rateLimiter(req)
-          for (const [k, v] of Object.entries(check.headers)) res.setHeader(k, v)
-          if (check.limited) {
-            sendError(res, 'RATE_LIMITED', 'Too many requests', 429, undefined, requestId)
-            logRequest({ method: req.method ?? 'GET', url, status: 429, duration: Date.now() - start, requestId })
-            return
-          }
-        }
-
-        const match = matchRoute(url, cachedRoutes)
-        if (!match) {
-          const urlPath = url.split('?')[0]
-          const routePaths = cachedRoutes.map((r) => r.routePath)
-          const suggestion = findSuggestion(urlPath, routePaths)
-          const msg = suggestion
-            ? `API route not found: ${urlPath}. Did you mean: ${suggestion}?`
-            : 'API route not found'
-          sendError(res, 'NOT_FOUND', msg, 404, undefined, requestId)
-          logRequest({ method: req.method ?? 'GET', url, status: 404, duration: Date.now() - start, requestId })
-          return
-        }
-        const method = (req.method ?? 'GET').toUpperCase()
-        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId, pluginRunner, transformer)
-        logRequest({ method, url, status: res.statusCode, duration: Date.now() - start, requestId })
-        return
-      }
-
-      // 3. Static files
-      if (serveStaticFile(req, res, clientDir)) return
-
-      // 4. Custom 404 for URLs with file extensions (missing static files)
-      const urlPath = url.split('?')[0]
-      if (custom404Html && extname(urlPath)) {
-        res.writeHead(404, { 'Content-Type': 'text/html' })
-        res.end(custom404Html)
-        return
-      }
-
-      // 5. SSR or SPA fallback
-      // T6.1: prefer streaming when config.ssrStreaming AND the build emitted renderStreaming.
-      if (ssrStreamingEnabled && ssrRenderStreaming) {
-        // Wire client-disconnect → AbortController (EC-11)
-        const controller = new AbortController()
-        const onClose = (): void => controller.abort()
-        req.on('close', onClose)
-        try {
-          const result = await ssrRenderStreaming(url, res, { signal: controller.signal })
-          if (result && typeof result === 'object' && 'redirect' in result) {
-            res.writeHead(302, { Location: (result.redirect as Response).headers.get('location') ?? '/' })
-            res.end()
-            return
-          }
-          // When renderStreaming succeeds it has already piped + flushed headers.
-          // It is responsible for calling res.end() once the stream is drained.
-          return
-        } catch (streamErr) {
-          console.error('[SSR Stream Error]', (streamErr as Error).message)
-          if (!res.headersSent) {
-            res.writeHead(500, { 'Content-Type': 'text/html' })
-          }
-          if (!res.writableEnded) {
-            res.end(custom500Html ?? '<h1>500 — Server Error</h1>')
-          }
-          return
-        } finally {
-          req.removeListener('close', onClose)
-        }
-      }
-      if (ssrRender) {
-        try {
-          const result = await ssrRender(url)
-          if (result && typeof result === 'object' && 'redirect' in result) {
-            res.writeHead(302, { Location: result.redirect.headers.get('location') ?? '/' })
-            res.end()
-            return
-          }
-          const ssrHtml = result as string
-          res.writeHead(200, { 'Content-Type': 'text/html' })
-          res.end(htmlHead + ssrHtml + htmlTail)
-          return
-        } catch (ssrErr) {
-          console.error('[SSR Error] Falling back to CSR:', (ssrErr as Error).message)
-          // Fall through to CSR fallback
-        }
-      }
-
-      // CSR fallback
-      res.writeHead(200, { 'Content-Type': 'text/html' })
-      res.end(indexHtml)
-    } catch (err) {
-      // Custom 500 page for non-API errors
-      if (custom500Html && !res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'text/html' })
-        res.end(custom500Html)
-      } else if (!res.headersSent) {
-        sendError(res, 'INTERNAL_ERROR', (err as Error).message, 500)
-      } else {
-        res.end()
-      }
-    }
+  const ssr = await setupSsr({
+    distDir,
+    indexHtml,
+    ssrConfigEnabled: config.ssr,
+    ssrStreamingConfig: config.ssrStreaming,
   })
 
-  // WebSocket upgrade handler (opt-in: only if server/ws/ exists)
-  if (cachedWsRoutes.length > 0) {
-    try {
-      const { WebSocketServer } = await import('ws')
-      const wss = new WebSocketServer({ noServer: true })
+  const server = createServer(
+    createRequestHandler({
+      buildCtx: (req, res, requestId, startTime): RequestHandlerCtx => ({
+        req,
+        res,
+        url: req.url ?? '/',
+        requestId,
+        startTime,
+        clientDir,
+        custom404Html,
+        cachedRoutes,
+        cachedActions,
+        loadModule,
+        serverDir,
+        pluginRunner,
+        transformer,
+        csrfMode: config.security?.csrf ?? 'strict',
+        disallowed: config.security?.disallowed,
+        rateLimiter,
+      }),
+      securityHeadersConfig: config.security?.headers ?? {},
+      ssrRender: ssr.render,
+      ssrRenderStreaming: ssr.renderStreaming,
+      ssrStreamingEnabled: ssr.streamingEnabled,
+      htmlHead: ssr.htmlHead,
+      htmlTail: ssr.htmlTail,
+      indexHtml,
+      custom500Html,
+    }),
+  )
 
-      server.on('upgrade', async (request, socket, head) => {
-        const url = request.url ?? '/'
-        if (!url.startsWith('/ws/')) {
-          socket.destroy()
-          return
-        }
-
-        const wsPath = url.split('?')[0]
-        const match = cachedWsRoutes.find(r => r.wsPath === wsPath)
-        if (!match) {
-          socket.destroy()
-          return
-        }
-
-        try {
-          const mod = await loadModule(match.filePath)
-          const handler = (mod.default ?? mod) as import('../../server/define-websocket.js').WebSocketHandler
-
-          wss.handleUpgrade(request, socket, head, (ws) => {
-            handler.onOpen?.(ws, request)
-            ws.on('message', (data: Buffer) => handler.onMessage?.(ws, data.toString()))
-            ws.on('close', (code: number, reason: Buffer) => handler.onClose?.(ws, code, reason))
-            ws.on('error', (err: Error) => handler.onError?.(ws, err))
-          })
-        } catch {
-          socket.destroy()
-        }
-      })
-    } catch {
-      throw new Error(
-        'WebSocket routes found but "ws" package is not installed. Run: npm install ws',
-      )
-    }
-  }
+  await attachWebSocketHandler(server, cachedWsRoutes, loadModule)
 
   server.listen(port, () => {
     console.log(`\n  Theo production server`)
-    console.log(`  → http://localhost:${port}\n`)
+    console.log(`  → http://localhost:${String(port)}\n`)
   })
+
+  installGracefulShutdown(server)
 }

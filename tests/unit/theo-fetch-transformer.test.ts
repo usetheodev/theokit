@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   deserializeFetchResponse,
   __resetMismatchWarningForTests,
@@ -44,8 +44,6 @@ describe('deserializeFetchResponse (T1.3)', () => {
   })
 
   it('propagates deserialize errors with transformer name (EC)', () => {
-    expect(() =>
-      deserializeFetchResponse('not-valid-json', null, 'json'),
-    ).toThrow()
+    expect(() => deserializeFetchResponse('not-valid-json', null, 'json')).toThrow()
   })
 })

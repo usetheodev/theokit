@@ -585,6 +585,8 @@ BDD scenarios:
 
 ### T4.1 — Generate + thread per-request nonce through SSR
 
+> **Status: ✅ Validated end-to-end 2026-05-22.** All unit + integration coverage in place (16 tests in `tests/unit/security-headers-nonce.test.ts` + `tests/unit/nonce.test.ts`). **Playwright validation gap closed** via new `tests/e2e/ssr-nonce.spec.ts` against `fixtures/ssr-basic` on port 3492 — 3/3 GREEN in 2 consecutive CI runs. Fix landed in same session: `packages/theo/src/router/entry-server.ts` was passing `nonce: options.nonce` to `renderToPipeableStream` but NOT to `StaticRouterProvider`. That meant the inline hydration script `<script>window.__staticRouterHydrationData = ...</script>` (emitted by react-router, NOT React directly) was shipping without the nonce attr — in strict CSP mode without `'unsafe-inline'`, the browser would block hydration → silent client-only fallback → page looks dead. The fix passes `nonce: options.nonce` as a prop to `StaticRouterProvider` per react-router 7's `StaticRouterProviderProps`. Validated via `curl -i http://localhost:3492/` → confirmed `<script nonce="...">window.__staticRouterHydrationData...` matches CSP `'nonce-...'`. Pre-existing follow-up: `tests/e2e/template-default.spec.ts` fails 3/8 due to items #3/#4 transition from mock chat to SDK chat (not item-5/T4.1 regression) — needs spec update to assert `Set ANTHROPIC_API_KEY` friendly error path instead of mock `Recebi: "..."`.
+
 #### Objective
 Generate a cryptographically random nonce per request, attach to context, inject into the inline script tag emitted by `entry-server.tsx`, and emit `nonce-<nonce>` in the CSP `script-src` directive. Document `ctx.nonce` API for user-authored inline scripts.
 

@@ -1,0 +1,20 @@
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install pnpm (or use npm if pnpm not available in image)
+RUN corepack enable && corepack prepare pnpm@latest --activate || true
+
+# Copy manifest and install
+COPY package.json ./
+RUN pnpm install --frozen-lockfile || npm install
+
+# Copy source
+COPY . .
+
+EXPOSE 8002
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
+    CMD wget --spider -q http://localhost:8002/health || exit 1
+
+CMD ["pnpm", "start"]

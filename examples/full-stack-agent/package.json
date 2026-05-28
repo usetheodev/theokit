@@ -1,0 +1,35 @@
+{
+  "name": "@usetheo/example-full-stack-agent",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "theokit dev",
+    "build": "theokit build",
+    "start": "theokit start",
+    "bot": "tsx server/telegram-bot.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@usetheo/gateway": "workspace:*",
+    "@usetheo/gateway-telegram": "workspace:*",
+    "@usetheo/sdk": "workspace:*",
+    "@usetheo/ui": "^0.11.0-next.0",
+    "grammy": "^1.30.0",
+    "lucide-react": "^0.469.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.0.0",
+    "theokit": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@tailwindcss/vite": "^4.0.0",
+    "tailwindcss": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

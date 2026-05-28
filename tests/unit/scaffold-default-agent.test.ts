@@ -2,10 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const TEMPLATE_ROOT = resolve(
-  __dirname,
-  '../../packages/create-theo/templates/default',
-)
+const TEMPLATE_ROOT = resolve(__dirname, '../../packages/create-theo/templates/default')
 
 function read(rel: string): string {
   return readFileSync(resolve(TEMPLATE_ROOT, rel), 'utf-8')
@@ -101,7 +98,9 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
 
   it('app/page.tsx is a Client Component ("use client" directive)', () => {
     const page = read('app/page.tsx')
-    expect(page.trim().startsWith("'use client'") || page.trim().startsWith('"use client"')).toBe(true)
+    expect(page.trim().startsWith("'use client'") || page.trim().startsWith('"use client"')).toBe(
+      true,
+    )
   })
 
   it('T1.2: page.tsx uses useAgentStream hook', () => {
@@ -128,9 +127,12 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
     expect(chat).toMatch(/export const POST/)
   })
 
-  it('server/routes/chat.ts has clear "replace with real LLM" comment (EC-11)', () => {
+  it('server/routes/chat.ts has clear documentation as the canonical agent endpoint (EC-11, updated for item #3)', () => {
+    // Updated 2026-05-22 (item #3): chat.ts is no longer a mock with
+    // "replace with X" comments — it's the canonical SDK wiring. Comment now
+    // explains the SDK-shaped contract (Agent.prompt, throwOnError, providers).
     const chat = read('server/routes/chat.ts')
-    expect(chat).toMatch(/replace|substitua|TODO|LLM/i)
+    expect(chat).toMatch(/agent|@usetheo\/sdk|Agent\.prompt|throwOnError/i)
   })
 
   it('T1.1: chat.ts uses defineAgentEndpoint helper (not manual SSE)', () => {
@@ -199,23 +201,24 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
     expect(layout).toMatch(/<Outlet/)
   })
 
-  it('template ships Tailwind + PostCSS config (TheoUI requires Tailwind v3 processing)', () => {
-    expect(() => read('tailwind.config.ts')).not.toThrow()
-    expect(() => read('postcss.config.js')).not.toThrow()
+  it('zero-config: template DOES NOT ship tailwind.config.ts or postcss.config.js (Phase 3 / @usetheo/ui ^0.5)', () => {
+    expect(() => read('tailwind.config.ts')).toThrow()
+    expect(() => read('postcss.config.js')).toThrow()
   })
 
-  it('tailwind.config scans app/, server/, and @usetheo/ui for utility classes', () => {
-    const cfg = read('tailwind.config.ts')
-    expect(cfg).toMatch(/app\/\*\*/)
-    expect(cfg).toMatch(/@usetheo\/ui/)
+  it('layout imports @usetheo/ui/styles.css (Tailwind v4 entry — pre-bundled by @usetheo/ui)', () => {
+    const layout = read('app/layout.tsx')
+    expect(layout).toMatch(/import\s+['"]@usetheo\/ui\/styles\.css['"]/)
   })
 
-  it('package.json.tmpl declares tailwindcss + postcss + lucide-react', () => {
+  it('package.json.tmpl declares tailwindcss@^4 + @tailwindcss/vite (v4 zero-config) + lucide-react', () => {
     const pkg = read('package.json.tmpl')
-    expect(pkg).toMatch(/"tailwindcss"/)
-    expect(pkg).toMatch(/"postcss"/)
-    expect(pkg).toMatch(/"autoprefixer"/)
-    expect(pkg).toMatch(/"tailwindcss-animate"/)
+    expect(pkg).toMatch(/"tailwindcss":\s*"\^4/)
+    expect(pkg).toMatch(/"@tailwindcss\/vite":\s*"\^4/)
     expect(pkg).toMatch(/"lucide-react"/)
+    // v3 toolchain removed — TheoKit's vite-plugin auto-chains v4 + UI plugin
+    expect(pkg).not.toMatch(/"postcss":/)
+    expect(pkg).not.toMatch(/"autoprefixer":/)
+    expect(pkg).not.toMatch(/"tailwindcss-animate":/)
   })
 })

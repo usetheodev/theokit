@@ -34,10 +34,8 @@ describe('theokit add — bundled adapters (T6.1)', () => {
   })
 
   it('all current registry entries are bundled (no real npm packages exist)', () => {
-    for (const [name, entry] of Object.entries(KNOWN_PACKAGES)) {
+    for (const [, entry] of Object.entries(KNOWN_PACKAGES)) {
       expect(entry.kind).toBe('bundled')
-      // Bundled entries do NOT need an npm name (we don't install)
-      void name
     }
   })
 

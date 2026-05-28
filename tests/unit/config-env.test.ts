@@ -5,60 +5,36 @@ import path from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
-const TEMP_DIR = path.join(tmpdir(), 'theo-env-test-' + Date.now())
+const TEMP_DIR = path.join(tmpdir(), `theo-env-test-${Date.now()}`)
 
 beforeAll(() => {
   // Base config only (no env file)
   const baseOnly = path.join(TEMP_DIR, 'base-only')
   mkdirSync(baseOnly, { recursive: true })
-  writeFileSync(
-    path.join(baseOnly, 'theo.config.ts'),
-    'export default { port: 4000 }',
-  )
+  writeFileSync(path.join(baseOnly, 'theo.config.ts'), 'export default { port: 4000 }')
 
   // Base + production override
   const withProd = path.join(TEMP_DIR, 'with-prod')
   mkdirSync(withProd, { recursive: true })
-  writeFileSync(
-    path.join(withProd, 'theo.config.ts'),
-    'export default { port: 4000, ssr: false }',
-  )
-  writeFileSync(
-    path.join(withProd, 'theo.config.production.ts'),
-    'export default { port: 8080 }',
-  )
+  writeFileSync(path.join(withProd, 'theo.config.ts'), 'export default { port: 4000, ssr: false }')
+  writeFileSync(path.join(withProd, 'theo.config.production.ts'), 'export default { port: 8080 }')
 
   // Partial merge (only ssr override)
   const partial = path.join(TEMP_DIR, 'partial-merge')
   mkdirSync(partial, { recursive: true })
-  writeFileSync(
-    path.join(partial, 'theo.config.ts'),
-    'export default { port: 5000, ssr: false }',
-  )
-  writeFileSync(
-    path.join(partial, 'theo.config.production.ts'),
-    'export default { ssr: true }',
-  )
+  writeFileSync(path.join(partial, 'theo.config.ts'), 'export default { port: 5000, ssr: false }')
+  writeFileSync(path.join(partial, 'theo.config.production.ts'), 'export default { ssr: true }')
 
   // Missing env file (staging env, no file)
   const missingEnv = path.join(TEMP_DIR, 'missing-env')
   mkdirSync(missingEnv, { recursive: true })
-  writeFileSync(
-    path.join(missingEnv, 'theo.config.ts'),
-    'export default { port: 3000 }',
-  )
+  writeFileSync(path.join(missingEnv, 'theo.config.ts'), 'export default { port: 3000 }')
 
   // Invalid env override (invalid port)
   const invalidEnv = path.join(TEMP_DIR, 'invalid-env')
   mkdirSync(invalidEnv, { recursive: true })
-  writeFileSync(
-    path.join(invalidEnv, 'theo.config.ts'),
-    'export default { port: 3000 }',
-  )
-  writeFileSync(
-    path.join(invalidEnv, 'theo.config.production.ts'),
-    'export default { port: -1 }',
-  )
+  writeFileSync(path.join(invalidEnv, 'theo.config.ts'), 'export default { port: 3000 }')
+  writeFileSync(path.join(invalidEnv, 'theo.config.production.ts'), 'export default { port: -1 }')
 })
 
 afterEach(() => {
@@ -76,20 +52,14 @@ describe('deepMerge', () => {
   it('should deep merge nested objects', () => {
     const base = { nested: { a: 1, b: 2 }, top: 'hello' }
     const override = { nested: { b: 3, c: 4 } }
-    const result = deepMerge(
-      base as Record<string, unknown>,
-      override as Record<string, unknown>,
-    )
+    const result = deepMerge(base as Record<string, unknown>, override as Record<string, unknown>)
     expect(result).toEqual({ nested: { a: 1, b: 3, c: 4 }, top: 'hello' })
   })
 
   it('should replace arrays instead of concatenating', () => {
     const base = { items: [1, 2, 3] }
     const override = { items: [4, 5] }
-    const result = deepMerge(
-      base as Record<string, unknown>,
-      override as Record<string, unknown>,
-    )
+    const result = deepMerge(base as Record<string, unknown>, override as Record<string, unknown>)
     expect(result).toEqual({ items: [4, 5] })
   })
 
@@ -152,9 +122,7 @@ describe('loadConfig with per-environment merging', () => {
 
   it('should throw TheoConfigError when merged config is invalid', async () => {
     process.env.NODE_ENV = 'production'
-    await expect(
-      loadConfig(path.join(TEMP_DIR, 'invalid-env')),
-    ).rejects.toThrow(TheoConfigError)
+    await expect(loadConfig(path.join(TEMP_DIR, 'invalid-env'))).rejects.toThrow(TheoConfigError)
   })
 
   it('should load base config when NODE_ENV is undefined', async () => {

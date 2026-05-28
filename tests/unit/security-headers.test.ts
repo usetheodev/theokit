@@ -3,8 +3,10 @@ import {
   buildSecurityHeaders,
   applySecurityHeaders,
   DEFAULT_CSP,
+  DEFAULT_PERMISSIONS_POLICY,
   type SecurityHeadersConfig,
-} from '../../packages/theo/src/server/security-headers.js'
+} from '../../packages/theo/src/server/security/security-headers.js'
+import { securityHeadersSchema } from '../../packages/theo/src/config/schema.js'
 
 /**
  * Phase 6 — Default Security Headers (D4 / EC-2).
@@ -16,10 +18,11 @@ import {
  *   - X-Content-Type-Options: nosniff
  *   - Referrer-Policy: strict-origin-when-cross-origin
  *
- * EC-2 amendment: default `cspMode = 'report-only'` for 0.2.0 so existing
- * apps with inline `<script>` tags or third-party CDN scripts keep
- * working. 0.3.0 will flip to `'enforce'` after a release of visibility
- * via report-only violations.
+ * EC-2 amendment: default `cspMode` was `'report-only'` in 0.2.0 so
+ * existing apps with inline `<script>` tags or third-party CDN scripts
+ * keep working. T6.1 (0.3.0) flips the default to `'enforce'` after a
+ * release of visibility via report-only violations. Apps that need the
+ * legacy posture opt in explicitly with `cspMode: 'report-only'`.
  *
  * `security.headers.csp = false` opts out entirely.
  * `security.headers.csp = <string>` overrides the policy verbatim.
@@ -27,10 +30,12 @@ import {
  */
 
 describe('buildSecurityHeaders — defaults', () => {
-  it('Given no config + dev env, When building, Then returns CSP-Report-Only + X-Frame + nosniff + Referrer-Policy', () => {
+  // T6.1 — 0.3.0 default is `cspMode: 'enforce'`. Apps wanting the
+  // legacy 'report-only' posture set `cspMode: 'report-only'` explicitly.
+  it('Given no config + dev env (0.3.0 default), When building, Then returns enforce-mode CSP + X-Frame + nosniff + Referrer-Policy', () => {
     const headers = buildSecurityHeaders({}, { production: false })
-    expect(headers['Content-Security-Policy-Report-Only']).toBeDefined()
-    expect(headers['Content-Security-Policy']).toBeUndefined()
+    expect(headers['Content-Security-Policy']).toBeDefined()
+    expect(headers['Content-Security-Policy-Report-Only']).toBeUndefined()
     expect(headers['X-Frame-Options']).toBe('DENY')
     expect(headers['X-Content-Type-Options']).toBe('nosniff')
     expect(headers['Referrer-Policy']).toBe('strict-origin-when-cross-origin')
@@ -77,10 +82,10 @@ describe('buildSecurityHeaders — cspMode', () => {
     expect(headers['Content-Security-Policy-Report-Only']).toBeUndefined()
   })
 
-  it('Given a custom csp string, When building, Then uses it verbatim', () => {
+  it('Given a custom csp string (0.3.0 default enforce mode), When building, Then uses it verbatim in enforce header', () => {
     const custom = "default-src 'self'; script-src 'self' https://cdn.example.com"
     const headers = buildSecurityHeaders({ csp: custom }, { production: false })
-    expect(headers['Content-Security-Policy-Report-Only']).toBe(custom)
+    expect(headers['Content-Security-Policy']).toBe(custom)
   })
 })
 
@@ -111,15 +116,17 @@ describe('applySecurityHeaders — integration with ServerResponse', () => {
     const headers: Record<string, string> = {}
     return {
       headers,
-      setHeader(k: string, v: string) { headers[k] = v },
+      setHeader(k: string, v: string) {
+        headers[k] = v
+      },
     }
   }
 
-  it('Given a response, When applied, Then setHeader is called for each header value', () => {
+  it('Given a response (0.3.0 default enforce mode), When applied, Then setHeader is called for each header value', () => {
     const res = mockRes()
     applySecurityHeaders(res as never, {}, { production: false })
     expect(res.headers['X-Frame-Options']).toBe('DENY')
-    expect(res.headers['Content-Security-Policy-Report-Only']).toBeDefined()
+    expect(res.headers['Content-Security-Policy']).toBeDefined()
   })
 
   it('Given cspMode = "off", When applied, Then no CSP header is set', () => {
@@ -140,5 +147,69 @@ describe('applySecurityHeaders — integration with ServerResponse', () => {
     // Handler "overrides" later:
     res.setHeader('X-Frame-Options', 'SAMEORIGIN')
     expect(res.headers['X-Frame-Options']).toBe('SAMEORIGIN')
+  })
+})
+
+/**
+ * T1.1 — Permissions-Policy default-deny header.
+ *
+ * Defense-in-depth: declare which Web APIs the page is allowed to use.
+ * Default-deny stance: geolocation, camera, microphone, payment, usb,
+ * accelerometer, gyroscope all set to `()` (no allowlist).
+ *
+ * EC-3 — CWE-113 HTTP Response Splitting mitigation: the Zod schema
+ * refuses CR/LF in the header value.
+ */
+describe('T1.1 — Permissions-Policy header', () => {
+  function mockRes() {
+    const headers: Record<string, string> = {}
+    return {
+      headers,
+      setHeader(k: string, v: string) {
+        headers[k] = v
+      },
+    }
+  }
+
+  it('Given default SecurityHeadersConfig, Then response has Permissions-Policy header matching DEFAULT_PERMISSIONS_POLICY', () => {
+    const headers = buildSecurityHeaders({}, { production: false })
+    expect(headers['Permissions-Policy']).toBe(DEFAULT_PERMISSIONS_POLICY)
+  })
+
+  it('Given config.permissionsPolicy = "geolocation=(self)", Then response has that exact header value (override)', () => {
+    const headers = buildSecurityHeaders(
+      { permissionsPolicy: 'geolocation=(self)' },
+      { production: false },
+    )
+    expect(headers['Permissions-Policy']).toBe('geolocation=(self)')
+  })
+
+  it('Given config.permissionsPolicy = false, Then NO Permissions-Policy header set', () => {
+    const headers = buildSecurityHeaders({ permissionsPolicy: false }, { production: false })
+    expect(headers['Permissions-Policy']).toBeUndefined()
+  })
+
+  it('Given securityHeadersSchema.parse({permissionsPolicy: "x=()"}), Then success; given .parse({permissionsPolicy: 123}), Then fail', () => {
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()' })).not.toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 123 })).toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: false })).not.toThrow()
+  })
+
+  it('EC-3: Given config.permissionsPolicy with CR or LF, Then schema.parse throws (CWE-113 HTTP Response Splitting mitigation)', () => {
+    expect(() =>
+      securityHeadersSchema.parse({ permissionsPolicy: 'x=(); \r\nX-Injected: yes' }),
+    ).toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()\nY: bad' })).toThrow()
+    expect(() => securityHeadersSchema.parse({ permissionsPolicy: 'x=()\rZ: bad' })).toThrow()
+  })
+
+  it('applySecurityHeaders emits Permissions-Policy on the response', () => {
+    const res = mockRes()
+    applySecurityHeaders(res as never, {}, { production: false })
+    expect(res.headers['Permissions-Policy']).toBe(DEFAULT_PERMISSIONS_POLICY)
+  })
+
+  it('T5.1: default CSP contains report-uri /__theo/csp-report', () => {
+    expect(DEFAULT_CSP).toContain('report-uri /__theo/csp-report')
   })
 })

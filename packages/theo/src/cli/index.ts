@@ -1,11 +1,20 @@
 import cac from 'cac'
 
+interface CliOptions {
+  port?: string | number
+  target?: string
+  upgradeReadiness?: string | number
+  json?: boolean
+  allowWarnings?: boolean
+  force?: boolean
+}
+
 const cli = cac('theokit')
 
 cli
   .command('dev', 'Start development server')
   .option('--port <port>', 'Port number')
-  .action(async (options) => {
+  .action(async (options: CliOptions) => {
     const { devCommand } = await import('./commands/dev.js')
     await devCommand({ port: options.port ? Number(options.port) : undefined })
   })
@@ -13,7 +22,7 @@ cli
 cli
   .command('build', 'Build for production')
   .option('--target <target>', 'Deploy target (node, vercel, cloudflare)')
-  .action(async (options) => {
+  .action(async (options: CliOptions) => {
     try {
       const { buildCommand } = await import('./commands/build.js')
       await buildCommand({ target: options.target })
@@ -27,7 +36,7 @@ cli
 cli
   .command('start', 'Start production server')
   .option('--port <port>', 'Port number')
-  .action(async (options) => {
+  .action(async (options: CliOptions) => {
     try {
       const { startCommand } = await import('./commands/start.js')
       await startCommand({ port: options.port ? Number(options.port) : undefined })
@@ -51,22 +60,44 @@ cli
     }
   })
 
-cli
-  .command('routes', 'List all routes, actions, and WebSocket endpoints')
-  .action(async () => {
-    try {
-      const { routesCommand } = await import('./commands/routes.js')
-      await routesCommand()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error(`\n  ✗ ${msg}\n`)
-      process.exit(1)
-    }
-  })
+cli.command('routes', 'List all routes, actions, and WebSocket endpoints').action(async () => {
+  try {
+    const { routesCommand } = await import('./commands/routes.js')
+    await routesCommand()
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`\n  ✗ ${msg}\n`)
+    process.exit(1)
+  }
+})
 
 cli
   .command('check', 'Run typecheck + scan + (optional) eslint')
-  .action(async () => {
+  .option(
+    '--upgrade-readiness <version>',
+    'Scan source for anticipated breakage under a future TheoKit version (currently supports 0.3). See docs/migration/0.2-to-0.3.md',
+  )
+  .option('--json', 'Emit machine-readable JSON (only with --upgrade-readiness)')
+  .option(
+    '--allow-warnings',
+    'Do not fail the build when violations are present (only with --upgrade-readiness)',
+  )
+  .action(async (options: CliOptions) => {
+    // cac may coerce `0.3` to a JS number — normalize before comparing.
+    const targetRaw = options.upgradeReadiness
+    if (targetRaw !== undefined) {
+      const target = String(targetRaw)
+      if (target !== '0.3') {
+        console.error(`\n  ✗ --upgrade-readiness: only '0.3' is supported (got '${target}')\n`)
+        process.exit(1)
+      }
+      const { upgradeReadinessCommand } = await import('./commands/upgrade-readiness.js')
+      await upgradeReadinessCommand({
+        json: Boolean(options.json),
+        allowWarnings: Boolean(options.allowWarnings),
+      })
+      return
+    }
     const { checkCommand } = await import('./commands/check.js')
     await checkCommand()
   })
@@ -78,17 +109,15 @@ cli
     await addCommand(pkg)
   })
 
-cli
-  .command('info', 'Print environment info (runtime, config, routes)')
-  .action(async () => {
-    const { infoCommand } = await import('./commands/info.js')
-    await infoCommand()
-  })
+cli.command('info', 'Print environment info (runtime, config, routes)').action(async () => {
+  const { infoCommand } = await import('./commands/info.js')
+  await infoCommand()
+})
 
 cli
   .command('docker', 'Generate Dockerfile for production')
   .option('--force', 'Overwrite existing Dockerfile')
-  .action(async (options) => {
+  .action(async (options: CliOptions) => {
     try {
       const { dockerCommand } = await import('./commands/docker.js')
       await dockerCommand({ force: options.force })

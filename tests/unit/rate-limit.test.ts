@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage } from 'node:http'
-import { createRateLimiter } from '../../packages/theo/src/server/rate-limit.js'
+import { createRateLimiter } from '../../packages/theo/src/server/rate-limit/rate-limit.js'
 
 function mockReq(ip = '127.0.0.1'): IncomingMessage {
   return { socket: { remoteAddress: ip } } as unknown as IncomingMessage
@@ -27,7 +27,7 @@ describe('Rate Limiter', () => {
     const check = createRateLimiter({ windowMs: 100, max: 1 })
     check(mockReq())
     expect(check(mockReq()).limited).toBe(true)
-    await new Promise(r => setTimeout(r, 150))
+    await new Promise((r) => setTimeout(r, 150))
     expect(check(mockReq()).limited).toBe(false)
   })
 

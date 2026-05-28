@@ -1,6 +1,10 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI `theo check` runner. Reads files under `cwd` only. Build-time tool.
+ * No HTTP input.
+ */
+import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { spawn } from 'node:child_process'
 
 export type StepStatus = 'ok' | 'fail' | 'skipped'
 
@@ -21,9 +25,7 @@ export interface RunCheckDeps {
   hasEslintConfig?: () => boolean
   runTsc?: () => Promise<{ ok: boolean; output: string }>
   runEslint?: () => Promise<{ ok: boolean; output: string }>
-  scanProject?: () => Promise<
-    { ok: true; routesCount: number } | { ok: false; error: string }
-  >
+  scanProject?: () => Promise<{ ok: true; routesCount: number } | { ok: false; error: string }>
 }
 
 function defaultHasTsConfig(cwd: string): boolean {
@@ -53,10 +55,10 @@ function spawnCmd(
     const proc = spawn(cmd, args, { cwd, shell: false, stdio: ['ignore', 'pipe', 'pipe'] })
     let stdout = ''
     let stderr = ''
-    proc.stdout.on('data', (c) => {
+    proc.stdout.on('data', (c: Buffer) => {
       stdout += c.toString()
     })
-    proc.stderr.on('data', (c) => {
+    proc.stderr.on('data', (c: Buffer) => {
       stderr += c.toString()
     })
     proc.on('close', (code) => {
@@ -145,10 +147,17 @@ export async function checkCommand(): Promise<void> {
 
   console.log('')
   for (const step of result.steps) {
-    const icon = step.status === 'ok' ? '✓' : step.status === 'fail' ? '✗' : '·'
+    let icon = '·'
+    if (step.status === 'ok') icon = '✓'
+    else if (step.status === 'fail') icon = '✗'
     console.log(`  ${icon} ${step.name}: ${step.status}`)
     if (step.status === 'fail' && step.output) {
-      console.log(step.output.split('\n').map((l) => `    ${l}`).join('\n'))
+      console.log(
+        step.output
+          .split('\n')
+          .map((l) => `    ${l}`)
+          .join('\n'),
+      )
     }
   }
   console.log('')

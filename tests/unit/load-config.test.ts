@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES = path.resolve(__dirname, '../../fixtures')
 
 // Create inline temp fixtures for tests that don't depend on Phase 4 fixtures
-const TEMP_DIR = path.join(tmpdir(), 'theo-test-' + Date.now())
+const TEMP_DIR = path.join(tmpdir(), `theo-test-${Date.now()}`)
 
 beforeAll(() => {
   // Temp dir without theo.config.ts
@@ -35,9 +35,7 @@ describe('loadConfig', () => {
   })
 
   it('should throw TheoConfigError for invalid config', async () => {
-    await expect(
-      loadConfig(path.join(FIXTURES, 'invalid-config')),
-    ).rejects.toThrow(/port/)
+    await expect(loadConfig(path.join(FIXTURES, 'invalid-config'))).rejects.toThrow(/port/)
   })
 
   it('should return defaults when config file is missing', async () => {
@@ -67,8 +65,8 @@ describe('loadConfig', () => {
   })
 
   it('should throw clear message when config exports null (EC-6)', async () => {
-    await expect(
-      loadConfig(path.join(TEMP_DIR, 'null-config')),
-    ).rejects.toThrow(/must use export default defineConfig/)
+    await expect(loadConfig(path.join(TEMP_DIR, 'null-config'))).rejects.toThrow(
+      /must use export default defineConfig/,
+    )
   })
 })

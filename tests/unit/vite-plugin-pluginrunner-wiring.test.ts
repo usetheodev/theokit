@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { theoPlugin } from '../../packages/theo/src/vite-plugin/index.js'
 import { createActionMiddleware } from '../../packages/theo/src/vite-plugin/action-middleware.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 
 describe('vite-plugin — plugin runner wiring in dev (T1.1, EC-1)', () => {
   it('exposes a configResolved hook', () => {

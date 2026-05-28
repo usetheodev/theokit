@@ -39,8 +39,8 @@ export default function Page() {
     <main>
       <h1>Batching demo</h1>
       <p>
-        Three same-tick dispatches collapse into a single POST to{' '}
-        <code>/api/__theo_batch__</code>. Open DevTools → Network and watch.
+        Three same-tick dispatches collapse into a single POST to <code>/api/__theo_batch__</code>.
+        Open DevTools → Network and watch.
       </p>
       <pre>{JSON.stringify(results, null, 2)}</pre>
     </main>

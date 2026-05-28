@@ -30,7 +30,9 @@ describe('Changeset Configuration', () => {
   })
 
   it('create-theo version should be 0.1.0-alpha.0', () => {
-    const pkg = JSON.parse(readFileSync(resolve(rootDir, 'packages/create-theo/package.json'), 'utf-8'))
+    const pkg = JSON.parse(
+      readFileSync(resolve(rootDir, 'packages/create-theo/package.json'), 'utf-8'),
+    )
     expect(pkg.version).toMatch(/0\.1\.0-alpha/)
   })
 

@@ -44,7 +44,9 @@ describe('regression — layout receives <Outlet /> as children prop', () => {
   it('Given a tree with a layout, When the manifest is generated, Then the layout call includes children: Outlet', () => {
     const tree = makeTree('/app/layout.tsx')
     const out = generateRouteManifest(tree)
-    expect(out).toMatch(/createElement\(\s*\w*Layout\w*\s*,\s*\{\s*children:\s*React\.createElement\(Outlet\)\s*\}\s*\)/)
+    expect(out).toMatch(
+      /createElement\(\s*\w*Layout\w*\s*,\s*\{\s*children:\s*React\.createElement\(Outlet\)\s*\}\s*\)/,
+    )
   })
 
   it('Given a tree without a layout, When the manifest is generated, Then no Outlet-wrap is emitted at the root', () => {

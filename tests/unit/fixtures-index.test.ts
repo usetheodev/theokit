@@ -18,7 +18,7 @@ function listFixtureDirs(): string[] {
       const full = join(FIXTURES_ROOT, name)
       return statSync(full).isDirectory()
     })
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
 }
 
 describe('T0.1 — fixtures index README', () => {
@@ -42,7 +42,10 @@ describe('T0.1 — fixtures index README', () => {
     const rows = readme.match(/^\|\s*[a-z][a-z0-9-]+\s*\|/gm) ?? []
     const namesInTable = rows
       .map((r) => r.replace(/^\|\s*|\s*\|$/g, '').trim())
-      .filter((n) => !['Fixture', 'fixture', '---'].some((skip) => n.toLowerCase() === skip.toLowerCase()))
+      .filter(
+        (n) =>
+          !['Fixture', 'fixture', '---'].some((skip) => n.toLowerCase() === skip.toLowerCase()),
+      )
     for (const name of namesInTable) {
       expect(dirs.has(name), `Index row "${name}" has no matching fixture directory`).toBe(true)
     }

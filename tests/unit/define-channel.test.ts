@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { defineChannel } from '../../packages/theo/src/server/define-channel.js'
-import type { ChannelHandler } from '../../packages/theo/src/server/define-channel.js'
+import { defineChannel } from '../../packages/theo/src/server/define/define-channel.js'
+import type { ChannelHandler } from '../../packages/theo/src/server/define/define-channel.js'
 
 describe('defineChannel', () => {
   it('should return the same handler reference (identity)', () => {
@@ -60,9 +60,10 @@ describe('defineChannel', () => {
     }
 
     const handler = defineChannel<ChatMessage>({
-      onMessage: (_ws, _room, data) => {
-        // Type inference: data should be ChatMessage
-        void data
+      onMessage: (_ws, _room, data: ChatMessage) => {
+        // Type inference: `data` is ChatMessage at the call site (verified
+        // by the parameter annotation above; runtime body is a no-op).
+        expect(typeof data.text).toBe('string')
       },
     })
 

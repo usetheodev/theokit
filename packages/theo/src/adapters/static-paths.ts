@@ -7,13 +7,9 @@ export interface ResolvedPath {
   filename: string
 }
 
-export interface StaticPathParams {
-  [key: string]: string | string[]
-}
+export type StaticPathParams = Record<string, string | string[]>
 
-export type LoadStaticPaths = (
-  paramsFilePath: string,
-) => Promise<StaticPathParams[] | null>
+export type LoadStaticPaths = (paramsFilePath: string) => Promise<StaticPathParams[] | null>
 
 export class StaticPathsRequiredError extends Error {
   constructor(routePath: string, paramsFile: string) {
@@ -39,9 +35,9 @@ const CATCH_ALL = /^\[\.\.\.(.+)\]$/
 const PARAM = /^\[(.+)\]$/
 
 export function parseSegment(segment: string): ParsedSegment {
-  const catchAll = segment.match(CATCH_ALL)
+  const catchAll = CATCH_ALL.exec(segment)
   if (catchAll) return { kind: 'catch-all', name: catchAll[1] }
-  const param = segment.match(PARAM)
+  const param = PARAM.exec(segment)
   if (param) return { kind: 'param', name: param[1] }
   return { kind: 'static' }
 }
@@ -61,8 +57,7 @@ async function walk(
   out: ResolvedPath[],
   options: CollectOptions,
 ): Promise<void> {
-  const segments =
-    node.segment === '' ? parentSegments : [...parentSegments, node.segment]
+  const segments = node.segment === '' ? parentSegments : [...parentSegments, node.segment]
 
   if (node.page) {
     const resolved = await resolveNodePaths(segments, options)
@@ -115,7 +110,7 @@ async function resolveNodePaths(
         if (Array.isArray(value)) {
           filled.push(...value)
         } else {
-          filled.push(String(value))
+          filled.push(value)
         }
       }
     }

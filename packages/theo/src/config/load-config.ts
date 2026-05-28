@@ -1,8 +1,15 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Config loader. Reads `theo.config.{ts,js,mjs}` under the user's `cwd`.
+ * Names are a fixed set of literals; `cwd` is a CLI arg resolved to
+ * absolute. Build-time tool — no HTTP input.
+ */
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { theoConfigSchema } from './schema.js'
+
 import { TheoConfigError } from './errors.js'
+import { loadEnv } from './load-env.js'
+import { theoConfigSchema } from './schema.js'
 import type { TheoConfig } from './schema.js'
 
 const CONFIG_FILE = 'theo.config.ts'
@@ -44,6 +51,12 @@ export function deepMerge(
 }
 
 export async function loadConfig(dir: string): Promise<TheoConfig> {
+  // T1.3 — Load .env BEFORE reading theo.config.ts. Defensive: CLI commands
+  // (dev/build/start) already call loadEnv() first, but programmatic users
+  // who call loadConfig directly (tests, custom scripts) need this too.
+  // Module-level cache makes the second call a Map-lookup (no FS).
+  loadEnv({ cwd: dir })
+
   const configPath = resolve(dir, CONFIG_FILE)
 
   if (!existsSync(configPath)) {
@@ -52,12 +65,9 @@ export async function loadConfig(dir: string): Promise<TheoConfig> {
 
   let mod: Record<string, unknown>
   try {
-    mod = await import(pathToFileURL(configPath).href)
+    mod = (await import(pathToFileURL(configPath).href)) as Record<string, unknown>
   } catch (err) {
-    throw new TheoConfigError(
-      [{ field: '_file', message: (err as Error).message }],
-      configPath,
-    )
+    throw new TheoConfigError([{ field: '_file', message: (err as Error).message }], configPath)
   }
 
   const userConfig = mod.default
@@ -67,8 +77,7 @@ export async function loadConfig(dir: string): Promise<TheoConfig> {
       [
         {
           field: '_export',
-          message:
-            'theo.config.ts must use export default defineConfig({...})',
+          message: 'theo.config.ts must use export default defineConfig({...})',
         },
       ],
       configPath,
@@ -85,17 +94,14 @@ export async function loadConfig(dir: string): Promise<TheoConfig> {
 
     if (existsSync(envPath)) {
       try {
-        const envMod = await import(pathToFileURL(envPath).href)
+        const envMod = (await import(pathToFileURL(envPath).href)) as Record<string, unknown>
         const envConfig = envMod.default
 
         if (envConfig != null && typeof envConfig === 'object') {
           rawConfig = deepMerge(rawConfig, envConfig as Record<string, unknown>)
         }
       } catch (err) {
-        throw new TheoConfigError(
-          [{ field: '_file', message: (err as Error).message }],
-          envPath,
-        )
+        throw new TheoConfigError([{ field: '_file', message: (err as Error).message }], envPath)
       }
     }
   }

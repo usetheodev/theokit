@@ -6,7 +6,7 @@ describe('defineRoute', () => {
   it('should return the route config unchanged (same reference)', () => {
     const config = {
       query: z.object({ search: z.string() }),
-      handler: ({ query }: { query: { search: string } }) => ({ results: [] }),
+      handler: ({ query: _query }: { query: { search: string } }) => ({ results: [] }),
     }
     const result = defineRoute(config)
     expect(result).toBe(config)

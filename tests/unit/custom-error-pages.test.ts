@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ServerResponse } from 'node:http'
-import { sendError } from '../../packages/theo/src/server/execute.js'
+import { sendError } from '../../packages/theo/src/server/http/execute.js'
 import {
   loadCustomErrorPages,
   MAX_ERROR_HTML_BYTES,
-} from '../../packages/theo/src/server/error-pages.js'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+} from '../../packages/theo/src/server/http/error-pages.js'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 

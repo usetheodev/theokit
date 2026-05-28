@@ -47,7 +47,8 @@ describe('T2.2 — agent-endpoint-mock wire format (functional)', () => {
   // exercising it with a Request — avoids spinning up a dev server.
   it('POST /api/agent emits 4 SSE chunks with all event variants', async () => {
     const mod = await import('../../fixtures/agent-endpoint-mock/server/routes/agent.js')
-    const handler = (mod.POST as { handler: (args: unknown) => Response | Promise<Response> }).handler
+    const handler = (mod.POST as { handler: (args: unknown) => Response | Promise<Response> })
+      .handler
     const request = new Request('http://localhost/api/agent', { method: 'POST', body: '{}' })
     const response = await handler({
       query: undefined,
@@ -77,7 +78,8 @@ describe('T2.2 — agent-endpoint-mock wire format (functional)', () => {
 
   it('agent-infinite aborts within 200ms when request signal fires', async () => {
     const mod = await import('../../fixtures/agent-endpoint-mock/server/routes/agent-infinite.js')
-    const handler = (mod.POST as { handler: (args: unknown) => Response | Promise<Response> }).handler
+    const handler = (mod.POST as { handler: (args: unknown) => Response | Promise<Response> })
+      .handler
 
     const controller = new AbortController()
     const request = new Request('http://localhost/api/agent-infinite', {

@@ -64,9 +64,13 @@ export function createBatcher(options: BatcherOptions): Batcher {
         .transport(payload)
         .then((results) => {
           for (let i = 0; i < chunk.length; i++) {
-            const result = results[i]
-            if (!result) {
-              chunk[i].reject(new Error('Batch transport returned no result for index ' + i))
+            // `results[i]` could be undefined at runtime when the transport
+            // returns fewer entries than the chunk; TypeScript's strict
+            // typing without `noUncheckedIndexedAccess` does not surface
+            // this, so we hand-narrow.
+            const result = results.length > i ? results[i] : undefined
+            if (result === undefined) {
+              chunk[i].reject(new Error(`Batch transport returned no result for index ${i}`))
               continue
             }
             if ('error' in result) {
@@ -78,7 +82,7 @@ export function createBatcher(options: BatcherOptions): Batcher {
             }
           }
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           for (const item of chunk) item.reject(err)
         })
     }

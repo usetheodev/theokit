@@ -1,0 +1,15 @@
+/**
+ * Tailwind v4 entry CSS — per @usetheo/ui@0.5.1-next.0 RFC 0008 recipe.
+ *
+ * Just imports the UI's pre-built surface. The library is responsible
+ * for emitting the utility classes its components use — consumers
+ * should not need to know about Tailwind @source paths, package
+ * manager layout (pnpm/.pnpm/), or symlink resolution.
+ *
+ * Currently `@usetheo/ui/styles.css` ships tokens + base layer but
+ * does NOT pre-compile the utility classes used by its components.
+ * As a result, hover/focus/active states render unstyled in pnpm
+ * layouts where `@source` can't follow symlinks. RFC 0008 follow-up
+ * tracked at @usetheo/ui — proper fix lives there.
+ */
+@import "@usetheo/ui/styles.css";

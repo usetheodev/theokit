@@ -28,22 +28,59 @@ export function generateEntryServer(options: EntryServerOptions = {}): string {
  */
 function buildAppTreeJs(options: EntryServerOptions): string {
   const theme = options.theoUi?.theme ?? 'violet-forge'
+  // T4.1 — pass options.nonce to StaticRouterProvider so its internal
+  // hydration data script (`<script>window.__staticRouterHydrationData
+  // = ...</script>`) carries the nonce attribute. Without this, CSP
+  // enforce mode (without 'unsafe-inline') blocks the hydration script
+  // → React falls back to client-only render → button onClick handlers
+  // never attach → page looks dead. The nonce option to
+  // renderToPipeableStream covers React-emitted scripts but NOT the
+  // hydration script which is emitted by react-router itself.
+  // hydrate: false — CRITICAL fix for hydration mismatch.
+  //
+  // StaticRouterProvider with `hydrate: true` (default) emits
+  // `<script>window.__staticRouterHydrationData = ...</script>` INSIDE
+  // the React tree. The client's `<RouterProvider>` does NOT emit any
+  // script. React's reconciler sees server={...stuff, <script>} vs
+  // client={...stuff} and DISCARDS the entire server tree, regenerating
+  // from scratch on the client. That regeneration causes a massive
+  // layout shift (CLS 0.39 measured in the example).
+  //
+  // Fix: tell StaticRouterProvider to NOT emit the script. The framework
+  // emits the hydration data as a separate `<script>` in the HTML
+  // template (outside #root), via the `hydrationData` returned from
+  // `render()`. The script still runs BEFORE entry-client.js, so
+  // window.__staticRouterHydrationData is populated when
+  // createBrowserRouter reads it.
   if (options.theoUi) {
     return [
       `React.createElement(TheoUIProvider, { theme: { defaultTheme: '${theme}' } },`,
       `      React.createElement(Suspense, { fallback: null },`,
-      `        React.createElement(StaticRouterProvider, { router, context })`,
+      `        React.createElement(StaticRouterProvider, { router, context, hydrate: false })`,
       `      )`,
       `    )`,
     ].join('\n')
   }
-  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context })\n    )`
+  return `React.createElement(Suspense, { fallback: null },\n      React.createElement(StaticRouterProvider, { router, context, hydrate: false })\n    )`
+}
+
+/**
+ * Generate the hydration data extraction snippet. Reads
+ * loaderData/actionData/errors from the StaticHandlerContext and returns
+ * them as an object the framework can serialize into a `<script>` tag.
+ */
+function hydrationDataExtractSnippet(): string {
+  return [
+    `    const hydrationData = {`,
+    `      loaderData: context.loaderData,`,
+    `      actionData: context.actionData,`,
+    `      errors: context.errors,`,
+    `    }`,
+  ].join('\n')
 }
 
 function generateSingleShotEntry(options: EntryServerOptions): string {
-  const theoUiImport = options.theoUi
-    ? `import { TheoUIProvider } from '@usetheo/ui'\n`
-    : ''
+  const theoUiImport = options.theoUi ? `import { TheoUIProvider } from '@usetheo/ui'\n` : ''
   const appTree = buildAppTreeJs(options)
   return [
     `import React, { Suspense } from 'react'`,
@@ -64,19 +101,24 @@ function generateSingleShotEntry(options: EntryServerOptions): string {
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
     `  const app = ${appTree}`,
     ``,
+    hydrationDataExtractSnippet(),
+    ``,
     `  return new Promise((resolve, reject) => {`,
     `    let html = ''`,
     `    let piped = false`,
     `    const passthrough = new PassThrough()`,
     `    passthrough.on('data', (chunk) => { html += chunk.toString() })`,
-    `    passthrough.on('end', () => { resolve(html) })`,
+    `    passthrough.on('end', () => { resolve({ html, hydrationData }) })`,
     `    passthrough.on('error', reject)`,
     ``,
-    `    // T3.1 — Pipe on onShellReady (Next.js pattern). Calling pipe()`,
-    `    // twice throws "React currently only supports piping to one`,
-    `    // writable stream". The \`piped\` flag is a belt-and-suspenders`,
-    `    // guard if onShellReady fires unexpectedly more than once.`,
+    `    // Pipe on onShellReady (Next.js pattern). Calling pipe() twice`,
+    `    // throws "React currently only supports piping to one writable`,
+    `    // stream". The \`piped\` flag is a belt-and-suspenders guard if`,
+    `    // onShellReady fires unexpectedly more than once.`,
+    `    // Forward options.nonce to React so every <script> tag React`,
+    `    // emits (Suspense boundary scripts) carries the nonce attribute.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
+    `      nonce: options.nonce,`,
     `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,
     `      onShellError(err) { reject(err) },`,
     `      onError(err) { console.error('[SSR Error]', err) },`,
@@ -86,18 +128,10 @@ function generateSingleShotEntry(options: EntryServerOptions): string {
   ].join('\n')
 }
 
-function generateStreamingEntry(options: EntryServerOptions): string {
-  const theoUiImport = options.theoUi
-    ? `import { TheoUIProvider } from '@usetheo/ui'\n`
-    : ''
-  const appTree = buildAppTreeJs(options)
+// Generated-code fragments — extracted so the parent emitter stays under
+// the max-lines-per-function ceiling.
+function streamingWebRenderer(appTree: string): string[] {
   return [
-    `import React, { Suspense } from 'react'`,
-    `import { renderToPipeableStream, renderToReadableStream } from 'react-dom/server'`,
-    `import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router'`,
-    `import { routes } from '/@theo/route-manifest'`,
-    theoUiImport,
-    ``,
     `// T2.3 — Web Standards streaming entry for edge runtimes (Cloudflare,`,
     `// Bun, Deno, Vercel Edge). Uses renderToReadableStream and returns a`,
     `// Response with the stream as body. Honors request.signal for client`,
@@ -116,6 +150,7 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     ``,
     `  const stream = await renderToReadableStream(app, {`,
     `    signal: request.signal,`,
+    `    nonce: options.nonce,`,
     `    onError(err) { console.error('[SSR Web Stream Error]', err) },`,
     `  })`,
     `  return new Response(stream, {`,
@@ -126,7 +161,11 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `    },`,
     `  })`,
     `}`,
-    ``,
+  ]
+}
+
+function streamingNodeRenderer(appTree: string): string[] {
+  return [
     `// T6.1 — Node streaming SSR entry (opt-in via theo.config.ts > ssrStreaming: true)`,
     `// Flushes the shell as soon as it's ready, then streams Suspense boundaries.`,
     `// EC-11: respects request.signal for client-disconnect cleanup.`,
@@ -145,19 +184,15 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `  return new Promise((resolve, reject) => {`,
     `    let didError = false`,
     `    const stream = renderToPipeableStream(app, {`,
+    `      nonce: options.nonce,`,
     `      onShellReady() {`,
-    `        // Flush shell immediately; Suspense boundaries stream after.`,
     `        response.statusCode = didError ? 500 : 200`,
     `        response.setHeader('Content-Type', 'text/html; charset=utf-8')`,
     `        response.setHeader('Transfer-Encoding', 'chunked')`,
     `        stream.pipe(response)`,
     `        resolve({ streaming: true })`,
     `      },`,
-    `      onShellError(err) {`,
-    `        // Error before shell — fall back to 500 and reject so caller can`,
-    `        // emit a synchronous error response.`,
-    `        reject(err)`,
-    `      },`,
+    `      onShellError(err) { reject(err) },`,
     `      onError(err) {`,
     `        didError = true`,
     `        console.error('[SSR Stream Error]', err)`,
@@ -166,13 +201,15 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     ``,
     `    // EC-11: client disconnect cleanup`,
     `    if (options.signal) {`,
-    `      options.signal.addEventListener('abort', () => {`,
-    `        stream.abort()`,
-    `      })`,
+    `      options.signal.addEventListener('abort', () => { stream.abort() })`,
     `    }`,
     `  })`,
     `}`,
-    ``,
+  ]
+}
+
+function backCompatRenderer(appTree: string): string[] {
+  return [
     `// Backward compatibility: keep the single-shot render export available so`,
     `// callers that always used 'render()' don't break when streaming is on.`,
     `export async function render(url, options = {}) {`,
@@ -187,25 +224,43 @@ function generateStreamingEntry(options: EntryServerOptions): string {
     `  const router = createStaticRouter(handler.dataRoutes, context)`,
     `  const app = ${appTree}`,
     ``,
+    hydrationDataExtractSnippet(),
+    ``,
     `  const { PassThrough } = await import('node:stream')`,
     `  return new Promise((resolve, reject) => {`,
     `    let html = ''`,
     `    let piped = false`,
     `    const passthrough = new PassThrough()`,
     `    passthrough.on('data', (chunk) => { html += chunk.toString() })`,
-    `    passthrough.on('end', () => { resolve(html) })`,
+    `    passthrough.on('end', () => { resolve({ html, hydrationData }) })`,
     `    passthrough.on('error', reject)`,
     ``,
-    `    // T3.1 — Pipe on onShellReady (Next.js pattern). Calling pipe()`,
-    `    // twice throws "React currently only supports piping to one`,
-    `    // writable stream". The \`piped\` flag is a belt-and-suspenders`,
-    `    // guard if onShellReady fires unexpectedly more than once.`,
+    `    // Pipe on onShellReady (Next.js pattern). nonce forwarded.`,
     `    const { pipe } = renderToPipeableStream(app, {`,
+    `      nonce: options.nonce,`,
     `      onShellReady() { if (!piped) { piped = true; pipe(passthrough) } },`,
     `      onShellError(err) { reject(err) },`,
     `      onError(err) { console.error('[SSR Error]', err) },`,
     `    })`,
     `  })`,
     `}`,
+  ]
+}
+
+function generateStreamingEntry(options: EntryServerOptions): string {
+  const theoUiImport = options.theoUi ? `import { TheoUIProvider } from '@usetheo/ui'\n` : ''
+  const appTree = buildAppTreeJs(options)
+  return [
+    `import React, { Suspense } from 'react'`,
+    `import { renderToPipeableStream, renderToReadableStream } from 'react-dom/server'`,
+    `import { createStaticHandler, createStaticRouter, StaticRouterProvider } from 'react-router'`,
+    `import { routes } from '/@theo/route-manifest'`,
+    theoUiImport,
+    ``,
+    ...streamingWebRenderer(appTree),
+    ``,
+    ...streamingNodeRenderer(appTree),
+    ``,
+    ...backCompatRenderer(appTree),
   ].join('\n')
 }

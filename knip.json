@@ -1,0 +1,45 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.{ts,js,mjs,sh}"],
+      "ignore": ["my-test/**", "fixtures/**", "examples/**", "tests/**"]
+    },
+    "packages/theo": {
+      "entry": [
+        "src/adapters/node.ts",
+        "src/adapters/bun.ts",
+        "src/adapters/cloudflare.ts",
+        "src/adapters/deno-deploy.ts",
+        "src/adapters/vercel.ts",
+        "src/adapters/netlify.ts",
+        "src/adapters/aws-lambda.ts",
+        "src/adapters/static.ts",
+        "src/devtools/entry.tsx",
+        "src/devtools/index.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/create-theo": {
+      "project": ["src/**/*.{ts,tsx}"]
+    }
+  },
+  "ignoreDependencies": [
+    "react",
+    "react-dom",
+    "react-router",
+    "ws",
+    "drizzle-orm",
+    "postgres",
+    "expect-type",
+    "lint-staged"
+  ],
+  "rules": {
+    "files": "error",
+    "dependencies": "error",
+    "unlisted": "error",
+    "exports": "off",
+    "types": "off",
+    "duplicates": "warn"
+  }
+}

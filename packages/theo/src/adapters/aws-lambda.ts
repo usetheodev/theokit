@@ -1,11 +1,17 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * AWS Lambda adapter. Writes to `cwd/.theo/lambda/`. Build-time tool.
+ */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
+
 import { nodeAdapter } from './node.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 export interface AwsLambdaBuildDeps {
-  runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
+  runNodeBuild?: (config: TheoConfig, cwd: string, ctx?: AdapterBuildContext) => Promise<void>
   writeEntry?: (path: string, content: string) => void
   ensureDir?: (path: string) => void
 }
@@ -167,7 +173,7 @@ export function renderAwsLambdaEntry(): string {
     `  const { req, res, toResponse } = createWebShim(request)`,
     `  const requestId = randomUUID()`,
     `  const method = request.method.toUpperCase()`,
-    `  await executeRoute(match.route, method, match.params, req, res, loaderCache, serverDir, requestId)`,
+    `  await executeRoute({ route: match.route, method, params: match.params, req, res, loadModule: loaderCache, serverDir, requestId })`,
     `  const response = await toResponse()`,
     `  return responseToV2Result(response)`,
     `}`,
@@ -178,24 +184,33 @@ export async function buildAwsLambda(
   config: TheoConfig,
   cwd: string,
   deps: AwsLambdaBuildDeps = {},
+  ctx?: AdapterBuildContext,
 ): Promise<void> {
+  // Wave 2 (T2.2) — reject polyglot services on this adapter.
+  assertServicesUnsupported('aws-lambda', readManifest(cwd))
+
   const runNodeBuild = deps.runNodeBuild ?? nodeAdapter.build.bind(nodeAdapter)
-  await runNodeBuild(config, cwd)
+  await runNodeBuild(config, cwd, ctx)
 
   const outputDir = resolve(cwd, '.theo/aws')
   const ensureDir = deps.ensureDir ?? ((p: string) => mkdirSync(p, { recursive: true }))
   ensureDir(outputDir)
 
   const entry = renderAwsLambdaEntry()
-  const write = deps.writeEntry ?? ((p, c) => writeFileSync(p, c))
+  const write =
+    deps.writeEntry ??
+    ((p, c) => {
+      writeFileSync(p, c)
+    })
   write(resolve(outputDir, 'handler.mjs'), entry)
 
+  // eslint-disable-next-line no-console -- CLI build progress
   console.log('\n  ✓ AWS Lambda output → .theo/aws/handler.mjs\n')
 }
 
 export const awsLambdaAdapter: DeployAdapter = {
   name: 'aws-lambda',
-  build(config, cwd) {
-    return buildAwsLambda(config, cwd)
+  build(config, cwd, ctx) {
+    return buildAwsLambda(config, cwd, {}, ctx)
   },
 }

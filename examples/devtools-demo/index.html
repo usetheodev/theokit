@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Theo Devtools — Live Demo</title>
+    <style>
+      body {
+        margin: 0;
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #f5f5f7;
+        color: #1a1a1a;
+      }
+      main {
+        max-width: 720px;
+        margin: 40px auto;
+        padding: 24px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 24px;
+      }
+      h2 {
+        margin: 24px 0 8px;
+        font-size: 16px;
+        color: #555;
+      }
+      p {
+        line-height: 1.5;
+      }
+      nav {
+        display: flex;
+        gap: 12px;
+        margin: 16px 0;
+      }
+      nav a {
+        color: #6d28d9;
+        text-decoration: none;
+        padding: 6px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+      }
+      nav a:hover {
+        background: #f0eafe;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .actions button {
+        appearance: none;
+        background: #6d28d9;
+        color: white;
+        border: 0;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .actions button:hover {
+        background: #5b21b6;
+      }
+      .actions button.danger {
+        background: #dc2626;
+      }
+      .actions button.danger:hover {
+        background: #b91c1c;
+      }
+      pre {
+        background: #1a1a1a;
+        color: #fafafa;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        overflow-x: auto;
+      }
+      code {
+        background: #f0f0f0;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/@theo/entry-client"></script>
+  </body>
+</html>

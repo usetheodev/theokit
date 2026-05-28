@@ -66,7 +66,11 @@ describe('eventV2ToRequestShape', () => {
 
 describe('responseToLambdaResultV2', () => {
   it('produces v2 result with statusCode and headers', () => {
-    const result = responseToLambdaResultV2(200, { 'content-type': 'application/json' }, '{"ok":true}')
+    const result = responseToLambdaResultV2(
+      200,
+      { 'content-type': 'application/json' },
+      '{"ok":true}',
+    )
     expect(result.statusCode).toBe(200)
     expect(result.headers['content-type']).toBe('application/json')
     expect(result.body).toBe('{"ok":true}')

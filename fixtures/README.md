@@ -30,12 +30,18 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | adapter-targets | parent dir for the 6 compile-only deploy adapter fixtures | full-cov |
 | agent-endpoint-mock | `defineAgentEndpoint` wire-format reference (4 AgentEvent variants + abort) | full-cov |
 | agents-dir-ignored | negative test: agents/ directory is intentionally not scanned | base |
+| auth-providers-diy-github | DIY GitHub OAuth using PKCE + state + rotateSession (security-hardening) | security |
+| auth-providers-with-authjs | Auth.js bridge: mirror Auth.js user into TheoKit session (security-hardening) | security |
+| cors-enabled | `config.security.cors` end-to-end (preflight + Access-Control-* echo) | security |
+| csp-reports | `/__theo/csp-report` built-in endpoint + audit logger fan-out | security |
+| rate-limit-per-route | per-route + per-user rate limit (`keyBy: 'session'`) | security |
 | app-router-basic | minimal `app/` routing | base |
 | app-router-errors | per-segment `error.tsx` boundaries | base |
 | app-router-nested-layouts | nested `layout.tsx` composition | base |
 | app-router-not-found | `not-found.tsx` per segment | base |
 | basic-valid-app | minimal valid project structure | base |
 | batching | `createBatcher` + same-microtask collapse | full-cov |
+| cache-basic | All 5 cache primitives (defineCachedRoute, defineCachedFunction, revalidateTag, revalidatePath, updateTag) + routeRules + tags fan-out | caching-and-revalidation |
 | custom-transformer | `TheoTransformer` interface + Date round-trip | full-cov |
 | define-channel | `defineChannel` pub/sub over WebSocket rooms | full-cov |
 | define-integration | `defineTheoIntegration` + virtual module prefix | full-cov |
@@ -53,14 +59,28 @@ You can then copy the relevant code patterns from any fixture into your scaffold
 | react-query-integration | `theokit/react-query` driving `@tanstack/react-query` | full-cov |
 | server-actions-basic | `defineAction` with Zod and form submit | base |
 | server-routes-basic | `defineRoute` with Zod query/body/params | base |
+| services-both | polyglot Python + Node services with `dependsOn` topological order | wave-2-completion |
+| services-node-basic | polyglot Node (Hono) sidecar via `services: {}` orchestration | wave-2-completion |
+| services-python-basic | polyglot Python (FastAPI) sidecar via `services: {}` orchestration | wave-2-completion |
 | sessions-auth | `createSessionManager` + `requireAuth` + EC-2 secret guard | full-cov |
 | ssr-basic | single-shot server-side rendering | base |
 | ssr-streaming | `renderToPipeableStream` + Suspense progressive flush | full-cov |
+| template-api-only | Playwright fixture mirroring the `api-only` create-theo template | framework-maturity-hardening |
+| template-dashboard | Playwright fixture mirroring the `dashboard` create-theo template | framework-maturity-hardening |
 | template-default | Playwright fixture mirroring the default scaffold (Phase 10 — T10.1) | nextjs-maturity |
+| template-postgres | Playwright fixture mirroring the `postgres` create-theo template (env-gated DATABASE_URL) | framework-maturity-hardening |
+| template-saas | Playwright fixture mirroring the `saas` create-theo template (env-gated DATABASE_URL + session secret) | framework-maturity-hardening |
 | theoui-autoinject | TheoUI auto-injection without user-code imports | full-cov |
 | typed-client | end-to-end `theoFetch<typeof GET>` inference | full-cov |
+| upgrade-readiness-clean | clean app surface — `theokit check --upgrade-readiness 0.3` reports zero violations | 0.3-cutover |
+| upgrade-readiness-dirty | deliberate 0.3 violations (raw fetch POST, inline `<script>`, `dangerouslySetInnerHTML`) for the scanner | 0.3-cutover |
 | use-agent-stream-react | `useAgentStream` in plain React (no `@usetheo/ui`) | full-cov |
 | websocket-basic | `defineWebSocket` request handler | base |
+| cron-basic | `defineCron` with morning-summary cron + manifest emit | jobs-crons-webhooks |
+| jobs-basic | `defineJob` + `ctx.queue.enqueue` smoke | jobs-crons-webhooks |
+| webhook-stripe | `defineWebhook` + `stripe(secret)` helper roundtrip | jobs-crons-webhooks |
+| webhook-github | `defineWebhook` + `github(secret)` helper roundtrip | jobs-crons-webhooks |
+| webhook-slack | `defineWebhook` + `slack({signingSecret})` helper roundtrip | jobs-crons-webhooks |
 
 ## Notes on adapter fixtures
 

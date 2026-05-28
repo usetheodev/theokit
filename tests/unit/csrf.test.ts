@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateCsrf } from '../../packages/theo/src/server/csrf.js'
+import { validateCsrf } from '../../packages/theo/src/server/security/csrf.js'
 import type { IncomingMessage } from 'node:http'
 
 function mockReq(headers: Record<string, string>): IncomingMessage {

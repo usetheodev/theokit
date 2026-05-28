@@ -1,11 +1,17 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Bun deploy adapter. Writes to `cwd/.theo/bun/`. Build-time.
+ */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
+
 import { nodeAdapter } from './node.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 export interface BunBuildDeps {
-  runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
+  runNodeBuild?: (config: TheoConfig, cwd: string, ctx?: AdapterBuildContext) => Promise<void>
   writeEntry?: (path: string, content: string) => void
   ensureDir?: (path: string) => void
 }
@@ -97,7 +103,7 @@ export function renderBunEntry(port: number, opts: { ssrStreaming?: boolean } = 
     `      const { req, res, toResponse } = createWebShim(request)`,
     `      const requestId = randomUUID()`,
     `      const method = request.method.toUpperCase()`,
-    `      await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir, requestId)`,
+    `      await executeRoute({ route: match.route, method, params: match.params, req, res, loadModule, serverDir, requestId })`,
     `      return toResponse()`,
     `    }`,
     ``,
@@ -117,24 +123,33 @@ export async function buildBun(
   config: TheoConfig,
   cwd: string,
   deps: BunBuildDeps = {},
+  ctx?: AdapterBuildContext,
 ): Promise<void> {
+  // Wave 2 (T2.2) — reject polyglot services on this adapter.
+  assertServicesUnsupported('bun', readManifest(cwd))
+
   const runNodeBuild = deps.runNodeBuild ?? nodeAdapter.build.bind(nodeAdapter)
-  await runNodeBuild(config, cwd)
+  await runNodeBuild(config, cwd, ctx)
 
   const outputDir = resolve(cwd, '.theo/bun')
   const ensureDir = deps.ensureDir ?? ((p: string) => mkdirSync(p, { recursive: true }))
   ensureDir(outputDir)
 
-  const entry = renderBunEntry(config.port, { ssrStreaming: config.ssrStreaming === true })
-  const write = deps.writeEntry ?? ((p, c) => writeFileSync(p, c))
+  const entry = renderBunEntry(config.port, { ssrStreaming: config.ssrStreaming })
+  const write =
+    deps.writeEntry ??
+    ((p, c) => {
+      writeFileSync(p, c)
+    })
   write(resolve(outputDir, 'server.mjs'), entry)
 
+  // eslint-disable-next-line no-console -- CLI build progress
   console.log('\n  ✓ Bun output → .theo/bun/server.mjs\n')
 }
 
 export const bunAdapter: DeployAdapter = {
   name: 'bun',
-  build(config, cwd) {
-    return buildBun(config, cwd)
+  build(config, cwd, ctx) {
+    return buildBun(config, cwd, {}, ctx)
   },
 }

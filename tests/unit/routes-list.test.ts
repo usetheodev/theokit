@@ -1,16 +1,16 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { resolve } from 'node:path'
-import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
-import { scanServerActions } from '../../packages/theo/src/server/action-scan.js'
-import { scanWebSocketRoutes } from '../../packages/theo/src/server/ws-scan.js'
+import { scanServerRoutes } from '../../packages/theo/src/server/scan/scan.js'
+import { scanServerActions } from '../../packages/theo/src/server/scan/action-scan.js'
+import { scanWebSocketRoutes } from '../../packages/theo/src/server/scan/ws-scan.js'
 
 describe('Route Listing Data', () => {
   it('should list API routes from fixture', () => {
     const serverDir = resolve(__dirname, '../../fixtures/server-routes-basic/server')
     const routes = scanServerRoutes(serverDir)
     expect(routes.length).toBeGreaterThan(0)
-    const paths = routes.map(r => r.routePath)
-    expect(paths.some(p => p.includes('health'))).toBe(true)
+    const paths = routes.map((r) => r.routePath)
+    expect(paths.some((p) => p.includes('health'))).toBe(true)
   })
 
   it('should list actions from fixture', () => {
@@ -23,7 +23,7 @@ describe('Route Listing Data', () => {
     const serverDir = resolve(__dirname, '../../fixtures/websocket-basic/server')
     const routes = scanWebSocketRoutes(serverDir)
     expect(routes.length).toBeGreaterThan(0)
-    const paths = routes.map(r => r.wsPath)
+    const paths = routes.map((r) => r.wsPath)
     expect(paths).toContain('/ws/echo')
   })
 

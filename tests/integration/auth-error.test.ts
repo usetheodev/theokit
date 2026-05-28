@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { executeRoute } from '../../packages/theo/src/server/execute.js'
-import type { ServerRouteNode } from '../../packages/theo/src/server/match.js'
-import { requireAuth } from '../../packages/theo/src/server/auth.js'
+import { executeRoute } from '../../packages/theo/src/server/http/execute.js'
+import type { ServerRouteNode } from '../../packages/theo/src/server/scan/match.js'
+import { requireAuth } from '../../packages/theo/src/server/auth/auth.js'
 
 function createMockReq(method = 'GET', url = '/api/test'): IncomingMessage {
   return {
@@ -17,9 +17,13 @@ function createMockRes() {
   let status = 0
   let body = ''
   return {
-    writeHead: vi.fn((s: number) => { status = s }),
+    writeHead: vi.fn((s: number) => {
+      status = s
+    }),
     write: vi.fn(),
-    end: vi.fn((b?: string) => { if (b) body = b }),
+    end: vi.fn((b?: string) => {
+      if (b) body = b
+    }),
     headersSent: false,
     writableEnded: false,
     statusCode: 200,
@@ -38,10 +42,22 @@ describe('Auth Error Handling in executeRoute', () => {
   it('should return 401 with AUTH_REQUIRED when handler throws requireAuth(null)', async () => {
     const res = createMockRes()
     const loader = async () => ({
-      GET: { handler: () => { requireAuth(null) } },
+      GET: {
+        handler: () => {
+          requireAuth(null)
+        },
+      },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-123')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-123',
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(401, expect.anything())
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)
@@ -52,10 +68,22 @@ describe('Auth Error Handling in executeRoute', () => {
   it('should include requestId in 401 response', async () => {
     const res = createMockRes()
     const loader = async () => ({
-      GET: { handler: () => { requireAuth(null) } },
+      GET: {
+        handler: () => {
+          requireAuth(null)
+        },
+      },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-456')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-456',
+    })
 
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)
     expect(body.error.requestId).toBe('req-456')
@@ -64,10 +92,22 @@ describe('Auth Error Handling in executeRoute', () => {
   it('should still return 500 for non-auth errors (backward compat)', async () => {
     const res = createMockRes()
     const loader = async () => ({
-      GET: { handler: () => { throw new Error('Something broke') } },
+      GET: {
+        handler: () => {
+          throw new Error('Something broke')
+        },
+      },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader, undefined, 'req-789')
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+      requestId: 'req-789',
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(500, expect.anything())
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)
@@ -86,7 +126,14 @@ describe('Auth Error Handling in executeRoute', () => {
       },
     })
 
-    await executeRoute(createRoute(), 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route: createRoute(),
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(200, expect.anything())
     const body = JSON.parse((res.end as ReturnType<typeof vi.fn>).mock.calls[0][0] as string)

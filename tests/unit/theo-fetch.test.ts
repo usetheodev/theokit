@@ -114,10 +114,12 @@ describe('theoFetch', () => {
   })
 
   it('should handle empty content-length', async () => {
-    mockFetch.mockResolvedValue(new Response('', {
-      status: 200,
-      headers: { 'content-length': '0' },
-    }))
+    mockFetch.mockResolvedValue(
+      new Response('', {
+        status: 200,
+        headers: { 'content-length': '0' },
+      }),
+    )
     const result = await theoFetch('/api/empty')
     expect(result).toBeNull()
   })

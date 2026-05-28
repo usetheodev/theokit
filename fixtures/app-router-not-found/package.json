@@ -1,1 +1,5 @@
-{ "name": "app-router-not-found", "private": true, "type": "module" }
+{
+  "name": "app-router-not-found",
+  "private": true,
+  "type": "module"
+}

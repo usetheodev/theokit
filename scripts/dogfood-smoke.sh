@@ -11,7 +11,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SCORE=0
-MAX=47
+MAX=48
 FAILS=()
 
 pass() {
@@ -476,11 +476,22 @@ else
   fail "CSRF warn-first incomplete (missing one of: enforceCsrf / schema / opt-out / theoFetch header)"
 fi
 
+# 48. T7.2 (0.3.0) — bundle budget CI gate
+echo "→ Bundle budget script (T7.2)"
+if [ -x scripts/check-bundle-budget.sh ] \
+   && grep -q "BUNDLE_BUDGET_KB" scripts/check-bundle-budget.sh \
+   && grep -q "zlib" scripts/check-bundle-budget.sh \
+   && ! grep -q "| gzip -c" scripts/check-bundle-budget.sh; then
+  pass "bundle budget script present (executable + portable via Node zlib)"
+else
+  fail "bundle budget script missing or non-portable (uses shell gzip)"
+fi
+
 echo ""
 echo "════════════════════════════════════════"
 echo "Health Score: $SCORE/$MAX"
 if [ "$SCORE" -ge 41 ]; then
-  echo "Status: PASS (>= 41/47 = >= 85%)"
+  echo "Status: PASS (>= 41/$MAX = >= 85%)"
   exit 0
 else
   echo "Status: FAIL"

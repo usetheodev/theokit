@@ -1,5 +1,6 @@
+import path from 'node:path'
+
 import { defineConfig } from '@playwright/test'
-import path from 'path'
 
 const rootDir = path.dirname(new URL(import.meta.url).pathname)
 const cliPath = path.resolve(rootDir, 'packages/theo/src/cli/index.ts')
@@ -12,7 +13,7 @@ export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 30000,
   expect: { timeout: 10000 },
-  workers: 1,  // Sequential — 4 dev servers compete for resources in parallel
+  workers: 1, // Sequential — 4 dev servers compete for resources in parallel
   projects: [
     {
       name: 'onda1',
@@ -38,6 +39,66 @@ export default defineConfig({
       name: 'template-default',
       use: { baseURL: 'http://localhost:3460' },
       testMatch: 'template-default.spec.ts',
+    },
+    {
+      // T2.2 — Canonical chat.ts via @usetheo/sdk Agent.prompt + throwOnError.
+      // Reuses template-default fixture on a separate port; fake ANTHROPIC_API_KEY
+      // makes Anthropic return 401 → SDK throws AgentRunError → SSE error event.
+      name: 'template-default-canonical-chat',
+      use: { baseURL: 'http://localhost:3470' },
+      testMatch: 'template-default-canonical-chat.spec.ts',
+    },
+    {
+      // 0.3.0 cutover T4.1 validation — per-request nonce machinery
+      // end-to-end. Asserts that <script nonce="X"> in the SSR'd HTML
+      // matches the Content-Security-Policy header's nonce-X directive,
+      // Cache-Control: private, no-store is set (EC-3), and every <script>
+      // tag emitted carries the nonce attribute (EC-12).
+      name: 'ssr-nonce',
+      use: { baseURL: 'http://localhost:3492' },
+      testMatch: 'ssr-nonce.spec.ts',
+    },
+    {
+      // Item #6 — examples/full-stack-agent demo. Exercises every Phase B
+      // primitive end-to-end + the cookie persistence story.
+      name: 'full-stack-agent',
+      use: { baseURL: 'http://localhost:3494' },
+      testMatch: 'example-full-stack-agent.spec.ts',
+    },
+    {
+      name: 'devtools',
+      use: { baseURL: 'http://localhost:3461' },
+      testMatch: 'devtools.spec.ts',
+    },
+    {
+      // T6.1 — WebSocket E2E
+      name: 'websocket-echo',
+      use: { baseURL: 'http://localhost:3462' },
+      testMatch: 'websocket-echo.spec.ts',
+    },
+    {
+      // T5.1 — dashboard template (1 of 4)
+      name: 'template-dashboard',
+      use: { baseURL: 'http://localhost:3463' },
+      testMatch: 'template-dashboard.spec.ts',
+    },
+    {
+      // T5.1 — api-only template (2 of 4)
+      name: 'template-api-only',
+      use: { baseURL: 'http://localhost:3464' },
+      testMatch: 'template-api-only.spec.ts',
+    },
+    {
+      // T5.1 — postgres template (3 of 4) — env-gated (DATABASE_URL).
+      name: 'template-postgres',
+      use: { baseURL: 'http://localhost:3465' },
+      testMatch: 'template-postgres.spec.ts',
+    },
+    {
+      // T5.1 — saas template (4 of 4) — env-gated (DATABASE_URL + THEO_SESSION_SECRET).
+      name: 'template-saas',
+      use: { baseURL: 'http://localhost:3466' },
+      testMatch: 'template-saas.spec.ts',
     },
   ],
   webServer: [
@@ -75,6 +136,91 @@ export default defineConfig({
       port: 3460,
       reuseExistingServer: false,
       timeout: 60000,
+    },
+    {
+      // T1.3 — devtools project. Reuses template-default fixture on a
+      // separate port so the existing template-default spec is unaffected.
+      command: `npx tsx ${cliPath} dev --port 3461`,
+      cwd: fixture('template-default'),
+      port: 3461,
+      reuseExistingServer: false,
+      timeout: 60000,
+    },
+    {
+      // T2.2 — Canonical chat.ts spec. Same fixture, separate port. A
+      // placeholder OPENROUTER_API_KEY is set so the route reaches the
+      // `createConversationHistory` path (issues the cookie) BEFORE the
+      // SDK call returns 401 from OpenRouter — exactly what the item-5
+      // continuity specs assert. The string intentionally lacks any
+      // `sk-` prefix so secret scanners don't trip.
+      command: `npx tsx ${cliPath} dev --port 3470`,
+      cwd: fixture('template-default'),
+      port: 3470,
+      reuseExistingServer: false,
+      timeout: 60000,
+      env: { OPENROUTER_API_KEY: 'PLAYWRIGHT_PLACEHOLDER_canonical_chat' },
+    },
+    {
+      // Item #6 — examples/full-stack-agent. Placeholder OpenRouter key
+      // reaches createConversationHistory (cookie issued) before the SDK
+      // returns 401 from OpenRouter — exactly the wire we want to assert.
+      command: `npx tsx ${cliPath} dev --port 3494`,
+      cwd: path.resolve(rootDir, 'examples/full-stack-agent'),
+      port: 3494,
+      reuseExistingServer: false,
+      timeout: 60000,
+      env: { OPENROUTER_API_KEY: 'PLAYWRIGHT_PLACEHOLDER_full_stack_agent' },
+    },
+    {
+      // 0.3.0 cutover T4.1 — ssr-basic on dedicated port for the nonce spec.
+      command: `npx tsx ${cliPath} dev --port 3492`,
+      cwd: fixture('ssr-basic'),
+      port: 3492,
+      reuseExistingServer: false,
+      timeout: 60000,
+    },
+    {
+      // T6.1 — WebSocket echo fixture for the WS E2E spec.
+      // EC-8: webServer timeout 180s for scaffold + first-run install.
+      command: `npx tsx ${cliPath} dev --port 3462`,
+      cwd: fixture('websocket-basic'),
+      port: 3462,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — dashboard template fixture.
+      command: `npx tsx ${cliPath} dev --port 3463`,
+      cwd: fixture('template-dashboard'),
+      port: 3463,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — api-only template fixture.
+      command: `npx tsx ${cliPath} dev --port 3464`,
+      cwd: fixture('template-api-only'),
+      port: 3464,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — postgres template fixture. Tests are env-gated via
+      // DATABASE_URL; the server boots regardless so the harness is
+      // testable end-to-end in any env. CI provides Postgres service.
+      command: `npx tsx ${cliPath} dev --port 3465`,
+      cwd: fixture('template-postgres'),
+      port: 3465,
+      reuseExistingServer: false,
+      timeout: 180000,
+    },
+    {
+      // T5.1 — saas template fixture. Same env-gate strategy.
+      command: `npx tsx ${cliPath} dev --port 3466`,
+      cwd: fixture('template-saas'),
+      port: 3466,
+      reuseExistingServer: false,
+      timeout: 180000,
     },
   ],
 })

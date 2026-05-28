@@ -10,7 +10,7 @@ describe('Cloudflare adapter — WS wiring (T3.4)', () => {
 
   it('template detects upgrade requests', () => {
     const out = renderCloudflareWorkerEntry()
-    expect(out).toContain("upgrade")
+    expect(out).toContain('upgrade')
     expect(out).toMatch(/websocket/i)
   })
 

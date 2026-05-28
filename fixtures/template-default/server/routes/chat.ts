@@ -1,47 +1,65 @@
-import { defineAgentEndpoint, type AgentEvent } from 'theokit/server'
+import { z } from 'zod'
+import {
+  defineAgentEndpoint,
+  defineAgentTool,
+  streamAgentRun,
+  createConversationHistory,
+  type AgentEvent,
+} from 'theokit/server'
 
 /**
- * MOCK AGENT ENDPOINT — REPLACE WITH YOUR REAL LLM PROVIDER.
+ * Chat agent endpoint — persistent conversation via createConversationHistory.
  *
- * What this is:
- *   A demo that yields 3 hardcoded events so the default scaffold has
- *   something to render from the first `theokit dev`.
+ * Each browser tab gets a stable conversation id cookie on first visit;
+ * subsequent requests resume the same agent. Conversation turns auto-persist
+ * in `<cwd>/.theokit/agents/<conversationId>/messages.jsonl` (SDK owns
+ * storage). Tools: current_time example. Memory facts: opt-in via
+ * options.memory (off by default).
  *
- * What to do here:
- *   Substitua este mock pelo seu LLM provider (OpenAI/Anthropic/local).
- *   O shape de AgentEvent é o contrato — qualquer provider que produza
- *   events compatíveis (`message`, `tool_call`, `tool_result`, `error`)
- *   funciona. Para token streaming, prefira UM evento `message` com
- *   content acumulado em vez de um evento por token (evita SSE backpressure).
- *
- * Example real handler:
- *   import { OpenAI } from 'openai'
- *   export const POST = defineAgentEndpoint({
- *     async *handler({ body }) {
- *       const { message } = body as { message: string }
- *       const stream = await openai.chat.completions.create({ stream: true, ... })
- *       let acc = ''
- *       for await (const chunk of stream) {
- *         acc += chunk.choices[0].delta.content ?? ''
- *         yield { type: 'message', content: acc }
- *       }
- *     },
- *   })
- *
- * The `body` is already parsed by the framework (JSON / multipart). Use
- * `body` instead of `request.json()` — `request` is the underlying Node
- * `IncomingMessage` and does not expose a Web-Fetch `.json()` method.
- *
- * The wire format is Server-Sent Events (text/event-stream), produced
- * automatically by `defineAgentEndpoint`:
- *   data: {"type":"message","content":"..."}\n\n
- *   data: {"type":"tool_call","name":"...","args":{...}}\n\n
+ * Provider: OPENROUTER_API_KEY (preferred — gateway to many models) OR
+ * ANTHROPIC_API_KEY (direct Anthropic).
  */
+
+const currentTime = defineAgentTool({
+  name: 'current_time',
+  description: 'Get the current ISO timestamp on the server.',
+  inputSchema: z.object({}),
+  handler: () => new Date().toISOString(),
+})
+
 export const POST = defineAgentEndpoint({
-  async *handler({ body }): AsyncGenerator<AgentEvent> {
-    const { message = '' } = (body ?? {}) as { message?: string }
-    yield { type: 'message', content: `Recebi: "${message}"` }
-    yield { type: 'tool_call', name: 'search', args: { q: message } }
-    yield { type: 'message', content: 'Pronto. (Este é um mock — conecte seu LLM aqui.)' }
+  async *handler({ body, request, cookieHeaders, signal }): AsyncGenerator<AgentEvent> {
+    const safeBody =
+      body !== null && typeof body === 'object' && !Array.isArray(body)
+        ? (body as { message?: string })
+        : {}
+    const { message = '' } = safeBody
+    const orKey = process.env.OPENROUTER_API_KEY
+    const anKey = process.env.ANTHROPIC_API_KEY
+    const apiKey = orKey !== undefined && orKey.length > 0 ? orKey : anKey
+    const modelId =
+      orKey !== undefined && orKey.length > 0
+        ? 'openrouter/anthropic/claude-3.5-sonnet'
+        : 'claude-sonnet-4-5-20250929'
+    if (apiKey === undefined || apiKey.length === 0) {
+      yield {
+        type: 'error',
+        message: 'Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY in your .env to enable the agent.',
+      }
+      return
+    }
+    const { agent } = await createConversationHistory({
+      request,
+      response: { headers: cookieHeaders },
+      options: {
+        apiKey,
+        model: { id: modelId },
+        tools: [currentTime],
+      },
+    })
+    const run = await agent.send(message, { signal })
+    yield* streamAgentRun(run)
+    // Intentionally NO agent.dispose() — the agent stays registered so the
+    // next request from the same conversation resumes it (continuity).
   },
 })

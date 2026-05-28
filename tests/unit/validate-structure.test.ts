@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES = path.resolve(__dirname, '../../fixtures')
-const TEMP_DIR = path.join(tmpdir(), 'theo-validate-' + Date.now())
+const TEMP_DIR = path.join(tmpdir(), `theo-validate-${Date.now()}`)
 
 beforeAll(() => {
   // Create a temp dir without app/ and without theo.config.ts (for multi-error test)

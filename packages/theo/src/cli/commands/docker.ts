@@ -1,3 +1,7 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI `theo docker`. Writes Dockerfile + .dockerignore under user's `cwd`.
+ * Build-time tool. No HTTP input.
+ */
 import { existsSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -80,6 +84,7 @@ function generateDockerignore(): string {
   ].join('\n')
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- CLI surface contract is async; sync today is implementation detail
 export async function dockerCommand(options?: { force?: boolean }): Promise<void> {
   const cwd = process.cwd()
   const dockerfilePath = resolve(cwd, 'Dockerfile')

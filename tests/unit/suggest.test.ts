@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { levenshtein, findSuggestion } from '../../packages/theo/src/server/suggest.js'
+import {
+  levenshtein,
+  findSuggestion,
+} from '../../packages/theo/src/server/observability/suggest.js'
 
 describe('levenshtein', () => {
   it('should return 0 for identical strings', () => {

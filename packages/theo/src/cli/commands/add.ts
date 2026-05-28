@@ -1,6 +1,10 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI `theo add` — detects pkg manager + writes manifests under user `cwd`.
+ * Build-time tool. No HTTP input.
+ */
+import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { spawn } from 'node:child_process'
 
 export class InvalidPackageNameError extends Error {
   constructor(input: string, reason: string) {
@@ -32,10 +36,7 @@ export function validatePackageInput(input: string): true {
     throw new InvalidPackageNameError(input, 'must be a non-empty string')
   }
   if (!PACKAGE_NAME_REGEX.test(input)) {
-    throw new InvalidPackageNameError(
-      input,
-      'allowed: lowercase letters, digits, hyphens only',
-    )
+    throw new InvalidPackageNameError(input, 'allowed: lowercase letters, digits, hyphens only')
   }
   return true
 }
@@ -88,7 +89,9 @@ function levenshtein(a: string, b: string): number {
   const n = b.length
   if (m === 0) return n
   if (n === 0) return m
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    Array.from<number>({ length: n + 1 }).fill(0),
+  )
   for (let i = 0; i <= m; i++) dp[i][0] = i
   for (let j = 0; j <= n; j++) dp[0][j] = j
   for (let i = 1; i <= m; i++) {
@@ -133,11 +136,11 @@ export async function runAdd(deps: RunAddDeps): Promise<AddResult> {
   validatePackageInput(deps.input)
 
   const registry = deps.registry ?? KNOWN_PACKAGES
-  const entry = registry[deps.input]
-  if (!entry) {
+  if (!Object.hasOwn(registry, deps.input)) {
     const suggestion = findSuggestion(deps.input, Object.keys(registry))
     throw new UnknownPackageError(deps.input, suggestion)
   }
+  const entry = registry[deps.input]
 
   // T6.1 — bundled adapters need no install
   if (entry.kind === 'bundled') {
@@ -183,10 +186,14 @@ function defaultSpawnPm(
   args: string[],
   opts: { cwd: string; shell: boolean },
 ): Promise<{ ok: boolean; code: number }> {
-  return new Promise((resolveProm) => {
+  return new Promise((resolve) => {
     const proc = spawn(cmd, args, { cwd: opts.cwd, shell: opts.shell, stdio: 'inherit' })
-    proc.on('close', (code) => resolveProm({ ok: code === 0, code: code ?? 1 }))
-    proc.on('error', () => resolveProm({ ok: false, code: 1 }))
+    proc.on('close', (code) => {
+      resolve({ ok: code === 0, code: code ?? 1 })
+    })
+    proc.on('error', () => {
+      resolve({ ok: false, code: 1 })
+    })
   })
 }
 

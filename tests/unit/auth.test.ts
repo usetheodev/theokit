@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { requireAuth, AuthRequiredError } from '../../packages/theo/src/server/auth.js'
+import { requireAuth, AuthRequiredError } from '../../packages/theo/src/server/auth/auth.js'
 
 describe('requireAuth', () => {
   it('should pass with valid session object', () => {

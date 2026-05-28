@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { serializeResponse, deserializeResponse } from '../../packages/theo/src/server/serialization.js'
+import {
+  serializeResponse,
+  deserializeResponse,
+} from '../../packages/theo/src/server/serialization.js'
 
 describe('serializeResponse / deserializeResponse', () => {
   it('should roundtrip Date objects', () => {
@@ -12,7 +15,12 @@ describe('serializeResponse / deserializeResponse', () => {
   })
 
   it('should roundtrip Map objects', () => {
-    const data = { map: new Map([['a', 1], ['b', 2]]) }
+    const data = {
+      map: new Map([
+        ['a', 1],
+        ['b', 2],
+      ]),
+    }
     const serialized = serializeResponse(data)
     const result = deserializeResponse(serialized) as typeof data
 

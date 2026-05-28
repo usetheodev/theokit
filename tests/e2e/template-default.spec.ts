@@ -1,4 +1,4 @@
-import { test, expect, type ConsoleMessage } from '@playwright/test'
+import { test, expect, type ConsoleMessage, type Page } from '@playwright/test'
 
 /**
  * Phase 10 — T10.1 Playwright browser test for the default template.
@@ -26,7 +26,7 @@ const SAFE_TO_IGNORE_CONSOLE = [
   // does not log a console error — listed here just to document the policy.
 ]
 
-function collectConsoleErrors(page: import('@playwright/test').Page) {
+function collectConsoleErrors(page: Page) {
   const errors: string[] = []
   page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() !== 'error') return
@@ -74,12 +74,15 @@ test.describe('Default template — agent surface', () => {
     await expect(page.locator('h1, [class*="font-display"]').first()).toBeVisible()
   })
 
-  test('chat composer accepts input + auto-attaches X-Theo-Action header', async ({ page }) => {
+  test('chat composer accepts input + auto-attaches X-Theo-Action header (T1.1)', async ({
+    page,
+  }) => {
     const errors = collectConsoleErrors(page)
 
-    // Capture the chat request so we can assert the CSRF header is attached
-    // (theoFetch does it, but the template uses native fetch via the hook —
-    // the framework defaults to warn mode so requests succeed without).
+    // T1.1 — Phase 1 BLOCKING fix: consumeAgentStream now attaches
+    // X-Theo-Action: '1' on the POST so 0.3.0 strict CSRF accepts the request
+    // without per-route opt-out. This assertion was previously inverted
+    // (documenting the pre-fix behavior); flipping it locks the fix.
     let chatHadCsrfHeader = false
     page.on('request', (req) => {
       if (req.url().endsWith('/api/chat') && req.method() === 'POST') {
@@ -105,12 +108,10 @@ test.describe('Default template — agent surface', () => {
 
     expect(errors).toEqual([])
 
-    // CSRF header — the template's useAgentStream hook uses native fetch and
-    // does NOT attach the header. The framework still serves the request in
-    // warn mode (default) and logs a stderr warning. We assert the contract:
-    // header absent here is fine; if it WERE present, the server would also
-    // accept it.
-    expect(chatHadCsrfHeader).toBe(false) // documents current behavior
+    // T1.1: useAgentStream MUST attach the header. Inverts the previous
+    // assertion `.toBe(false)` which documented the BUG. Now the test
+    // locks the FIX.
+    expect(chatHadCsrfHeader).toBe(true)
   })
 
   test('streaming response arrives as 3 SSE events in order', async ({ page }) => {
@@ -175,7 +176,9 @@ test.describe('Default template — agent surface', () => {
     await expect(page.getByPlaceholder('Run a command…')).toHaveCount(0)
   })
 
-  test('Phase 7 — every response carries an x-trace-id header (traceparent / x-request-id / generated)', async ({ page }) => {
+  test('Phase 7 — every response carries an x-trace-id header (traceparent / x-request-id / generated)', async ({
+    page,
+  }) => {
     // No header → generated UUID propagates as x-trace-id (and x-request-id).
     const generatedResp = await page.request.get('/api/chat')
     const generatedTrace = generatedResp.headers()['x-trace-id']

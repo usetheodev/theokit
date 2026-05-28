@@ -1,0 +1,65 @@
+name: Release coordinated (T9.1)
+
+# T9.1 — Atomic multi-package publish via scripts/publish-coordinated.sh.
+# Manual `workflow_dispatch` so the release team controls when to fire
+# (no auto-publish on push). Coexists with `release.yml` (changesets-based)
+# — this one is the explicit-atomic path for major releases / beta gates.
+#
+# Requires `NPM_TOKEN` repository secret.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist_tag:
+        description: 'npm dist-tag (latest | next)'
+        required: true
+        default: 'next'
+        type: choice
+        options:
+          - latest
+          - next
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify NPM_TOKEN is set
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "::error::NPM_TOKEN secret is not configured."
+            exit 1
+          fi
+
+      - name: Full validation chain (typecheck + lint + tests)
+        run: |
+          pnpm typecheck
+          pnpm lint --max-warnings=0
+          pnpm format:check
+          pnpm test
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Atomic publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_DIST_TAG: ${{ inputs.dist_tag }}
+        run: bash scripts/publish-coordinated.sh

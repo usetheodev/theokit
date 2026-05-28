@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { defineAgentEndpoint } from '../../packages/theo/src/server/define-agent-endpoint.js'
-import type { AgentEvent } from '../../packages/theo/src/server/agent-types.js'
+import { defineAgentEndpoint } from '../../packages/theo/src/server/define/define-agent-endpoint.js'
+import type { AgentEvent } from '../../packages/theo/src/server/agent/agent-types.js'
 
 /**
  * T5.1 — defineAgentEndpoint
@@ -154,7 +154,6 @@ describe('defineAgentEndpoint (T5.1)', () => {
 
   it('emits no chunks for empty generator (edge case)', async () => {
     const endpoint = defineAgentEndpoint({
-      // eslint-disable-next-line require-yield
       async *handler(): AsyncGenerator<AgentEvent> {
         // emits nothing
       },
@@ -194,5 +193,43 @@ describe('defineAgentEndpoint (T5.1)', () => {
 
     expect(captured.request).toBe(req)
     expect(captured.ctx).toEqual({ userId: 'u-1' })
+  })
+
+  // Item #5 — cookieHeaders bridge
+  it('forwards cookieHeaders writes from handler into the SSE response', async () => {
+    const endpoint = defineAgentEndpoint({
+      async *handler({ cookieHeaders }): AsyncGenerator<AgentEvent> {
+        cookieHeaders.append('set-cookie', 'theo_conversation=abc123; HttpOnly; Path=/')
+        yield { type: 'message', content: 'hi' }
+      },
+    })
+
+    const response = (await endpoint.handler({
+      query: undefined,
+      body: undefined,
+      params: undefined,
+      request: makeMockRequest(),
+      ctx: undefined,
+    })) as Response
+
+    expect(response.headers.getSetCookie()).toContain('theo_conversation=abc123; HttpOnly; Path=/')
+  })
+
+  it('does not add Set-Cookie when handler does not touch cookieHeaders', async () => {
+    const endpoint = defineAgentEndpoint({
+      async *handler(): AsyncGenerator<AgentEvent> {
+        yield { type: 'message', content: 'silent' }
+      },
+    })
+
+    const response = (await endpoint.handler({
+      query: undefined,
+      body: undefined,
+      params: undefined,
+      request: makeMockRequest(),
+      ctx: undefined,
+    })) as Response
+
+    expect(response.headers.getSetCookie()).toEqual([])
   })
 })

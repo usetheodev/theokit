@@ -9,6 +9,8 @@ dist/
 .output/
 .nitro/
 .cache/
+.vercel/
+.wrangler/
 *.tsbuildinfo
 
 # Environment
@@ -78,5 +80,7 @@ ONDAS.md
 my-test/
 
 # Reference framework implementations (cloned for SOTA research)
-referencias/
+# referencias/
 .gstack/
+fixtures/template-default/.theokit
+architecture-output

@@ -4,11 +4,11 @@ import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import path from 'node:path'
 import { execSync } from 'node:child_process'
-import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
-import { matchRoute } from '../../packages/theo/src/server/match.js'
-import { executeRoute, sendError } from '../../packages/theo/src/server/execute.js'
-import { createProductionLoader } from '../../packages/theo/src/server/module-loader.js'
-import { serveStaticFile } from '../../packages/theo/src/server/static.js'
+import { scanServerRoutes } from '../../packages/theo/src/server/scan/scan.js'
+import { matchRoute } from '../../packages/theo/src/server/scan/match.js'
+import { executeRoute, sendError } from '../../packages/theo/src/server/http/execute.js'
+import { createProductionLoader } from '../../packages/theo/src/server/scan/module-loader.js'
+import { serveStaticFile } from '../../packages/theo/src/server/http/static.js'
 
 const FIXTURES = path.resolve(import.meta.dirname, '../../fixtures')
 const fixtureDir = path.join(FIXTURES, 'production-build')
@@ -21,6 +21,7 @@ let port: number
 
 beforeAll(async () => {
   // Build using CLI
+  // eslint-disable-next-line sonarjs/os-command -- developer-local integration test running the framework's own CLI via npx tsx
   execSync(
     `npx tsx ${resolve(import.meta.dirname, '../../packages/theo/src/cli/index.ts')} build`,
     { cwd: fixtureDir, stdio: 'pipe' },
@@ -36,9 +37,20 @@ beforeAll(async () => {
       if (url.startsWith('/api/')) {
         const routes = scanServerRoutes(serverDir)
         const match = matchRoute(url, routes)
-        if (!match) { sendError(res, 'NOT_FOUND', 'Not found', 404); return }
+        if (!match) {
+          sendError(res, 'NOT_FOUND', 'Not found', 404)
+          return
+        }
         const method = (req.method ?? 'GET').toUpperCase()
-        await executeRoute(match.route, method, match.params, req, res, loadModule, serverDir)
+        await executeRoute({
+          route: match.route,
+          method,
+          params: match.params,
+          req,
+          res,
+          loadModule,
+          serverDir,
+        })
         return
       }
       if (serveStaticFile(req, res, clientDir)) return

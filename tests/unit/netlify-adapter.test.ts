@@ -61,12 +61,9 @@ describe('mergeNetlifyToml (EC-2)', () => {
   })
 
   it('appends Theo redirect when no conflicting /api/* redirect exists', () => {
-    const existing = [
-      '[[redirects]]',
-      '  from = "/old"',
-      '  to = "/new"',
-      '  status = 301',
-    ].join('\n')
+    const existing = ['[[redirects]]', '  from = "/old"', '  to = "/new"', '  status = 301'].join(
+      '\n',
+    )
     const merged = mergeNetlifyToml(existing)
     expect(merged).toContain('from = "/old"')
     expect(merged).toContain('from = "/api/*"')
@@ -83,10 +80,7 @@ describe('mergeNetlifyToml (EC-2)', () => {
   })
 
   it('preserves arbitrary unknown sections', () => {
-    const existing = [
-      '[context.production.environment]',
-      '  NODE_VERSION = "20"',
-    ].join('\n')
+    const existing = ['[context.production.environment]', '  NODE_VERSION = "20"'].join('\n')
     const merged = mergeNetlifyToml(existing)
     expect(merged).toContain('[context.production.environment]')
     expect(merged).toContain('NODE_VERSION = "20"')

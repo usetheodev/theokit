@@ -46,7 +46,9 @@ describe('defineAction type inference', () => {
   })
 
   it('should infer ctx type from TCtx generic', () => {
-    interface AppContext { userId: string }
+    interface AppContext {
+      userId: string
+    }
     defineAction<z.ZodObject<{ name: z.ZodString }>, AppContext>({
       input: z.object({ name: z.string() }),
       handler: ({ ctx }) => {

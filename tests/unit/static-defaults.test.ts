@@ -99,9 +99,7 @@ describe('buildStatic — default Vite SSR wiring (T1.5 closure)', () => {
         ensureDir: async () => {},
       })
 
-      const files = Object.keys(captured).filter((p) =>
-        p.includes('/.theo/static/blog/'),
-      )
+      const files = Object.keys(captured).filter((p) => p.includes('/.theo/static/blog/'))
       expect(files.length).toBe(2)
     } finally {
       rmSync(cwd, { recursive: true, force: true })

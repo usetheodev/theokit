@@ -10,10 +10,7 @@ describe('Onda 4 — Server Actions', () => {
   let baseUrl: string
 
   beforeAll(async () => {
-    server = await startDevServer(
-      path.join(FIXTURES, 'server-actions-basic'),
-      { port: 0 },
-    )
+    server = await startDevServer(path.join(FIXTURES, 'server-actions-basic'), { port: 0 })
     const address = server.httpServer!.address()
     port = typeof address === 'object' && address ? address.port : 0
     baseUrl = `http://localhost:${port}/api/__actions/create-user/createUser`

@@ -60,9 +60,7 @@ describe('T1.3 — resolveTheoRootDir branch detection', () => {
   it('src shape: currentDir is vite-plugin/, parent has client/ → returns parent', () => {
     const t = buildTempTree()
     try {
-      expect(resolveTheoRootDir(t.srcViteShape.currentDir)).toBe(
-        t.srcViteShape.expectedRoot,
-      )
+      expect(resolveTheoRootDir(t.srcViteShape.currentDir)).toBe(t.srcViteShape.expectedRoot)
     } finally {
       t.cleanup()
     }

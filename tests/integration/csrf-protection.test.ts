@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { executeRoute } from '../../packages/theo/src/server/execute.js'
-import type { ServerRouteNode } from '../../packages/theo/src/server/match.js'
+import { executeRoute } from '../../packages/theo/src/server/http/execute.js'
+import type { ServerRouteNode } from '../../packages/theo/src/server/scan/match.js'
 
 /**
  * Phase 5 — CSRF integration test.
@@ -32,7 +32,9 @@ function makeReq(opts: Partial<FakeReq> = {}): IncomingMessage {
     url: opts.url ?? '/api/login',
     on() {},
     removeListener() {},
-    emit() { return true },
+    emit() {
+      return true
+    },
   } as unknown as IncomingMessage
 }
 
@@ -51,9 +53,17 @@ function makeRes(): FakeRes & ServerResponse {
     statusCode: 200,
     headers: {},
     ended: false,
-    writeHead(s, h) { this.statusCode = s; if (h) Object.assign(this.headers, h) },
-    setHeader(k, v) { this.headers[k.toLowerCase()] = v },
-    end(body) { this.body = body; this.ended = true },
+    writeHead(s, h) {
+      this.statusCode = s
+      if (h) Object.assign(this.headers, h)
+    },
+    setHeader(k, v) {
+      this.headers[k.toLowerCase()] = v
+    },
+    end(body) {
+      this.body = body
+      this.ended = true
+    },
   }
   return res as FakeRes & ServerResponse
 }
@@ -84,10 +94,16 @@ describe('CSRF integration — warn mode (default)', () => {
     const req = makeReq({ method: 'POST', headers: {} })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-1', undefined, undefined, 'warn',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-1',
+      csrfMode: 'warn',
+    })
 
     expect(handler).toHaveBeenCalledOnce()
     expect(res.statusCode).toBe(200)
@@ -102,10 +118,16 @@ describe('CSRF integration — warn mode (default)', () => {
     const req = makeReq({ method: 'POST', headers: { 'x-theo-action': '1' } })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-2', undefined, undefined, 'warn',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-2',
+      csrfMode: 'warn',
+    })
 
     expect(handler).toHaveBeenCalledOnce()
     expect(warnSpy).not.toHaveBeenCalled()
@@ -116,10 +138,16 @@ describe('CSRF integration — warn mode (default)', () => {
     const req = makeReq({ method: 'GET', headers: {} })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'GET', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-3', undefined, undefined, 'warn',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'GET',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-3',
+      csrfMode: 'warn',
+    })
 
     expect(handler).toHaveBeenCalledOnce()
     expect(warnSpy).not.toHaveBeenCalled()
@@ -132,10 +160,16 @@ describe('CSRF integration — strict mode', () => {
     const req = makeReq({ method: 'POST', headers: {} })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-4', undefined, undefined, 'strict',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-4',
+      csrfMode: 'strict',
+    })
 
     expect(handler).not.toHaveBeenCalled()
     expect(res.statusCode).toBe(403)
@@ -147,10 +181,16 @@ describe('CSRF integration — strict mode', () => {
     const req = makeReq({ method: 'POST', headers: { 'x-theo-action': '1' } })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-5', undefined, undefined, 'strict',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-5',
+      csrfMode: 'strict',
+    })
 
     expect(handler).toHaveBeenCalledOnce()
     expect(res.statusCode).toBe(200)
@@ -168,10 +208,16 @@ describe('CSRF integration — strict mode', () => {
     })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-6', undefined, undefined, 'strict',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-6',
+      csrfMode: 'strict',
+    })
 
     expect(handler).not.toHaveBeenCalled()
     expect(res.statusCode).toBe(403)
@@ -182,10 +228,16 @@ describe('CSRF integration — strict mode', () => {
     const req = makeReq({ method: 'POST', headers: {} })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler, csrf: false }),
-      undefined, 'rid-7', undefined, undefined, 'strict',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler, csrf: false }),
+      requestId: 'rid-7',
+      csrfMode: 'strict',
+    })
 
     expect(handler).toHaveBeenCalledOnce()
     expect(res.statusCode).toBe(200)
@@ -198,10 +250,16 @@ describe('CSRF integration — off mode', () => {
     const req = makeReq({ method: 'POST', headers: {} })
     const res = makeRes()
 
-    await executeRoute(
-      ROUTE, 'POST', {}, req, res, makeLoader({ handler }),
-      undefined, 'rid-8', undefined, undefined, 'off',
-    )
+    await executeRoute({
+      route: ROUTE,
+      method: 'POST',
+      params: {},
+      req,
+      res,
+      loadModule: makeLoader({ handler }),
+      requestId: 'rid-8',
+      csrfMode: 'off',
+    })
 
     expect(handler).toHaveBeenCalledOnce()
     expect(warnSpy).not.toHaveBeenCalled()

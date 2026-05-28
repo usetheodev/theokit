@@ -22,10 +22,7 @@ export const requestIdEchoPlugin = defineTheoPlugin({
     })
 
     app.addHook('onError', (ctx) => {
-      console.error(
-        `[request-id-echo] request ${ctx.requestId} failed:`,
-        ctx.error,
-      )
+      console.error(`[request-id-echo] request ${ctx.requestId} failed:`, ctx.error)
     })
   },
 })

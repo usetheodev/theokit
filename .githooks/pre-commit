@@ -1,12 +1,28 @@
 #!/usr/bin/env bash
-# Git pre-commit hook — delegates to scripts/prevent-secrets.sh
-# This hook blocks commits containing secrets or sensitive data.
+# Git pre-commit hook — runs:
+#   1. Secret scanning (scripts/prevent-secrets.sh)
+#   2. lint-staged (ESLint + Prettier on changed files only — fast)
+#
+# Per CLAUDE.md "Testes — Se Não Tem Teste, Não Funciona": tests are NOT
+# in pre-commit to keep the loop tight. Tests run in CI (cheap there).
 
-SCRIPT="$(git rev-parse --show-toplevel)/scripts/prevent-secrets.sh"
+set -e
 
-if [ -f "$SCRIPT" ]; then
-  bash "$SCRIPT"
+ROOT="$(git rev-parse --show-toplevel)"
+
+# 1. Secret scan — fail fast on accidental secrets.
+SECRETS_SCRIPT="$ROOT/scripts/prevent-secrets.sh"
+if [ -f "$SECRETS_SCRIPT" ]; then
+  bash "$SECRETS_SCRIPT"
 else
-  echo "WARNING: prevent-secrets.sh not found at $SCRIPT"
+  echo "WARNING: prevent-secrets.sh not found at $SECRETS_SCRIPT"
   echo "Secret scanning skipped."
+fi
+
+# 2. lint-staged — ESLint + Prettier on staged files only.
+if [ -f "$ROOT/node_modules/.bin/lint-staged" ]; then
+  cd "$ROOT" && ./node_modules/.bin/lint-staged
+else
+  echo "WARNING: lint-staged not installed — skipping lint/format step."
+  echo "Run 'pnpm install' to enable the full pre-commit gate."
 fi

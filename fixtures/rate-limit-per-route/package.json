@@ -1,0 +1,5 @@
+{
+  "name": "rate-limit-per-route",
+  "private": true,
+  "type": "module"
+}

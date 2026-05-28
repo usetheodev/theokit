@@ -3,3 +3,30 @@ packages:
   - 'my-test'
   - 'examples/*'
   - 'fixtures/template-default'
+  # T9.1 — TheoUI auto-inject fixture: needs @usetheo/ui resolvable via
+  # node_modules for the entry-client probe (theoui-detect.ts) to succeed.
+  - 'fixtures/theoui-autoinject'
+  # Wave 2 completion plan T0.2 — services fixtures pre-emptively registered.
+  # Fixture service ports are 8101 (python-basic), 8102 (node-basic),
+  # 8103/8104 (both — python+node with dependsOn). Tests that spawn these
+  # MUST run serial within the same Vitest file (port collisions otherwise).
+  # Port range RESERVED: 8100–8199 for service fixtures.
+  - 'fixtures/services-python-basic'
+  - 'fixtures/services-node-basic'
+  - 'fixtures/services-both'
+  # Template fixtures (Playwright matrix). Wave 2 prereq R0.5.2 — Postgres
+  # templates need @usetheo/ui + drizzle-orm installed; workspace
+  # registration ensures `pnpm install` from root provisions them.
+  - 'fixtures/template-dashboard'
+  - 'fixtures/template-api-only'
+  - 'fixtures/template-postgres'
+  - 'fixtures/template-saas'
+  # @usetheo/sdk via sibling checkout (workspace protocol) — required by the
+  # canonical chat.ts wired in fixtures/template-default. pnpm tolerates
+  # missing sibling for contributors without the checkout.
+  - '../theokit-sdk/packages/sdk'
+  # @usetheo/gateway + @usetheo/gateway-telegram — required by
+  # examples/full-stack-agent for the Telegram bot demo. Same sibling-checkout
+  # tolerance as @usetheo/sdk.
+  - '../theokit-sdk/packages/gateway'
+  - '../theokit-sdk/packages/gateway-telegram'

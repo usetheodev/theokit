@@ -1,9 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   createBatcher,
   type BatchTransport,
   type BatchRequest,
-  type BatchResponse,
 } from '../../packages/theo/src/client/batch.js'
 
 describe('createBatcher — microtask collapsing (T5.1)', () => {

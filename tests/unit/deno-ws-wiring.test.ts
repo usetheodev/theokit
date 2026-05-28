@@ -10,7 +10,7 @@ describe('Deno adapter — WS wiring (T3.3)', () => {
 
   it('template detects upgrade requests', () => {
     const out = renderDenoEntry(8000)
-    expect(out).toContain("upgrade")
+    expect(out).toContain('upgrade')
     expect(out).toMatch(/websocket/i)
   })
 

@@ -14,6 +14,9 @@ import { theoPlugin } from '../../packages/theo/src/vite-plugin/index.js'
  * The fix is the full list of subpath aliases ORDERED with bare last.
  * If anyone removes an entry or reorders so that `theokit` is not last,
  * these tests fail.
+ *
+ * NOTE: config() became async after T3.3 (zero-config-polish) — it now
+ * awaits integrateUseTheoUI() for @usetheo/ui auto-config. Tests await.
  */
 
 const EXPECTED_SUBPATHS = [
@@ -26,12 +29,11 @@ const EXPECTED_SUBPATHS = [
   // 'theokit' (bare) — MUST be last
 ]
 
-function getAliasArray(): Array<{ find: string; replacement: string }> {
+async function getAliasArray(): Promise<Array<{ find: string; replacement: string }>> {
   const plugin = theoPlugin()
-  // Vite plugin API: config() returns the config patch
-  const hook = plugin.config as (this: unknown, ...args: unknown[]) => unknown
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cfg = hook.call({}, {} as any, {} as any) as
+  const hook = plugin.config as (this: unknown, ...args: unknown[]) => Promise<unknown>
+
+  const cfg = (await hook.call({}, {} as any, {} as any)) as
     | { resolve?: { alias?: unknown } }
     | undefined
   const alias = cfg?.resolve?.alias
@@ -40,41 +42,42 @@ function getAliasArray(): Array<{ find: string; replacement: string }> {
 }
 
 describe('T1.2 — Vite plugin emits all subpath aliases in correct order', () => {
-  it('emits at least 7 aliases', () => {
-    const aliases = getAliasArray()
+  it('emits at least 7 aliases', async () => {
+    const aliases = await getAliasArray()
     expect(aliases.length).toBeGreaterThanOrEqual(EXPECTED_SUBPATHS.length + 1)
   })
 
-  it('contains every expected subpath alias', () => {
-    const aliases = getAliasArray()
+  it('contains every expected subpath alias', async () => {
+    const aliases = await getAliasArray()
     const finds = aliases.map((a) => a.find)
     for (const sub of EXPECTED_SUBPATHS) {
       expect(finds, `missing alias ${sub}`).toContain(sub)
     }
   })
 
-  it('places bare `theokit` alias LAST (so subpaths match first)', () => {
-    const aliases = getAliasArray()
+  it('places bare `theokit` alias LAST (so subpaths match first)', async () => {
+    const aliases = await getAliasArray()
     const last = aliases[aliases.length - 1]
     expect(last?.find, 'bare theokit alias must be last in array').toBe('theokit')
   })
 
-  it('replacement path for `theokit/client` points to an existing file', () => {
-    const aliases = getAliasArray()
+  it('replacement path for `theokit/client` points to an existing file', async () => {
+    const aliases = await getAliasArray()
     const clientAlias = aliases.find((a) => a.find === 'theokit/client')
     expect(clientAlias).toBeDefined()
-    expect(existsSync(clientAlias!.replacement), `missing file: ${clientAlias!.replacement}`).toBe(true)
+    expect(existsSync(clientAlias!.replacement), `missing file: ${clientAlias!.replacement}`).toBe(
+      true,
+    )
   })
 
-  it('each subpath alias resolves to a real file on disk', () => {
-    const aliases = getAliasArray()
+  it('each subpath alias resolves to a real file on disk', async () => {
+    const aliases = await getAliasArray()
     for (const sub of EXPECTED_SUBPATHS) {
       const a = aliases.find((x) => x.find === sub)
       expect(a, `missing alias for ${sub}`).toBeDefined()
-      expect(
-        existsSync(a!.replacement),
-        `alias ${sub} → ${a!.replacement} does not exist`,
-      ).toBe(true)
+      expect(existsSync(a!.replacement), `alias ${sub} → ${a!.replacement} does not exist`).toBe(
+        true,
+      )
     }
   })
 })

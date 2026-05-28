@@ -36,9 +36,7 @@ describe('generateRouteManifest', () => {
   })
 
   it('should generate errorElement for error file', () => {
-    const code = generateRouteManifest(
-      makeNode({ page: '/app/page.tsx', error: '/app/error.tsx' }),
-    )
+    const code = generateRouteManifest(makeNode({ page: '/app/page.tsx', error: '/app/error.tsx' }))
     expect(code).toContain('errorElement')
     expect(code).toContain('Error_root')
   })
@@ -96,7 +94,11 @@ describe('generateRouteManifest', () => {
     const code = generateRouteManifest(
       makeNode({
         children: [
-          makeNode({ segment: 'my-dashboard', path: '/my-dashboard', page: '/app/my-dashboard/page.tsx' }),
+          makeNode({
+            segment: 'my-dashboard',
+            path: '/my-dashboard',
+            page: '/app/my-dashboard/page.tsx',
+          }),
         ],
       }),
     )

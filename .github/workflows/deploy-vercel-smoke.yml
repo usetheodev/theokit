@@ -1,0 +1,60 @@
+name: Deploy smoke (Vercel)
+
+# T4.1 — Real Vercel deploy + smoke. Gated on changes to the example
+# OR the adapter code OR the smoke script. Manual `workflow_dispatch`
+# is also wired so the release team can fire it on demand.
+#
+# Requires `VERCEL_TOKEN` repository secret.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'examples/deploy-vercel/**'
+      - 'packages/theo/src/adapters/vercel.ts'
+      - 'scripts/deploy-smoke-vercel.sh'
+      - '.github/workflows/deploy-vercel-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name:
+          Install dependencies
+          # Workspace deps; the example uses workspace:* for theokit.
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify VERCEL_TOKEN is set
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN secret is not configured."
+            exit 1
+          fi
+
+      - name: Run Vercel deploy + smoke
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bash scripts/deploy-smoke-vercel.sh
+
+      - name: Upload deploy-evidence.jsonl
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-evidence-${{ github.sha }}
+          path: deploy-evidence.jsonl
+          if-no-files-found: warn

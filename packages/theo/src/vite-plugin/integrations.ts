@@ -88,7 +88,7 @@ export function createIntegrationRegistry(
 ): IntegrationRegistry {
   const integrations: TheoIntegration[] = []
   const virtualModules = new Map<string, { code: string; owner: string }>()
-  const routes: Array<{ path: string; owner: string; handler: RouteHandler }> = []
+  const routes: { path: string; owner: string; handler: RouteHandler }[] = []
   const userRoutes = new Set(options.existingRoutes)
 
   function buildHookCtxFor(integrationName: string, extra: Partial<HookContext>): HookContext {
@@ -152,16 +152,18 @@ export function createIntegrationRegistry(
     listRoutes() {
       return routes.map((r) => ({ path: r.path, owner: r.owner }))
     },
+    // eslint-disable-next-line @typescript-eslint/require-await -- async surface for the public callHook contract
     async callHook(integrationName, _hookName, extraCtx) {
-      const ctx = buildHookCtxFor(integrationName, extraCtx)
+      // Build the ctx for parity with `fire()` so test invocations
+      // observe the same shape; we don't actually need the value here.
+      buildHookCtxFor(integrationName, extraCtx)
       // Surface for direct test invocation; production code uses fire()
-      if (extraCtx.addVirtualModule && typeof extraCtx.addVirtualModule === 'function') {
-        ;(extraCtx.addVirtualModule as (id: string, code: string) => void)(
+      if (typeof extraCtx.addVirtualModule === 'function') {
+        extraCtx.addVirtualModule(
           `virtual:integration:${integrationName}/test`,
           'export const ok = true',
         )
       }
-      void ctx // suppress unused warning
     },
   }
 }

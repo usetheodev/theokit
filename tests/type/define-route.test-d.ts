@@ -58,7 +58,10 @@ describe('defineRoute type inference', () => {
   })
 
   it('should infer ctx type from TCtx generic', () => {
-    interface AppContext { user: string; requestId: string }
+    interface AppContext {
+      user: string
+      requestId: string
+    }
     defineRoute<z.ZodUndefined, z.ZodUndefined, z.ZodUndefined, AppContext>({
       handler: ({ ctx }) => {
         expectTypeOf(ctx).toEqualTypeOf<AppContext>()

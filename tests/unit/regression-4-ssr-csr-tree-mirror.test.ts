@@ -48,12 +48,8 @@ describe('T1.4 — SSR and CSR React trees mirror each other', () => {
   })
 
   it('with theoUi enabled: only the leaf component differs (StaticRouterProvider vs RouterProvider)', () => {
-    const server = extractWrapSequence(
-      generateEntryServer({ theoUi: { theme: 'noir' } }),
-    )
-    const client = extractWrapSequence(
-      generateEntryClient(true, { theoUi: { theme: 'noir' } }),
-    )
+    const server = extractWrapSequence(generateEntryServer({ theoUi: { theme: 'noir' } }))
+    const client = extractWrapSequence(generateEntryClient(true, { theoUi: { theme: 'noir' } }))
     // Strip the leaf, compare wrappers
     expect(server.slice(0, -1)).toEqual(client.slice(0, -1))
     expect(server[server.length - 1]).toBe('StaticRouterProvider')

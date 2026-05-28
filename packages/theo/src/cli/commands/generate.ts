@@ -1,8 +1,33 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * CLI `theo generate`. Writes scaffolded files under `cwd` + a generator
+ * name from CLI args. Build-time tool. No HTTP input.
+ */
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 
-const VALID_TYPES = ['route', 'action', 'page', 'ws'] as const
-type GeneratorType = (typeof VALID_TYPES)[number]
+export const VALID_TYPES = ['route', 'action', 'page', 'ws'] as const
+export type GeneratorType = (typeof VALID_TYPES)[number]
+
+export interface GenerateOptions {
+  cwd: string
+  type: string
+  name: string
+}
+
+export type GenerateStatus =
+  | 'created'
+  | 'already_exists'
+  | 'invalid_kind'
+  | 'invalid_name'
+  | 'not_a_project'
+
+export interface GenerateResult {
+  status: GenerateStatus
+  filePath?: string
+  kind?: GeneratorType
+  name?: string
+  message?: string
+}
 
 function toKebabCase(name: string): boolean {
   return /^[a-z][a-z0-9/-]*$/.test(name)
@@ -11,7 +36,7 @@ function toKebabCase(name: string): boolean {
 function toPascalCase(name: string): string {
   return name
     .split(/[-/]/)
-    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join('')
 }
 
@@ -52,15 +77,12 @@ function generateActionTemplate(name: string): string {
 
 function generatePageTemplate(name: string): string {
   const pascal = toPascalCase(name)
-  return [
-    `export default function ${pascal}Page() {`,
-    `  return <h1>${pascal}</h1>`,
-    `}`,
-    ``,
-  ].join('\n')
+  return [`export default function ${pascal}Page() {`, `  return <h1>${pascal}</h1>`, `}`, ``].join(
+    '\n',
+  )
 }
 
-function generateWsTemplate(name: string): string {
+function generateWsTemplate(_name: string): string {
   return [
     `import { defineWebSocket } from 'theokit/server'`,
     ``,
@@ -73,27 +95,36 @@ function generateWsTemplate(name: string): string {
   ].join('\n')
 }
 
-export async function generateCommand(type: string, name: string): Promise<void> {
-  const cwd = process.cwd()
+/**
+ * Programmatic generate. Returns a structured result instead of throwing —
+ * Studio (`theokit_generate` tool) consumes this directly. The CLI wrapper
+ * below maps the structured result to console output + exit code semantics.
+ */
+// eslint-disable-next-line @typescript-eslint/require-await
+export async function generate(opts: GenerateOptions): Promise<GenerateResult> {
+  const { cwd, type, name } = opts
 
-  // Check if in a Theo project (EC-1)
   if (!existsSync(resolve(cwd, 'theo.config.ts')) && !existsSync(resolve(cwd, 'theo.config.js'))) {
-    throw new Error('Not a Theo project. Run this from a project root with theo.config.ts')
+    return {
+      status: 'not_a_project',
+      message: 'Not a Theo project. cwd has no theo.config.ts or theo.config.js',
+    }
   }
 
-  // Validate type
   if (!VALID_TYPES.includes(type as GeneratorType)) {
-    throw new Error(`Invalid generator type "${type}". Available types: ${VALID_TYPES.join(', ')}`)
+    return {
+      status: 'invalid_kind',
+      message: `Invalid generator type "${type}". Available: ${VALID_TYPES.join(', ')}`,
+    }
   }
 
-  // Validate name
   if (!name || !toKebabCase(name)) {
-    throw new Error(
-      `Invalid name "${name}". Use kebab-case: lowercase letters, numbers, hyphens. Example: my-route`,
-    )
+    return {
+      status: 'invalid_name',
+      message: `Invalid name "${name}". Use kebab-case: lowercase letters, numbers, hyphens.`,
+    }
   }
 
-  // Determine file path and content
   let filePath: string
   let content: string
 
@@ -115,20 +146,39 @@ export async function generateCommand(type: string, name: string): Promise<void>
       content = generateWsTemplate(name)
       break
     default:
-      throw new Error(`Unknown type: ${type}`)
+      return { status: 'invalid_kind', message: `Unknown type: ${type}` }
   }
 
-  // Check if file exists
   if (existsSync(filePath)) {
-    console.log(`\n  ⚠ ${filePath} already exists. Skipping.\n`)
-    return
+    return { status: 'already_exists', filePath, kind: type as GeneratorType, name }
   }
 
-  // Create directories
   mkdirSync(dirname(filePath), { recursive: true })
-
-  // Write file
   writeFileSync(filePath, content)
 
-  console.log(`\n  ✓ Created ${type}: ${filePath}\n`)
+  return { status: 'created', filePath, kind: type as GeneratorType, name }
+}
+
+/**
+ * CLI entry point — preserves the original surface (throws + console.log).
+ * Wraps the programmatic `generate` function.
+ */
+export async function generateCommand(type: string, name: string): Promise<void> {
+  const result = await generate({ cwd: process.cwd(), type, name })
+  switch (result.status) {
+    case 'not_a_project':
+      throw new Error('Not a Theo project. Run this from a project root with theo.config.ts')
+    case 'invalid_kind':
+      throw new Error(result.message ?? 'Invalid kind')
+    case 'invalid_name':
+      throw new Error(
+        `Invalid name "${name}". Use kebab-case: lowercase letters, numbers, hyphens. Example: my-route`,
+      )
+    case 'already_exists':
+      console.log(`\n  ⚠ ${result.filePath} already exists. Skipping.\n`)
+      return
+    case 'created':
+      console.log(`\n  ✓ Created ${type}: ${result.filePath}\n`)
+      return
+  }
 }

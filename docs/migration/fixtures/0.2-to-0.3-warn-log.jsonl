@@ -1,0 +1,5 @@
+{"event":"csrf.warn","method":"POST","path":"/api/chat","reason":"Missing X-Theo-Action header","code":"CSRF_STRICT_CUTOVER","docsUrl":"https://theokit.dev/upgrade/csrf-strict-cutover","warnOnce":true}
+{"event":"csrf.warn","method":"POST","path":"/api/checkout","reason":"Origin mismatch","code":"CSRF_STRICT_CUTOVER","docsUrl":"https://theokit.dev/upgrade/csrf-strict-cutover","warnOnce":true}
+{"event":"csrf.warn","method":"POST","path":"/api/chat","reason":"Missing X-Theo-Action header","code":"CSRF_STRICT_CUTOVER","docsUrl":"https://theokit.dev/upgrade/csrf-strict-cutover","warnOnce":true}
+{"event":"csrf.warn","method":"POST","path":"/api/upload","reason":"Missing X-Theo-Action header","code":"CSRF_STRICT_CUTOVER","docsUrl":"https://theokit.dev/upgrade/csrf-strict-cutover","warnOnce":true}
+{"event":"csrf.warn","method":"PUT","path":"/api/profile","reason":"Origin mismatch","code":"CSRF_STRICT_CUTOVER","docsUrl":"https://theokit.dev/upgrade/csrf-strict-cutover","warnOnce":true}

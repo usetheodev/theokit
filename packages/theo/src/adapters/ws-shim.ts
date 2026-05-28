@@ -10,10 +10,7 @@
 export interface WebSocketLike {
   send(data: string | Uint8Array | ArrayBuffer): void
   close(code?: number, reason?: string): void
-  on(
-    event: 'message' | 'close' | 'error',
-    cb: (data?: unknown) => void,
-  ): void
+  on(event: 'message' | 'close' | 'error', cb: (data?: unknown) => void): void
 }
 
 export interface WsHandler {
@@ -39,16 +36,18 @@ export function createNodeWsBridge(handler: WsHandler): {
   return {
     attach(nativeWs: NodeWsLike): WebSocketLike {
       const wsLike: WebSocketLike = {
-        send: (data) => nativeWs.send(data),
-        close: (code, reason) => nativeWs.close(code, reason),
+        send: (data) => {
+          nativeWs.send(data)
+        },
+        close: (code, reason) => {
+          nativeWs.close(code, reason)
+        },
         on: (event, cb) => {
           nativeWs.on(event, cb)
         },
       }
       nativeWs.on('open', () => handler.onOpen?.(wsLike))
-      nativeWs.on('message', (data) =>
-        handler.onMessage?.(wsLike, data),
-      )
+      nativeWs.on('message', (data) => handler.onMessage?.(wsLike, data))
       nativeWs.on('close', (codeMaybe) => {
         const code = typeof codeMaybe === 'number' ? codeMaybe : undefined
         handler.onClose?.(wsLike, code)
@@ -76,8 +75,12 @@ export interface BunWebSocketConfig {
 
 function bunCtxToWsLike(bunWs: BunWsContext): WebSocketLike {
   return {
-    send: (data) => bunWs.send(data),
-    close: (code, reason) => bunWs.close(code, reason),
+    send: (data) => {
+      bunWs.send(data)
+    },
+    close: (code, reason) => {
+      bunWs.close(code, reason)
+    },
     on: () => {
       // Bun pushes events via the config handlers — no per-instance on()
     },
@@ -121,8 +124,12 @@ export function createDenoWsBridge(
     handle(request: Request): Response {
       const { response, socket } = denoNs.upgradeWebSocket(request)
       const wsLike: WebSocketLike = {
-        send: (data) => socket.send(data),
-        close: (code, reason) => socket.close(code, reason),
+        send: (data) => {
+          socket.send(data)
+        },
+        close: (code, reason) => {
+          socket.close(code, reason)
+        },
         on: () => {
           // Deno uses addEventListener — adapter dispatches below
         },
@@ -136,9 +143,7 @@ export function createDenoWsBridge(
         const ev = e as { code?: number; reason?: string }
         handler.onClose?.(wsLike, ev.code, ev.reason)
       })
-      socket.addEventListener('error', (err) =>
-        handler.onError?.(wsLike, err),
-      )
+      socket.addEventListener('error', (err) => handler.onError?.(wsLike, err))
       return response
     },
   }
@@ -164,18 +169,27 @@ export function createCloudflareWsBridge(handler: WsHandler): {
         WebSocketPair?: new () => { 0: unknown; 1: CfServerWs }
       }
       if (!g.WebSocketPair) {
-        throw new Error(
-          'WebSocketPair is not available — Cloudflare Workers runtime expected.',
-        )
+        throw new Error('WebSocketPair is not available — Cloudflare Workers runtime expected.')
       }
       const pair = new g.WebSocketPair()
       const client = pair[0]
       const server = pair[1]
       server.accept()
       const wsLike: WebSocketLike = {
-        send: (data) => server.send(data),
-        close: (code, reason) => server.close(code, reason),
-        on: () => {},
+        send: (data) => {
+          server.send(data)
+        },
+        close: (code, reason) => {
+          server.close(code, reason)
+        },
+        // Cloudflare's WebSocketPair exposes events via addEventListener;
+        // the WebSocketLike `on` contract is for Node-style ws. We leave
+        // it as a no-op so user handlers that expect Node-style `on(...)`
+        // do not crash — but the events flow through addEventListener
+        // below, not through this method.
+        on: (): void => {
+          /* intentional no-op on Cloudflare; see comment above */
+        },
       }
       server.addEventListener('open', () => handler.onOpen?.(wsLike))
       server.addEventListener('message', (e) => {
@@ -186,9 +200,7 @@ export function createCloudflareWsBridge(handler: WsHandler): {
         const ev = e as { code?: number; reason?: string }
         handler.onClose?.(wsLike, ev.code, ev.reason)
       })
-      server.addEventListener('error', (err) =>
-        handler.onError?.(wsLike, err),
-      )
+      server.addEventListener('error', (err) => handler.onError?.(wsLike, err))
       // CF requires returning Response with status 101 and webSocket pair.
       // Node's Response throws on 101; fall back to a plain object that
       // satisfies the CF runtime's protocol but matches our test shape.

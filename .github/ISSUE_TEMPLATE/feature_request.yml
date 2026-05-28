@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a new feature or improvement for TheoKit.
+title: '[feat]: '
+labels: ['enhancement', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: check the [roadmap in CLAUDE.md](https://github.com/usetheodev/theokit/blob/main/CLAUDE.md) and existing feature-request issues.
+        If your proposal would change the framework's scope ("the app the agent lives in"), open a discussion instead.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: "What problem are you trying to solve? What's the friction today?"
+      placeholder: 'When I do X, I have to Y manually every time. I expected the framework to...'
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed solution
+      description: 'How would you like the framework to behave? Be specific — API shape, file layout, config keys.'
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: 'What else did you try or think about? Why is your proposal better than those?'
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: "Anything else — what app you're building, what the user-facing impact is, links to similar features in other frameworks."
+    validations:
+      required: false
+  - type: checkboxes
+    id: scope_check
+    attributes:
+      label: Scope check
+      description: 'TheoKit is a vertical framework for agent-shaped apps. We say no to features that dilute that focus.'
+      options:
+        - label: I've read the roadmap and this isn't already on it.
+          required: true
+        - label: This fits TheoKit's stated mission (the app the agent lives in).
+          required: true

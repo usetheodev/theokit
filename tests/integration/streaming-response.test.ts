@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { executeRoute } from '../../packages/theo/src/server/execute.js'
-import type { ServerRouteNode } from '../../packages/theo/src/server/match.js'
+import { executeRoute } from '../../packages/theo/src/server/http/execute.js'
+import type { ServerRouteNode } from '../../packages/theo/src/server/scan/match.js'
 
 function createMockReq(method = 'GET', url = '/api/test'): IncomingMessage {
   return {
@@ -77,7 +77,14 @@ describe('Streaming Response via ReadableStream', () => {
     const route = createRoute('/test')
     const loader = createStreamingLoader(['chunk1', 'chunk2', 'chunk3'])
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.write).toHaveBeenCalledTimes(3)
     expect(res.end).toHaveBeenCalledTimes(1)
@@ -88,7 +95,14 @@ describe('Streaming Response via ReadableStream', () => {
     const route = createRoute('/test')
     const loader = createStreamingLoader(['a', 'b'])
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.end).toHaveBeenCalledTimes(1)
   })
@@ -96,16 +110,26 @@ describe('Streaming Response via ReadableStream', () => {
   it('should preserve Content-Type: text/event-stream for SSE', async () => {
     const res = createMockRes()
     const route = createRoute('/test')
-    const loader = createStreamingLoader(
-      ['data: hello\n\n', 'data: world\n\n'],
-      { 'content-type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-    )
-
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
-
-    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
+    const loader = createStreamingLoader(['data: hello\n\n', 'data: world\n\n'], {
       'content-type': 'text/event-stream',
-    }))
+      'Cache-Control': 'no-cache',
+    })
+
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
+
+    expect(res.writeHead).toHaveBeenCalledWith(
+      200,
+      expect.objectContaining({
+        'content-type': 'text/event-stream',
+      }),
+    )
     expect(res.write).toHaveBeenCalledTimes(2)
   })
 
@@ -125,7 +149,14 @@ describe('Streaming Response via ReadableStream', () => {
       },
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.write).not.toHaveBeenCalled()
     expect(res.end).toHaveBeenCalledTimes(1)
@@ -140,7 +171,14 @@ describe('Streaming Response via ReadableStream', () => {
       },
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.writeHead).toHaveBeenCalledWith(204, expect.anything())
     expect(res.write).not.toHaveBeenCalled()
@@ -152,18 +190,29 @@ describe('Streaming Response via ReadableStream', () => {
     const route = createRoute('/test')
     const loader = async () => ({
       GET: {
-        handler: () => new Response('hello world', {
-          status: 200,
-          headers: { 'content-type': 'text/plain' },
-        }),
+        handler: () =>
+          new Response('hello world', {
+            status: 200,
+            headers: { 'content-type': 'text/plain' },
+          }),
       },
     })
 
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
-    expect(res.writeHead).toHaveBeenCalledWith(200, expect.objectContaining({
-      'content-type': 'text/plain',
-    }))
+    expect(res.writeHead).toHaveBeenCalledWith(
+      200,
+      expect.objectContaining({
+        'content-type': 'text/plain',
+      }),
+    )
     // String body creates a single-chunk ReadableStream
     expect(res.write).toHaveBeenCalled()
     expect(res.end).toHaveBeenCalledTimes(1)
@@ -193,7 +242,14 @@ describe('Streaming Response via ReadableStream', () => {
     })
 
     // Should NOT throw — error is caught internally
-    await executeRoute(route, 'GET', {}, createMockReq(), res, loader)
+    await executeRoute({
+      route,
+      method: 'GET',
+      params: {},
+      req: createMockReq(),
+      res,
+      loadModule: loader,
+    })
 
     expect(res.write).toHaveBeenCalledTimes(1) // first chunk written
     expect(res.end).toHaveBeenCalledTimes(1) // response closed gracefully

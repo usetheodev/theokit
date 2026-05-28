@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { encrypt, decrypt } from '../../packages/theo/src/server/crypto.js'
+import { encrypt, decrypt } from '../../packages/theo/src/server/auth/crypto.js'
 
 const SECRET = 'a-very-secure-secret-key-for-testing-purposes-1234'
 

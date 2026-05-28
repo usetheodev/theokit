@@ -1,8 +1,15 @@
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Netlify deploy adapter. All paths derived from `cwd` and a fixed
+ * `.theo/netlify/` output layout. Build-time tool — no HTTP input.
+ */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import type { DeployAdapter } from './types.js'
+
 import type { TheoConfig } from '../config/schema.js'
+import { assertServicesUnsupported, readManifest } from '../services/index.js'
+
 import { nodeAdapter } from './node.js'
+import type { AdapterBuildContext, DeployAdapter } from './types.js'
 
 export class NetlifyConflictError extends Error {
   constructor(path: string, currentTo: string) {
@@ -16,7 +23,7 @@ export class NetlifyConflictError extends Error {
 }
 
 export interface NetlifyBuildDeps {
-  runNodeBuild?: (config: TheoConfig, cwd: string) => Promise<void>
+  runNodeBuild?: (config: TheoConfig, cwd: string, ctx?: AdapterBuildContext) => Promise<void>
   writeFile?: (path: string, content: string) => void
   ensureDir?: (path: string) => void
   readTomlIfExists?: () => string | null
@@ -55,7 +62,7 @@ export function renderNetlifyFunction(): string {
     `  const { req, res, toResponse } = createWebShim(request)`,
     `  const requestId = randomUUID()`,
     `  const method = request.method.toUpperCase()`,
-    `  await executeRoute(match.route, method, match.params, req, res, loaderCache, serverDir, requestId)`,
+    `  await executeRoute({ route: match.route, method, params: match.params, req, res, loadModule: loaderCache, serverDir, requestId })`,
     `  return toResponse()`,
     `}`,
   ].join('\n')
@@ -77,29 +84,19 @@ const THEO_REDIRECT_TO = '/.netlify/functions/theo'
  * Unknown sections (e.g. `[build]`, `[[headers]]`, `[context.production.environment]`)
  * are preserved as-is.
  */
-export function mergeNetlifyToml(existing: string | null): string {
-  const target = [
-    '[[redirects]]',
-    '  from = "/api/*"',
-    '  to = "/.netlify/functions/theo"',
-    '  status = 200',
-    '  force = true',
-  ].join('\n')
+interface NetlifyRedirectBlock {
+  startLine: number
+  endLine: number
+  from?: string
+  to?: string
+}
 
-  if (existing === null || existing.trim().length === 0) {
-    return target + '\n'
-  }
-
-  // Parse blocks: split on lines, track `[[redirects]]` sections and their
-  // `from`/`to` values.
-  const lines = existing.split(/\r?\n/)
-  type Block = { startLine: number; endLine: number; from?: string; to?: string }
-  const blocks: Block[] = []
-  let current: Block | null = null
+function parseRedirectBlocks(lines: readonly string[]): NetlifyRedirectBlock[] {
+  const blocks: NetlifyRedirectBlock[] = []
+  let current: NetlifyRedirectBlock | null = null
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
-    const trimmed = line.trim()
+    const trimmed = lines[i].trim()
     if (trimmed === '[[redirects]]') {
       if (current) {
         current.endLine = i - 1
@@ -109,47 +106,71 @@ export function mergeNetlifyToml(existing: string | null): string {
       continue
     }
     if (current && /^\[(\[|[^[])/.test(trimmed)) {
-      // entering another section — close current
+      // Entering another section — close current.
       current.endLine = i - 1
       blocks.push(current)
       current = null
     }
     if (current) {
-      const fromMatch = trimmed.match(/^from\s*=\s*"([^"]+)"/)
+      const fromMatch = /^from\s*=\s*"([^"]+)"/.exec(trimmed)
       if (fromMatch) current.from = fromMatch[1]
-      const toMatch = trimmed.match(/^to\s*=\s*"([^"]+)"/)
+      const toMatch = /^to\s*=\s*"([^"]+)"/.exec(trimmed)
       if (toMatch) current.to = toMatch[1]
       current.endLine = i
     }
   }
   if (current) blocks.push(current)
+  return blocks
+}
+
+const THEO_REDIRECT_TARGET = [
+  '[[redirects]]',
+  '  from = "/api/*"',
+  '  to = "/.netlify/functions/theo"',
+  '  status = 200',
+  '  force = true',
+].join('\n')
+
+export function mergeNetlifyToml(existing: string | null): string {
+  if (existing === null || existing.trim().length === 0) {
+    return `${THEO_REDIRECT_TARGET}\n`
+  }
+
+  const blocks = parseRedirectBlocks(existing.split(/\r?\n/))
 
   // Detect conflict: every `/api/*` block must point at our function.
   for (const b of blocks) {
-    if (b.from === THEO_REDIRECT_FROM) {
-      if (b.to === THEO_REDIRECT_TO) {
-        // Already merged — return existing as-is (idempotent).
-        return existing.endsWith('\n') ? existing : existing + '\n'
-      }
-      throw new NetlifyConflictError(b.from, b.to ?? '(unknown)')
+    if (b.from !== THEO_REDIRECT_FROM) continue
+    if (b.to === THEO_REDIRECT_TO) {
+      // Already merged — return existing as-is (idempotent).
+      return existing.endsWith('\n') ? existing : `${existing}\n`
     }
+    throw new NetlifyConflictError(b.from, b.to ?? '(unknown)')
   }
 
   // No conflict — append target block.
   const sep = existing.endsWith('\n') ? '' : '\n'
-  return existing + sep + '\n' + target + '\n'
+  return `${existing}${sep}\n${THEO_REDIRECT_TARGET}\n`
 }
 
 export async function buildNetlify(
   config: TheoConfig,
   cwd: string,
   deps: NetlifyBuildDeps = {},
+  ctx?: AdapterBuildContext,
 ): Promise<void> {
+  // Wave 2 (T2.2) — reject polyglot services on this adapter.
+  assertServicesUnsupported('netlify', readManifest(cwd))
+
   const runNodeBuild = deps.runNodeBuild ?? nodeAdapter.build.bind(nodeAdapter)
-  await runNodeBuild(config, cwd)
+  await runNodeBuild(config, cwd, ctx)
 
   const ensureDir = deps.ensureDir ?? ((p: string) => mkdirSync(p, { recursive: true }))
-  const writeFile = deps.writeFile ?? ((p, c) => writeFileSync(p, c))
+  const writeFile =
+    deps.writeFile ??
+    ((p, c) => {
+      writeFileSync(p, c)
+    })
   const readTomlIfExists =
     deps.readTomlIfExists ??
     (() => {
@@ -165,12 +186,13 @@ export async function buildNetlify(
   const merged = mergeNetlifyToml(existingToml)
   writeFile(resolve(cwd, 'netlify.toml'), merged)
 
+  // eslint-disable-next-line no-console -- CLI build progress
   console.log('\n  ✓ Netlify output → .netlify/functions/theo.mjs + netlify.toml\n')
 }
 
 export const netlifyAdapter: DeployAdapter = {
   name: 'netlify',
-  build(config, cwd) {
-    return buildNetlify(config, cwd)
+  build(config, cwd, ctx) {
+    return buildNetlify(config, cwd, {}, ctx)
   },
 }

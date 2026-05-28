@@ -17,8 +17,13 @@ describe('TheoTransformer — built-in implementations', () => {
   it('superjson roundtrips Map and Set', () => {
     const m = new Map([['a', 1]])
     const s = new Set([1, 2, 3])
-    const outMap = superjsonTransformer.deserialize(superjsonTransformer.serialize(m)) as Map<string, number>
-    const outSet = superjsonTransformer.deserialize(superjsonTransformer.serialize(s)) as Set<number>
+    const outMap = superjsonTransformer.deserialize(superjsonTransformer.serialize(m)) as Map<
+      string,
+      number
+    >
+    const outSet = superjsonTransformer.deserialize(
+      superjsonTransformer.serialize(s),
+    ) as Set<number>
     expect(outMap.get('a')).toBe(1)
     expect(Array.from(outSet)).toEqual([1, 2, 3])
   })

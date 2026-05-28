@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   createPluginRunnerFromConfig,
   InvalidPluginShapeError,
-} from '../../packages/theo/src/server/load-plugins.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+} from '../../packages/theo/src/server/plugins/load-plugins.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 
 describe('createPluginRunnerFromConfig', () => {
   it('returns undefined when plugins is null', async () => {
@@ -31,21 +31,19 @@ describe('createPluginRunnerFromConfig', () => {
   })
 
   it('throws InvalidPluginShapeError for non-object entries', async () => {
-    await expect(
-      createPluginRunnerFromConfig([42]),
-    ).rejects.toThrow(InvalidPluginShapeError)
+    await expect(createPluginRunnerFromConfig([42])).rejects.toThrow(InvalidPluginShapeError)
   })
 
   it('throws for entries missing name', async () => {
-    await expect(
-      createPluginRunnerFromConfig([{ register: () => {} }]),
-    ).rejects.toThrow(/missing "name"/)
+    await expect(createPluginRunnerFromConfig([{ register: () => {} }])).rejects.toThrow(
+      /missing "name"/,
+    )
   })
 
   it('throws for entries missing register function', async () => {
-    await expect(
-      createPluginRunnerFromConfig([{ name: 'foo' }]),
-    ).rejects.toThrow(/missing "register"/)
+    await expect(createPluginRunnerFromConfig([{ name: 'foo' }])).rejects.toThrow(
+      /missing "register"/,
+    )
   })
 
   it('reports the offending index', async () => {

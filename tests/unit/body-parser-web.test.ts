@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  parseWebRequestBody,
-  RequestBodyTooLargeError,
-} from '../../packages/theo/src/server/body-parser-web.js'
+import { parseWebRequestBody } from '../../packages/theo/src/server/body-parser-web.js'
 
 describe('parseWebRequestBody (T5.1)', () => {
   it('extracts JSON body when content-type is application/json', async () => {
@@ -39,9 +36,9 @@ describe('parseWebRequestBody (T5.1)', () => {
       },
       body: '{}',
     })
-    await expect(
-      parseWebRequestBody(req, { maxFileSize: 10, maxFiles: 1 }),
-    ).rejects.toThrow(/too large/i)
+    await expect(parseWebRequestBody(req, { maxFileSize: 10, maxFiles: 1 })).rejects.toThrow(
+      /too large/i,
+    )
   })
 
   it('handles empty body gracefully', async () => {

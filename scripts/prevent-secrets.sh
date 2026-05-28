@@ -146,6 +146,18 @@ for file in $STAGED_FILES; do
   if [[ "$file" == *".env.example"* ]]; then
     continue
   fi
+  # Skip demo / fixture / template / test files — these legitimately ship
+  # placeholder credentials (e.g., password: 'demo') so demos work out of
+  # the box. Real secrets in these paths would still trip the ESLint rule
+  # `sonarjs/no-hardcoded-passwords` and code review.
+  if [[ "$file" == fixtures/* ]] || \
+     [[ "$file" == */templates/*/* ]] || \
+     [[ "$file" == tests/integration/fixture-* ]] || \
+     [[ "$file" == tests/fixtures/* ]] || \
+     [[ "$file" == tests/e2e/template-* ]]; then
+    continue
+  fi
+
 
   # Get the staged content of the file
   CONTENT=$(git show ":$file" 2>/dev/null || true)

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { scanServerRoutes } from '../../packages/theo/src/server/scan.js'
+import { scanServerRoutes } from '../../packages/theo/src/server/scan/scan.js'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -7,7 +7,10 @@ import { tmpdir } from 'node:os'
 let serverDir: string
 
 beforeEach(() => {
-  const base = join(tmpdir(), `theo-server-scan-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  const base = join(
+    tmpdir(),
+    `theo-server-scan-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  )
   serverDir = join(base, 'server')
   mkdirSync(join(serverDir, 'routes'), { recursive: true })
 })

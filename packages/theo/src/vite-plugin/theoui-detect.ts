@@ -6,8 +6,13 @@
  * detect correctly. Returns `{ enabled: false }` on any failure — never throws.
  */
 
-import { createRequire } from 'node:module'
+/* eslint-disable security/detect-non-literal-fs-filename --
+ * Reads `package.json` of `@usetheo/ui` resolved via `require.resolve`
+ * from the user's project. Path comes from a controlled require resolution,
+ * not HTTP input. Build-time tool.
+ */
 import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
 const localRequire = createRequire(import.meta.url)
@@ -29,10 +34,7 @@ export interface TheoUiDetectResult {
  * Raw user config shape (from theo.config.ts > ui field).
  * `false` = opt-out (force disabled); object = explicit config; undefined = default.
  */
-export type RawTheoUiConfig =
-  | false
-  | undefined
-  | { theme?: TheoUiTheme; fonts?: TheoUiFonts }
+export type RawTheoUiConfig = false | undefined | { theme?: TheoUiTheme; fonts?: TheoUiFonts }
 
 /**
  * Resolve the TheoUI config with defaults applied.
@@ -86,10 +88,13 @@ function isDeclaredInPackageJson(projectRoot: string): boolean {
       devDependencies?: Record<string, string>
       peerDependencies?: Record<string, string>
     }
+    // `||` is intentional — any truthy version string (including '0.0.0')
+    // counts as a declaration. `??` would let '' fall through, but version
+    // strings are never empty.
     return Boolean(
-      pkg.dependencies?.['@usetheo/ui'] ||
-        pkg.devDependencies?.['@usetheo/ui'] ||
-        pkg.peerDependencies?.['@usetheo/ui'],
+      pkg.dependencies?.['@usetheo/ui'] ??
+      pkg.devDependencies?.['@usetheo/ui'] ??
+      pkg.peerDependencies?.['@usetheo/ui'],
     )
   } catch {
     return false
@@ -101,9 +106,7 @@ export function detectTheoUi(
   rawConfig: RawTheoUiConfig,
   resolver: SubpathResolver = defaultResolver,
 ): TheoUiDetectResult {
-  const config = resolveTheoUiConfig(
-    typeof rawConfig === 'object' && rawConfig !== null ? rawConfig : undefined,
-  )
+  const config = resolveTheoUiConfig(typeof rawConfig === 'object' ? rawConfig : undefined)
 
   // Explicit opt-out wins over detection
   if (rawConfig === false) {

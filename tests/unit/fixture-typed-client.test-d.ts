@@ -4,11 +4,7 @@ import type {
   InferBody,
   InferResponse,
 } from '../../packages/theo/src/client/theo-fetch.js'
-import type {
-  GET,
-  POST,
-  User,
-} from '../../fixtures/typed-client/server/routes/users.js'
+import type { GET, POST, User } from '../../fixtures/typed-client/server/routes/users.js'
 
 /**
  * T4.1 — typed-client fixture type tests.

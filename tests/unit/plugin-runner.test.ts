@@ -3,8 +3,8 @@ import {
   PluginRunner,
   DuplicatePluginError,
   DuplicateDecorationError,
-} from '../../packages/theo/src/server/plugin-runner.js'
-import { defineTheoPlugin } from '../../packages/theo/src/server/define-plugin.js'
+} from '../../packages/theo/src/server/plugins/plugin-runner.js'
+import { defineTheoPlugin } from '../../packages/theo/src/server/define/define-plugin.js'
 import type {
   PluginContext,
   PluginErrorContext,
@@ -37,9 +37,9 @@ describe('PluginRunner — registry', () => {
   it('refuses duplicate plugin names', async () => {
     const runner = new PluginRunner()
     await runner.register(defineTheoPlugin({ name: 'dup', register() {} }))
-    await expect(
-      runner.register(defineTheoPlugin({ name: 'dup', register() {} })),
-    ).rejects.toThrow(DuplicatePluginError)
+    await expect(runner.register(defineTheoPlugin({ name: 'dup', register() {} }))).rejects.toThrow(
+      DuplicatePluginError,
+    )
   })
 
   it('returns false for has() on unknown plugin', () => {
@@ -272,9 +272,7 @@ describe('PluginRunner — onError hook', () => {
       }),
     )
     // Should not throw, should not recurse
-    await expect(
-      runner.runOnError(makeCtx(), new Error('original')),
-    ).resolves.toBeDefined()
+    await expect(runner.runOnError(makeCtx(), new Error('original'))).resolves.toBeDefined()
   })
 })
 

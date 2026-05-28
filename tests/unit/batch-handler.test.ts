@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   handleBatchRequest,
   STRIPPED_HEADERS,
   BatchPathConflictError,
-} from '../../packages/theo/src/server/batch-handler.js'
+} from '../../packages/theo/src/server/http/batch-handler.js'
 
 describe('handleBatchRequest — core (T1.4)', () => {
   it('processes 3 items and returns ordered results', async () => {

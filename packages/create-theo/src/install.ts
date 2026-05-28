@@ -1,4 +1,5 @@
 import spawn from 'cross-spawn'
+
 import type { PkgManager } from './pkg-manager.js'
 
 export function runInstall(cwd: string, pkgManager: PkgManager): void {

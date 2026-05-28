@@ -1,0 +1,63 @@
+/**
+ * Requests tab — list of recent HTTP requests.
+ *
+ * NEVER use dangerouslySetInnerHTML in any devtools component — see plan EC-20.
+ */
+import { useDevtoolsContext } from '../../hooks/useDevtoolsContext.js'
+import { tokens } from '../../styles/tokens.js'
+import { RequestRow } from '../RequestRow.js'
+
+export function RequestsTab() {
+  const { state, dispatch, styles } = useDevtoolsContext()
+
+  if (state.requests.length === 0) {
+    return (
+      <div style={{ color: tokens.colors.textMuted, padding: tokens.spacing.md }}>
+        No requests yet. Make a fetch call in your app to see it here.
+      </div>
+    )
+  }
+
+  const headerClass = styles.css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: ${tokens.spacing.xs} ${tokens.spacing.sm};
+    color: ${tokens.colors.textMuted};
+    font-size: ${tokens.font.sizeXs};
+    border-bottom: 1px solid ${tokens.colors.borderSubtle};
+  `
+  const clearBtn = styles.css`
+    appearance: none;
+    background: transparent;
+    color: ${tokens.colors.textMuted};
+    border: 1px solid ${tokens.colors.borderSubtle};
+    padding: 2px 6px;
+    border-radius: ${tokens.radius.sm};
+    cursor: pointer;
+    font-size: ${tokens.font.sizeXs};
+    &:hover { color: ${tokens.colors.text}; }
+  `
+
+  return (
+    <div data-testid="devtools-requests-tab">
+      <div className={headerClass}>
+        <span>
+          {state.requests.length} request{state.requests.length === 1 ? '' : 's'}
+        </span>
+        <button
+          type="button"
+          className={clearBtn}
+          onClick={() => {
+            dispatch({ type: 'RESET_REQUESTS' })
+          }}
+        >
+          clear
+        </button>
+      </div>
+      {state.requests.map((req) => (
+        <RequestRow key={req.id} request={req} />
+      ))}
+    </div>
+  )
+}

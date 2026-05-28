@@ -1,1 +1,1 @@
-export default { appDir: "app", serverDir: "server", port: 3000 }
+export default { appDir: 'app', serverDir: 'server', port: 3000 }

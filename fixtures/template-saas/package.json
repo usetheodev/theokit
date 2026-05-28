@@ -1,0 +1,15 @@
+{
+  "name": "fixture-template-saas",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "theokit": "workspace:*",
+    "@usetheo/ui": "^0.11.0-next.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.0.0",
+    "zod": "^3.24.0",
+    "drizzle-orm": "^0.45.0",
+    "postgres": "^3.4.0"
+  }
+}
