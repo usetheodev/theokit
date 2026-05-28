@@ -162,10 +162,11 @@ jobs:
     # Wave 2 prereq R0.5.2 — provisions Postgres + envs so the env-gated
     # template-postgres + template-saas Playwright specs run instead of skip.
     # See docs/plans/playwright-postgres-templates-ci-plan.md v1.1.
-    # typecheck-build install includes drizzle-kit (T0.2 — root devDeps).
+    # NOT gated on typecheck-build: neither fixture's routes import
+    # @usetheo/sdk (the dep at the root of typecheck-build's pre-existing
+    # failures on CI without the sibling repo). The job is self-contained.
     name: Playwright Postgres templates (postgres + saas)
     runs-on: ubuntu-latest
-    needs: [typecheck-build]
     env:
       # Test-only — never used in production. Documented in plan ADR D4.
       # gitleaks:allow (suffix `_dummy` marks it as non-secret).
