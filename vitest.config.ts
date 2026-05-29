@@ -6,6 +6,11 @@ export default defineConfig({
   test: {
     globals: true,
     include: ['tests/**/*.test.ts', 'tests/**/*.test-d.ts'],
+    // dogfood-regressions-fix-plan v1.1 T1.2 — native bindings preflight.
+    // globalSetup runs ONCE per suite (before any worker), making this the
+    // most efficient hook for the better-sqlite3 ABI mismatch guard.
+    // See: tests/setup-native-bindings.ts + scripts/preflight-native-bindings.mjs.
+    globalSetup: ['./tests/setup-native-bindings.ts'],
     typecheck: {
       enabled: true,
       include: ['tests/**/*.test-d.ts'],

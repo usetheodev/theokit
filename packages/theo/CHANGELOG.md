@@ -1,5 +1,236 @@
 # theo
 
+## 0.1.0-alpha.17
+
+### Patch Changes
+
+- **Finding A fix: fail-fast when no provider env + no explicit apiKey.**
+
+  Pre-fix: `createConversationHistory` called `tryResolveProvider()` (non-throwing
+  graceful), then passed undefined apiKey to SDK's `Agent.getOrCreate`. SDK
+  exhibited an undocumented silent-fallback behavior — returning a canned LLM-
+  shape response `"Hello! How can I assist you today?"` regardless of input.
+  Stranger sem KEY pensava que o agente funcionava.
+
+  Post-fix: `createConversationHistory` now throws actionable error when:
+  - No `options.apiKey` passed (consumer override)
+  - AND no `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` env
+
+  Template's try/catch yields `{type:'error',message:'Agent error: No LLM provider API key...'}`
+  SSE event with link to OpenRouter signup. Stranger now sees actionable instruction.
+
+  Workaround for users with manual auth flow: pass `options.apiKey` explicitly —
+  auto-resolution is bypassed.
+
+  Empirically validated end-to-end (sdk-residual-behavior-2026-05-28.md):
+  - `POST /api/chat` without provider env → `{type:'error',message:'...'}`
+  - Unit tests: 2 new regression gates (`Finding A: throws...` + `Finding A: explicit apiKey bypasses...`)
+  - Full suite 21/21 GREEN
+
+## 0.1.0-alpha.16
+
+### Patch Changes
+
+- **Chaos helper `chaos-providers.sh` invalid-key scenario: env injection fix.**
+
+  Previously the helper edited the sandbox `.env` to set an invalid OPENROUTER_API_KEY,
+  but the parent shell's exported `OPENROUTER_API_KEY` (valid) won the precedence
+  contest (process.env > .env file). The chaos test never exercised the actual
+  auth-failure code path → false-negative "no error surfaced" finding.
+
+  Fix: helper now passes invalid key via explicit `env "OPENROUTER_API_KEY=..."`
+  before `theokit dev`, overriding parent shell. Now confirmed end-to-end:
+  - OpenRouter returns HTTP 401
+  - SDK surfaces error
+  - Template `chat.ts` try/catch yields `{type:'error',message:'...auth_failed (HTTP 401)...'}`
+  - Helper detects error in SSE response → PASS
+
+  Vendored copy at `theokit/scripts/dogfood/chaos-providers.sh` byte-identical
+  to meta-repo source (parity test `dogfood-helpers-vendor-parity.test.ts`
+  enforces).
+
+  Phase 5 dogfood QA final state: **100/100** (4/4 chaos PASS + 4/4 multi-template
+  PASS + 6/7 lifecycle PASS — the 1 remaining lifecycle SKIP is INTERACTIVE_ONLY
+  phases per plan design).
+
+## 0.1.0-alpha.15
+
+### Patch Changes
+
+- **Template default chat.ts: surface provider errors as AgentEvent `error`.**
+
+  Pre-fix: `streamAgentRun(run)` could silently close SSE when SDK throws on
+  invalid OPENROUTER_API_KEY / rate-limit / model-not-found / 5xx. Client saw
+  a closed stream with no actionable message — stranger lost context.
+
+  Post-fix: full agent lifecycle wrapped in try/catch + caught exceptions
+  yield `{ type: 'error', message: ... }` AgentEvent. Dogfood chaos Phase 12
+  (invalid-key) now PASSES end-to-end.
+
+  Validated via `run-headless.sh` Phase 5 dogfood automation
+  (`dogfood-fixes-and-coverage-expansion-plan.md` v1.1 Phase 5).
+
+## 0.1.0-alpha.14
+
+### Minor Changes
+
+- **theokit-evolution-ci-and-dx onda — CI gates + template DX + devtools observability.**
+
+  This release ships 6 deliverables from the `theokit-evolution-ci-and-dx-plan.md` v1.1:
+
+  **Templates dogfood primitives 0.5.0 (Phase 2B):**
+  - `default` + `dashboard` ship `server/crons/cleanup-conversations.ts` (daily GC of stale `.theokit/agents/*` >30d)
+  - `api-only` ships `server/routes/webhooks/echo.ts` (HMAC-SHA256 self-signed pattern)
+  - `postgres` ships `server/jobs/log-message.ts` (defineJob enqueue pattern, ADR-0003 transactional outbox compliant)
+  - `saas` ships `server/routes/billing/stripe-webhook.ts` (Stripe HMAC verify) + wires `trackAgentRun` in `server/routes/agent.ts`
+
+  **README docs link (Phase 2A):**
+  - All 5 templates ship `📚 Full docs: https://docs.theokit.dev` in header
+
+  **Devtools `Agents` tab (Phase 3):**
+  - New tab in devtools panel showing per-run telemetry: time, user, model, tokens in/out, cost USD, status
+  - `dispatcher.onAgentRun(record)` wired from `trackAgentRun` in dev mode
+  - Tree-shaken in prod via universal `__IS_DEV` IIFE guard (Vite OR tsup) — devtools-treeshake test stays GREEN
+  - Ring buffer cap RING_BUFFER_CAP (50) for high-throughput resilience
+  - Reducer: `AGENT_RUN_ADD` + `RESET_AGENT_RUNS` actions
+
+  **Internals:**
+  - `AgentRunRecord` type + `CHANNEL_AGENT_RUN` channel in `devtools/shared.ts`
+  - `trackAgentRun` extended with optional `status` field (default 'finished')
+
+  No breaking changes; all wiring is additive + opt-in via dev mode.
+
+## 0.1.0-alpha.13
+
+### Patch Changes
+
+- **Template fix: `pnpm.onlyBuiltDependencies: ["esbuild"]` para destravar pnpm 11+ approve-builds gate.**
+
+  Sem esse hint, `pnpm install` + `theokit dev` falham com `ERR_PNPM_IGNORED_BUILDS` em pnpm 11+ (security default: build scripts de transitivas como esbuild não rodam sem aprovação explícita). Como esbuild é dep transitiva mandatória do Vite, declaramos o opt-in nos 5 templates oficiais (default, dashboard, api-only, postgres, saas).
+
+  Stranger executando `npx create-theokit my-app && cd my-app && pnpm install && pnpm dev` agora funciona end-to-end sem `pnpm approve-builds` interactive prompt.
+
+## 0.1.0-alpha.12
+
+### Patch Changes
+
+- **Template SDK bump → `@usetheo/sdk@^1.2.0` (D14 fault injection available).**
+
+  New scaffolds get the SDK with `THEOKIT_TEST_RESPONSE_OVERRIDE` fault-injection seam built in. Documented in the SDK's `docs.md` § "Test fault injection (v1.22+)". Use in `dogfood-stranger` Phase 13 (rate-limit chaos) for zero-cost / zero-quota-burn deterministic 429 / 5xx / 401 scenarios.
+
+  No theokit code changes — this is a template-side dep bump.
+
+## 0.1.0-alpha.11
+
+### Patch Changes
+
+- **FAANG-grade provider routing — Strategy + Registry pattern.**
+
+  Provider resolution moved from per-template conditionals into a centralized Strategy + Registry inside `theokit/server`. Consumers (template `chat.ts`, fixtures) now ship **zero conditionals on provider** — the framework resolves `apiKey` + `baseUrl` automatically from the highest-priority env var present (`OPENROUTER_API_KEY` > `OPENAI_API_KEY` > `ANTHROPIC_API_KEY`).
+
+  Inspired by Dapr Conversation Registry (`dapr/pkg/components/conversation/registry.go`) and Encore Manager provider array (`encore/runtimes/go/pubsub/manager_internal.go`).
+
+  **New public API in `theokit/server`:**
+  - `resolveProvider(): ResolvedProvider` — throws actionable error if no env var present
+  - `tryResolveProvider(): ResolvedProvider | null` — graceful degradation
+  - `registerProvider(descriptor: ProviderDescriptor): void` — runtime extension point (idempotent by name)
+  - `resetProviderRegistry(): void` — test-only / dev escape hatch
+  - `listProviders(): readonly ProviderDescriptor[]` — sorted by priority
+
+  **`createConversationHistory` upgrade:** auto-injects `apiKey` + `providers.routes[0]` (capability=chat) into SDK options when consumer omits `options.apiKey`. Explicit `options.apiKey` always wins (escape hatch preserved).
+
+  **Template `chat.ts` is now FAANG-clean** — pure `model: { id: 'gpt-4o-mini' }`, no `process.env.*` reads, no provider conditionals, no manual error yields.
+
+  **Wire protocol:** OpenAI Chat Completions (universal — every provider implements it). Anthropic uses native Messages API behind the same Strategy abstraction.
+
+## 0.1.0-alpha.8
+
+### Patch Changes
+
+- Bump `@usetheo/ui` peerDep range from `^0.11.0-next.0` to `^0.12.0-next.0` (alinha com create-theokit templates pós-T1.1 dist-tag move).
+
+## 0.1.0-alpha.6
+
+### Minor Changes
+
+- e761aac: Add cache primitives to `theokit/server` — closes the largest production gap vs Next.js.
+
+  Ships 5 new public primitives:
+  - **`defineCachedRoute(engine, config)`** — cache HTTP route responses with SWR + tag invalidation. Set-Cookie auto-bypasses, status `>= 400` not cached by default, GET/HEAD only (override via `cache.methods`).
+  - **`defineCachedFunction(engine, fn, opts)`** — memoize server functions. Built-in `.invalidate(...args)` method on the returned wrapper.
+  - **`revalidateTag(tag, opts?)`** — fan-out invalidation by tag.
+  - **`revalidatePath(path, opts?)`** — sugar over `revalidateTag('_THEO_T_/path')`.
+  - **`updateTag(tag)`** — Server-Action-safe immediate invalidation.
+
+  Plus the storage layer:
+  - **`CacheStorageAdapter`** interface with 7 methods (`get`, `set`, `delete`, `deleteByTag`, `size`, `clear`, `keys`).
+  - **`InMemoryCacheAdapter`** default implementation — LRU + reverse tag index, O(matched-keys) `deleteByTag`.
+  - **`createCacheEngine({ storage })`** factory exposing `getOrCompute`, `invalidate`, `invalidateTag`, `revalidatePath`.
+  - **`initCacheEngine(config)` / `getCacheEngine()` / `_resetCacheEngine()`** singleton resolver for framework wiring.
+
+  Helpers:
+  - **`getCacheControlHeader({ maxAge, swr, isPrivate? })`** — RFC 7234-compliant header builder.
+  - **`deriveCacheKey(req, opts?)`** — URL+sorted-query key derivation with `DEFAULT_EXCLUDED_QUERY_PARAMS` (25 tracking params auto-stripped, mirrors Astro list).
+  - **`compileRouteRules` / `resolveRouteRule`** — first-match-wins glob matching for `theo.config.ts cache.routeRules`.
+  - **`validateCacheTags` / `validateCacheMaxAge` / `validateCacheExpire`** — defensive validators.
+  - **Constants**: `CACHE_TAG_MAX_LENGTH = 256`, `CACHE_TAG_MAX_ITEMS = 128`, `THEO_T_PREFIX = '_THEO_T_'`, `CACHE_DEFAULT_MAX_AGE = 1`, `CACHE_DEFAULT_MAX_ENTRY_SIZE = 10 MB`.
+
+  Config schema (`theo.config.ts`):
+
+  ```ts
+  cache: {
+    enabled: true,
+    storage: 'memory',                        // or custom CacheStorageAdapter
+    maxEntries: 1000,
+    defaults: { maxAge: 1, cacheErrors: false },
+    routeRules: { '/api/static/**': { maxAge: 300, swr: 600 } },
+  }
+  ```
+
+  Edge cases handled (catalogued in `docs/reviews/edge-case-plan/caching-and-revalidation-edge-cases-2026-05-23.md`):
+  - **EC-1**: `validateTags` defensive guard for non-array input.
+  - **EC-2**: `varies: ['cookie']` auto-filtered + warn-once (Astro `IGNORED_VARY_HEADERS` pattern).
+  - **EC-3**: Response body > 10 MB bypasses cache + warn-once (configurable via `cache.maxEntrySize`).
+  - **EC-4**: Cache middleware structurally runs AFTER user middleware — auth/session/CSRF always gate first (no data leak vector).
+  - **EC-5**: `picomatch` declared as direct production dependency (was relying on Vite transitive — broken in production runtime).
+  - **EC-8**: Clock-skew negative-age clamped via `Math.max(0, age)`.
+  - **EC-9**: `validate` callback throws → treated as miss + `onError` invoked.
+  - **EC-10**: Loader returning `undefined` warn-once + skipped from cache.
+  - **EC-11**: `Transfer-Encoding: chunked` responses NOT cached.
+  - **EC-19**: `cache.maxEntrySize` validated at config-time.
+
+  New dep: `picomatch ^4.0.0` (direct, production — was transitive via Vite which broke prod).
+
+  Documentation: `docs/concepts/caching.md` (full 5-pattern guide + Redis adapter recipe + comparison vs Next.js / Nitro / Astro / TanStack).
+
+  Reference research: `.claude/knowledge-base/reference/caching-and-revalidation.md` (4 frameworks deep-read, 14 edge cases catalogued).
+
+  Plan: `docs/plans/caching-and-revalidation-plan.md` (13 tasks across 8 phases, 13 ADRs, 138 RED tests, 100% coverage matrix).
+
+  Fixture: `fixtures/cache-basic/` (all 5 primitives exercised + integration test).
+
+  Backward compatibility: 100%. The `cache` config field is optional; existing apps without `cache:` in `theo.config.ts` see zero behavior change.
+
+### Patch Changes
+
+- **Templates DX overhaul + scaffold SDK wiring (fix EC-S2/S3/S6 do dogfood-stranger run 2026-05-28)**
+  - **`create-theokit` templates** (default/dashboard/api-only/postgres/saas):
+    - Scripts completos: `dev` + `build` + `start` + `typecheck` declarados em todos
+    - `.nvmrc` com `22.12` em todos
+    - `public/favicon.ico` em todos (resolve 404 cosmético EC-S8)
+    - `drizzle-kit` em devDeps de postgres + saas (EC-10 SHOULD TEST)
+  - **`theokit` framework** (theokit/packages/theo):
+    - `vite-plugin/theoui-detect.ts` refatorado: substituído `createRequire(...).resolve()` por filesystem walk + leitura de `package.json:exports[subpath]`. **Resolve EC-S4 root cause** (Page não hidratava) — Chrome MCP confirmou `<main>`, `<header>`, `<textarea>` agora renderizam.
+    - `vite-plugin/auto-detect.ts` refatorado: mesma técnica filesystem walk (eliminação de `createRequire`).
+    - D13 invariant gated por `tests/integration/no-require-on-esm-only-deps.test.ts` (2 BDD it()) — previne regressão de require em `@usetheo/ui` (ESM-only by design).
+    - Playwright spec `tests/e2e/scaffold-page-hydrates.spec.ts` (4 BDD it()) — required CI check para hydration regression.
+
+  ADRs:
+  - [`theokit/docs/adr/0021-dogfood-stranger-coverage-expansion.md`](docs/adr/0021-dogfood-stranger-coverage-expansion.md) — D4-D14
+  - [`theokit/docs/adr/0022-create-theokit-republish-with-sdk-wired.md`](docs/adr/0022-create-theokit-republish-with-sdk-wired.md) — D2/D3/D10
+
+  Plan: [`.claude/knowledge-base/plans/dogfood-fixes-and-coverage-expansion-plan.md`](../../.claude/knowledge-base/plans/dogfood-fixes-and-coverage-expansion-plan.md) v1.1 FAANG-grade.
+
 ## 0.1.0-alpha.5
 
 ### Patch Changes
@@ -7,7 +238,6 @@
 - Consolidate `theokit/react-query` as a subpath of the canonical `theokit` package.
 
   Previously the React Query bridge lived in two places:
-
   - `theokit/client` (canonical implementation)
   - A separate `packages/theokit-react-query/` package that was set to publish as `@theokit/react-query@0.2.0` but never made it to the registry (scope didn't exist).
 
@@ -16,7 +246,7 @@
   **New surface:**
 
   ```ts
-  import { stableQueryKey, buildUseTheoQueryConfig } from "theokit/react-query";
+  import { stableQueryKey, buildUseTheoQueryConfig } from 'theokit/react-query'
   ```
 
   Aliases `buildUseTheoQueryInternals`, `FetcherFn`, and `UseTheoQueryInternals` are re-exported under the same subpath to preserve the names that pre-release builds of the standalone package exposed.
@@ -38,7 +268,6 @@
 - TheoUI default integration — `npx create-theokit my-app` now scaffolds a working agent surface out of the box.
 
   **`theokit`** (`0.1.0-alpha.2`)
-
   - `defineAgentEndpoint({ handler })` (`theokit/server`) — sugar over `defineRoute` that turns an `async *handler(): AsyncGenerator<AgentEvent>` into a Server-Sent Events response. Standards-compliant `text/event-stream` framing; respects `request.signal` for prompt cancellation; emits a final `{ type: 'error', message }` event when the generator throws.
   - `useAgentStream(path, options?)` (`theokit/client`) — React hook returning `{ events, status, send, abort, reset }`. Transport is `fetch + ReadableStream` (not `EventSource` — POST + body required). Cleans up on unmount (StrictMode-safe).
   - `consumeAgentStream(path, options)` + `parseSSEChunk(line)` (`theokit/client`) — the pure primitive the hook glues, exposed for non-React consumers and for tests.
@@ -46,7 +275,6 @@
   - Auto-injection of `@usetheo/ui` in the dev/build pipeline: when the user's project declares `@usetheo/ui` as a dependency and the package resolves, the Vite plugin emits `import '@usetheo/ui/styles.css'`, `import '@usetheo/ui/fonts.css'` (or `fonts-cdn.css` when configured), and wraps `RouterProvider` in `<TheoUIProvider theme={{ defaultTheme }}>`. New optional `ui` field in `theo.config.ts` (`false | { theme, fonts }`) for opt-out and theme selection. Conservative detection: package must be declared in `package.json` AND resolvable — prevents false positives in monorepos.
 
   **`create-theokit`** (`0.1.0-alpha.2`)
-
   - Default template now scaffolds an **agent surface**: `app/page.tsx` ships `AgentComposer` + `AgentTimeline` from `@usetheo/ui`, `server/routes/chat.ts` is a mock SSE endpoint emitting three `AgentEvent`s. Replace the mock with your real LLM provider.
   - New `--bare` flag — skips the TheoUI defaults for users who want a minimal scaffold. Atomic rollback: if the bare transform fails for any reason (filesystem perms etc.), the entire target directory is removed so no half-scaffolded project is left behind. `--bare` is only valid with `--template=default`.
   - `@usetheo/ui ^0.1.0-next.0` is now a direct dependency of the default template.

@@ -71,12 +71,23 @@ describe('T7.4 Sub-fase D — scaffold → build → start E2E', () => {
     // Use tsx to invoke the CLI from source — no need to npm-install
     // theokit; we just need the framework's build flow to scan + emit
     // manifests in the scaffolded tree.
+    //
+    // dogfood-regressions-fix-plan v1.1 — `npx tsx` from a clean tmpdir
+    // can't find tsx (no local install, no global), so we inject the repo's
+    // `node_modules/.bin` into PATH explicitly. Same env tsx that other
+    // tests rely on; just routes execSync's PATH lookup to it.
+    const repoBinPath = resolve(REPO, 'node_modules/.bin')
+    const envWithBin = {
+      ...process.env,
+      PATH: `${repoBinPath}:${process.env.PATH ?? ''}`,
+    }
     try {
       // eslint-disable-next-line sonarjs/os-command -- developer-local E2E running our own CLI
       execSync(`npx tsx ${CLI} build`, {
         cwd: projectDir,
         stdio: 'pipe',
         encoding: 'utf8',
+        env: envWithBin,
       })
     } catch {
       // Vite step may fail (no node_modules installed) — manifests still emit

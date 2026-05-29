@@ -34,32 +34,33 @@ export const POST = defineAgentEndpoint({
         ? (body as { message?: string })
         : {}
     const { message = '' } = safeBody
-    const orKey = process.env.OPENROUTER_API_KEY
-    const anKey = process.env.ANTHROPIC_API_KEY
-    const apiKey = orKey !== undefined && orKey.length > 0 ? orKey : anKey
-    const modelId =
-      orKey !== undefined && orKey.length > 0
-        ? 'openrouter/anthropic/claude-3.5-sonnet'
-        : 'claude-sonnet-4-5-20250929'
-    if (apiKey === undefined || apiKey.length === 0) {
-      yield {
-        type: 'error',
-        message: 'Set OPENROUTER_API_KEY or ANTHROPIC_API_KEY in your .env to enable the agent.',
-      }
-      return
+    // Provider resolution centralizada (Strategy pattern) — theokit/server resolve
+    // apiKey + baseUrl + provider automático via OPENROUTER_API_KEY / OPENAI_API_KEY /
+    // ANTHROPIC_API_KEY presente no env. Wire protocol: OpenAI Chat Completions
+    // (universal — todos os providers implementam essa API). Consumer NÃO tem
+    // conditionals sobre provider — é responsabilidade do framework.
+    // Wrap full agent lifecycle in try/catch — provider errors (invalid KEY,
+    // 401, rate-limit, model-not-found, 5xx) MUST surface as AgentEvent
+    // 'error' so the client renders an actionable message instead of a
+    // silent SSE closure. Dogfood chaos Phase 12 validates this contract.
+    try {
+      const { agent } = await createConversationHistory({
+        request,
+        response: { headers: cookieHeaders },
+        options: {
+          // model id literal — provider resolution NÃO depende de prefix inference.
+          // Stranger pode trocar livremente sem mexer em routing.
+          model: { id: 'gpt-4o-mini' },
+          tools: [currentTime],
+        },
+      })
+      const run = await agent.send(message, { signal })
+      yield* streamAgentRun(run)
+      // Intentionally NO agent.dispose() — the agent stays registered so the
+      // next request from the same conversation resumes it (continuity).
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      yield { type: 'error', message: `Agent error: ${msg}` }
     }
-    const { agent } = await createConversationHistory({
-      request,
-      response: { headers: cookieHeaders },
-      options: {
-        apiKey,
-        model: { id: modelId },
-        tools: [currentTime],
-      },
-    })
-    const run = await agent.send(message, { signal })
-    yield* streamAgentRun(run)
-    // Intentionally NO agent.dispose() — the agent stays registered so the
-    // next request from the same conversation resumes it (continuity).
   },
 })

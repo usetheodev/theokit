@@ -1,7 +1,7 @@
 {
   "name": "@usetheo/example-openrouter-demo",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1-alpha.8",
   "type": "module",
   "description": "The official TheoKit demo — chat agent powered by OpenRouter with 3 tools, streaming SSE, and conversation history.",
   "scripts": {

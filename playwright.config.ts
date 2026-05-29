@@ -100,6 +100,20 @@ export default defineConfig({
       use: { baseURL: 'http://localhost:3466' },
       testMatch: 'template-saas.spec.ts',
     },
+    {
+      // Wave 2 completion T5.1 — services fullstack E2E.
+      // Boots services-python-basic fixture programmatically (no webServer
+      // entry needed); spec self-skips when Python 3.11+/uv are absent.
+      name: 'services-fullstack',
+      testMatch: 'services-fullstack.spec.ts',
+    },
+    {
+      // T1.4 + EC-S4 regression gate (plan: dogfood-fixes-and-coverage-expansion).
+      // Reusa template-default fixture na porta dedicada 3471. Required CI check.
+      name: 'scaffold-page-hydrates',
+      use: { baseURL: 'http://localhost:3471' },
+      testMatch: 'scaffold-page-hydrates.spec.ts',
+    },
   ],
   webServer: [
     {
@@ -143,6 +157,16 @@ export default defineConfig({
       command: `npx tsx ${cliPath} dev --port 3461`,
       cwd: fixture('template-default'),
       port: 3461,
+      reuseExistingServer: false,
+      timeout: 60000,
+    },
+    {
+      // T1.4 (plan: dogfood-fixes-and-coverage-expansion) — scaffold-page-hydrates.
+      // Reusa template-default fixture na porta 3471 (livre).
+      // Sem env var (Page hydration NÃO depende de OPENROUTER — só de UI mount).
+      command: `npx tsx ${cliPath} dev --port 3471`,
+      cwd: fixture('template-default'),
+      port: 3471,
       reuseExistingServer: false,
       timeout: 60000,
     },

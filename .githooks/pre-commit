@@ -1,16 +1,32 @@
 #!/usr/bin/env bash
 # Git pre-commit hook — runs:
-#   1. Secret scanning (scripts/prevent-secrets.sh)
-#   2. lint-staged (ESLint + Prettier on changed files only — fast)
+#   GATE 0. theo-ui-link guard (ADR 0020) — MUST run FIRST (EC-3).
+#   GATE 1. Secret scanning (scripts/prevent-secrets.sh)
+#   GATE 2. lint-staged (ESLint + Prettier on changed files only — fast)
+#   GATE 3. Template version sync (ADR 0019) — only if version files changed
 #
 # Per CLAUDE.md "Testes — Se Não Tem Teste, Não Funciona": tests are NOT
 # in pre-commit to keep the loop tight. Tests run in CI (cheap there).
+#
+# EC-3 ORDERING NOTE: GATE 0 (theo-ui link guard) MUST come BEFORE GATE 3
+# (check:templates). When theo-ui is linked, the lockfile has @usetheo/ui
+# resolved as link:../theo-ui (not semver), which makes the sync script
+# emit false-positive drift. Aborting at GATE 0 produces a clean error
+# message and avoids the "use --no-verify" trap (proibido CLAUDE.md §4).
 
 set -e
 
 ROOT="$(git rev-parse --show-toplevel)"
 
-# 1. Secret scan — fail fast on accidental secrets.
+# GATE 0 (EC-3) — block commits while theo-ui is linked.
+if [ -f "$ROOT/pnpm-workspace.yaml.bak" ]; then
+  echo "Error: theo-ui is currently linked (pnpm-workspace.yaml.bak exists)."
+  echo "Run \`pnpm theo-ui:unlink\` before committing."
+  echo "(See CONTRIBUTING.md — Cross-repo dev section.)"
+  exit 1
+fi
+
+# GATE 1 — Secret scan, fail fast on accidental secrets.
 SECRETS_SCRIPT="$ROOT/scripts/prevent-secrets.sh"
 if [ -f "$SECRETS_SCRIPT" ]; then
   bash "$SECRETS_SCRIPT"
@@ -19,10 +35,20 @@ else
   echo "Secret scanning skipped."
 fi
 
-# 2. lint-staged — ESLint + Prettier on staged files only.
+# GATE 2 — lint-staged, ESLint + Prettier on staged files only.
 if [ -f "$ROOT/node_modules/.bin/lint-staged" ]; then
   cd "$ROOT" && ./node_modules/.bin/lint-staged
 else
   echo "WARNING: lint-staged not installed — skipping lint/format step."
   echo "Run 'pnpm install' to enable the full pre-commit gate."
+fi
+
+# GATE 3 (ADR 0019) — template version sync check, only if version files staged.
+if git diff --cached --name-only | grep -qE '(packages/theo/package\.json|packages/create-theo/templates/.*\.tmpl|pnpm-lock\.yaml)$'; then
+  if [ -f "$ROOT/node_modules/.bin/pnpm" ] || command -v pnpm >/dev/null 2>&1; then
+    cd "$ROOT" && pnpm check:templates || {
+      echo "Template drift detected. Run \`pnpm sync:templates\` to fix, then re-stage and re-commit."
+      exit 1
+    }
+  fi
 fi

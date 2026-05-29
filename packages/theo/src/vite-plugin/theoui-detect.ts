@@ -7,15 +7,15 @@
  */
 
 /* eslint-disable security/detect-non-literal-fs-filename --
- * Reads `package.json` of `@usetheo/ui` resolved via `require.resolve`
- * from the user's project. Path comes from a controlled require resolution,
- * not HTTP input. Build-time tool.
+ * Reads `package.json` of `@usetheo/ui` via filesystem walk under `node_modules`.
+ * Paths come from a controlled CLI/config inputs; this is a build-time tool.
+ *
+ * D13 invariant (ADR 0021): @usetheo/ui is ESM-only by design (`type: "module"`,
+ * exports['.'] sem `require` condition). Não usar `createRequire(...).resolve()` —
+ * `ERR_PACKAGE_PATH_NOT_EXPORTED` em runtime. Usar filesystem walk direto.
  */
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { join } from 'node:path'
-
-const localRequire = createRequire(import.meta.url)
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 
 export type TheoUiTheme = 'violet-forge' | 'noir' | 'paper'
 export type TheoUiFonts = 'bundled' | 'cdn'
@@ -67,13 +67,70 @@ export function resolveTheoUiConfig(
 /** Resolver fn — abstracted so tests can stub Node's walk-up behavior. */
 export type SubpathResolver = (specifier: string, projectRoot: string) => boolean
 
-const defaultResolver: SubpathResolver = (specifier, projectRoot) => {
+/**
+ * D13 invariant: substituir `require.resolve` por filesystem walk que LÊ exports.
+ *
+ * Specifier shape: `<pkgScope>/<pkgName>/<subpath>` (e.g. `@usetheo/ui/styles.css`)
+ * OR `<pkgName>/<subpath>` (e.g. `react/jsx-runtime`).
+ *
+ * Algoritmo:
+ *   1. Walk up node_modules a partir de projectRoot (handle pnpm hoist + workspaces).
+ *   2. Em cada candidato, ler package.json + resolver subpath via exports field.
+ *   3. Se exports mapeia o subpath, checar existsSync no path mapeado.
+ *
+ * Mimica resolução ESM Node sem usar createRequire (D13).
+ */
+function resolveExportSubpath(pkgRoot: string, subpath: string): string | null {
+  const pkgJsonPath = join(pkgRoot, 'package.json')
+  if (!existsSync(pkgJsonPath)) return null
   try {
-    localRequire.resolve(specifier, { paths: [projectRoot] })
-    return true
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8')) as {
+      exports?: Record<string, unknown>
+    }
+    const exportKey = `./${subpath}`
+    const exp = pkg.exports?.[exportKey]
+    if (!exp) {
+      // Fallback: tentar path direto (dist/<subpath> é convenção comum)
+      const fallback = join(pkgRoot, 'dist', subpath)
+      return existsSync(fallback) ? fallback : null
+    }
+    // exports value: string OR { import, require, default, types, ... }
+    let target: string | undefined
+    if (typeof exp === 'string') target = exp
+    else if (exp && typeof exp === 'object') {
+      const e = exp as { import?: string; default?: string }
+      target = e.import ?? e.default
+    }
+    if (!target) return null
+    const cleaned = target.replace(/^\.\//, '')
+    const candidate = join(pkgRoot, cleaned)
+    return existsSync(candidate) ? candidate : null
   } catch {
-    return false
+    return null
   }
+}
+
+const defaultResolver: SubpathResolver = (specifier, projectRoot) => {
+  const parts = specifier.split('/')
+  const pkgName = parts[0]?.startsWith('@') && parts.length >= 2
+    ? `${parts[0]}/${parts[1]}`
+    : parts[0]
+  if (!pkgName) return false
+  const subpath = specifier.slice(pkgName.length + 1)
+  if (!subpath) return false
+  // Walk up node_modules (handle pnpm hoist)
+  let dir = projectRoot
+  for (let depth = 0; depth < 10; depth++) {
+    const pkgRoot = join(dir, 'node_modules', ...pkgName.split('/'))
+    if (existsSync(pkgRoot)) {
+      const resolved = resolveExportSubpath(pkgRoot, subpath)
+      if (resolved) return true
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return false
 }
 
 /** Reads `<projectRoot>/package.json` and returns whether `@usetheo/ui`

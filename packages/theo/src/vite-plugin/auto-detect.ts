@@ -22,12 +22,16 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
 import type { DetectResult } from './auto-detect-types.js'
 
-const localRequire = createRequire(import.meta.url)
+/**
+ * D13 invariant (ADR 0021): @usetheo/ui is ESM-only by design.
+ * NÃO usar `createRequire(...).resolve()` — `ERR_PACKAGE_PATH_NOT_EXPORTED`
+ * em runtime para packages que declaram `type:"module"` sem `require` condition.
+ * Tudo filesystem walk direto.
+ */
 
 function isDeclared(name: string, projectRoot: string): boolean {
   try {
@@ -47,32 +51,52 @@ function isDeclared(name: string, projectRoot: string): boolean {
   }
 }
 
+/**
+ * D13: filesystem walk pra encontrar package.json (substitui require.resolve).
+ * Walks node_modules up to 10 levels (handles pnpm hoist + workspace symlinks).
+ */
 function resolvePackageJson(name: string, cwd: string): { path: string; version?: string } | null {
-  try {
-    const resolved = localRequire.resolve(`${name}/package.json`, { paths: [cwd] })
-    const raw = readFileSync(resolved, 'utf-8')
-    const pkg = JSON.parse(raw) as { version?: string }
-    return { path: resolved, version: pkg.version }
-  } catch {
-    return null
+  let dir = cwd
+  for (let depth = 0; depth < 10; depth++) {
+    const pkgJsonPath = join(dir, 'node_modules', ...name.split('/'), 'package.json')
+    if (existsSync(pkgJsonPath)) {
+      try {
+        const raw = readFileSync(pkgJsonPath, 'utf-8')
+        const pkg = JSON.parse(raw) as { name?: string; version?: string }
+        // Validate package name matches (defesa contra colisão path)
+        if (pkg.name === name) {
+          return { path: pkgJsonPath, version: pkg.version }
+        }
+      } catch {
+        // continue walking
+      }
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
+  return null
 }
 
+/**
+ * D13: fallback probe via filesystem (substitui require.resolve).
+ * Tenta common entry paths em node_modules. Retorna path do entry achado.
+ */
 function fallbackProbe(
   name: string,
   cwd: string,
 ): { resolvedEntry: string } | null {
-  // Try common subpaths in order. Returning the resolved entry path lets
-  // the caller walk up to find the package's package.json even when its
-  // `exports` field doesn't include `./package.json`.
-  const candidates = [name, `${name}/index.mjs`, `${name}/dist/index.mjs`, `${name}/dist/index.js`]
-  for (const spec of candidates) {
-    try {
-      const resolved = localRequire.resolve(spec, { paths: [cwd] })
-      return { resolvedEntry: resolved }
-    } catch {
-      // continue
+  const candidates = ['index.mjs', 'dist/index.mjs', 'dist/index.js', 'index.js']
+  let dir = cwd
+  for (let depth = 0; depth < 10; depth++) {
+    const pkgDir = join(dir, 'node_modules', ...name.split('/'))
+    for (const candidate of candidates) {
+      const entry = join(pkgDir, candidate)
+      if (existsSync(entry)) return { resolvedEntry: entry }
     }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
   }
   return null
 }

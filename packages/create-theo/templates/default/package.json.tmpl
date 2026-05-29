@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "theokit dev"
+    "dev": "theokit dev",
+    "build": "theokit build",
+    "start": "theokit start",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "theokit": "^0.1.0-alpha.4",
-    "@usetheo/sdk": "^1.0.0",
-    "@usetheo/ui": "^0.11.0-next.0",
+    "theokit": "^0.1.0-alpha.16",
+    "@usetheo/sdk": "^1.2.0",
+    "@usetheo/ui": "^0.12.0-next.0",
     "lucide-react": "^0.469.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -22,5 +25,10 @@
     "@types/react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0",
     "@tailwindcss/vite": "^4.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

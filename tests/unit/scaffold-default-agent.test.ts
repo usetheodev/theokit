@@ -150,7 +150,10 @@ describe('create-theokit default template — agent surface (T3.1)', () => {
   it('T1.1: chat.ts handler is an async generator yielding AgentEvent', () => {
     const chat = read('server/routes/chat.ts')
     expect(chat).toMatch(/async\s*\*\s*handler/)
-    expect(chat).toMatch(/yield\s*\{\s*type:/)
+    // Either bare `yield { type: ... }` OR yield-delegate to a generator
+    // (e.g., `yield* streamAgentRun(run)` since item #4). Both shapes
+    // satisfy the AgentEvent contract.
+    expect(chat).toMatch(/yield\s*\{\s*type:|yield\*\s+streamAgentRun\(/)
   })
 
   it('regression — chat.ts does NOT call request.json() (smoke 2026-05-18)', () => {

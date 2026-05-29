@@ -49,10 +49,14 @@ export function devtoolsReducer(state: DevtoolsState, action: DevtoolsAction): D
       return { ...state, routeManifest: action.manifest }
     case 'ROUTE_MATCHED':
       return { ...state, activeRoutePath: action.path, activeChain: action.chain }
+    case 'AGENT_RUN_ADD':
+      return { ...state, agentRuns: appendCapped(state.agentRuns, action.run) }
     case 'RESET_REQUESTS':
       return { ...state, requests: [] }
     case 'RESET_ERRORS':
       return { ...state, errors: [] }
+    case 'RESET_AGENT_RUNS':
+      return { ...state, agentRuns: [] }
     default:
       return state
   }

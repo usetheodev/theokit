@@ -2,6 +2,9 @@
 node_modules/
 .pnpm-store/
 
+# theo-ui link mode backup (ADR 0020) — never commit a backup workspace file
+pnpm-workspace.yaml.bak
+
 # Build output
 dist/
 .theo/

@@ -29,10 +29,14 @@
     "try:dev": "cd my-test && npx tsx ../packages/theo/src/cli/index.ts dev",
     "try:clean": "node -e \"const fs=require('fs');fs.rmSync('my-test',{recursive:true,force:true})\"",
     "changeset": "changeset",
-    "version-packages": "changeset version",
+    "version-packages": "changeset version && pnpm sync:templates",
     "release": "pnpm build && changeset publish",
     "prepare": "git config core.hooksPath .githooks || true",
-    "check:secrets": "bash scripts/prevent-secrets.sh"
+    "check:secrets": "bash scripts/prevent-secrets.sh",
+    "sync:templates": "node scripts/sync-template-versions.mjs --write",
+    "check:templates": "node scripts/sync-template-versions.mjs",
+    "theo-ui:link": "bash scripts/theo-ui-link.sh",
+    "theo-ui:unlink": "bash scripts/theo-ui-unlink.sh"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.2",

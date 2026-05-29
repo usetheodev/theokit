@@ -7,13 +7,14 @@
     "dev": "theokit dev",
     "build": "theokit build",
     "start": "theokit start",
+    "typecheck": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "theokit": "^0.1.0-alpha.1",
+    "theokit": "^0.1.0-alpha.16",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "drizzle-orm": "^0.45.0",
@@ -25,5 +26,10 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "drizzle-kit": "^0.31.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

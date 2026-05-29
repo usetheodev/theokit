@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added (dogfood-fixes-and-coverage-expansion T2.1 + T2.2 + T2.3, 2026-05-28)
+
+**DX hygiene em 5 templates** — resolve EC-S6 (sem scripts), EC-S7 (Node version), EC-S8 (favicon 404):
+
+- **Scripts**: 5 templates (default/dashboard/api-only/postgres/saas) agora têm `dev`, `build`, `start`, `typecheck` declarados em `package.json.tmpl`. Stranger não precisa adivinhar como buildar pra prod.
+- **`.nvmrc`**: 5 templates ganham `.nvmrc` com `22.12` — nvm/fnm/volta respect automaticamente, evita boot com Node antigo.
+- **`public/favicon.ico`**: 5 templates ganham favicon ICO 16x16 (1019 bytes) — resolve 404 cosmético em `GET /favicon.ico`.
+- **drizzle-kit em postgres/saas**: confirmado em devDeps (EC-10 SHOULD TEST coberto) — db:push funciona pra stranger.
+- **Test**: `tests/unit/all-templates-dx-hygiene.test.ts` (NEW, 37 BDD it()) — gate CI permanente.
+
+### Fixed (dogfood-fixes-and-coverage-expansion T1.2 + T1.4, 2026-05-28)
+
+**EC-S4 root cause RESOLVIDO** — `<Page />` não hidratava (UI invisível) em fixtures + scaffold publicado. Identificado empiricamente via Chrome DevTools MCP: `Error: useTheme must be used inside <ThemeProvider>` no console — auto-inject de `<TheoUIProvider>` falhava silently porque `detectTheoUi()` retornava `enabled: false`.
+
+- **`packages/theo/src/vite-plugin/theoui-detect.ts`** — defaultResolver refatorado: substituído `localRequire.resolve(specifier, { paths: [projectRoot] })` (que falha em ESM-only packages com `ERR_PACKAGE_PATH_NOT_EXPORTED`) por filesystem walk que LÊ `exports[subpath]` do package.json e resolve para path mapeado (e.g., `@usetheo/ui/styles.css` → `dist/styles.css` via exports field). Mantém fallback `dist/<subpath>` se exports field ausente (compat). D13 invariante (ADR 0021) ESM-only confirmed + gated.
+- **`packages/theo/src/vite-plugin/auto-detect.ts`** — `resolvePackageJson` + `fallbackProbe` refatorados para filesystem walk puro (sem `createRequire`/`require.resolve`). D13 invariante respected.
+- **`tests/integration/no-require-on-esm-only-deps.test.ts`** — (NEW) Gate CI permanente (2 BDD it()): (a) nenhum require/require.resolve hardcoded em `@usetheo/ui`; (b) UI-touching files (`theoui-detect`, `auto-detect`, `integrate-ui`, `inject-stylesheets`) zero `createRequire(import.meta.url)`. Previne regressão sistematicamente.
+- **`tests/e2e/scaffold-page-hydrates.spec.ts`** — (NEW) Required CI check Playwright spec (4 BDD it()): valida `<header>`, `<main>`, `<textarea>` hidratam + zero hydration errors + brand "Theo Agent" no DOM + body não-vazio. EC-S4 regression gate **permanente** independente de Chrome MCP.
+- **`playwright.config.ts`** — projeto `scaffold-page-hydrates` (port 3471, reusa fixture template-default).
+- **Tests pre-existentes preservados** — `vite-plugin-theoui-detect.test.ts` 13/13 GREEN pós-refactor (backward compat).
+- **Plan reference:** [`dogfood-fixes-and-coverage-expansion-plan.md`](../.claude/knowledge-base/plans/dogfood-fixes-and-coverage-expansion-plan.md) v1.1 T1.2 + T1.4.
+
+### Added (cross-repo-integration-coesao, 2026-05-28)
+
+**Closes 3 friction points between theokit ↔ theokit-sdk ↔ theo-ui.** Plan: [`.claude/knowledge-base/plans/cross-repo-integration-coesao-plan.md`](../.claude/knowledge-base/plans/cross-repo-integration-coesao-plan.md). ADRs: [`docs/adr/0018`](docs/adr/0018-usetheo-ui-vite-plugin-contract-versionado.md) + [`0019`](docs/adr/0019-template-version-sync-source-of-truth.md) + [`0020`](docs/adr/0020-cross-repo-workspace-link-opt-in.md).
+
+- **T1.1** — `@usetheo/ui` declarado como `peerDependency` opcional (`^0.11.0-next.0`, alinhado à versão publicada no npm) em `packages/theo/package.json` para tornar o contrato cross-repo explícito e ativar warnings nativos do pnpm em mismatches (#cross-repo-coesao). Range fechado caret pre-release força bump explícito quando UI sobe minor (próximo bump será `^0.12.0-next.0` quando UI publicar). Tests: `tests/unit/package-json-peerdep-usetheo-ui.test.ts` (3 BDD) + `tests/integration/peerdep-optional-warn-behavior.test.ts` (EC-4 pnpm CLI availability guard).
+- **T1.2** — Contract test cross-repo consumer-side em `tests/integration/contract-usetheo-ui-vite-plugin.test.ts` (7 it() — 5 CT-N do contrato + precondition + EC-7 hoist guard). Executa contra `dist/vite-plugin.js` real resolvido via fixture `theoui-autoinject` (UI fica fora do workspace default por ADR 0020, então não está em `packages/theo/node_modules`). EC-7 implementa `satisfiesCaretPrerelease` inline (evita +1 dep `semver`).
+- **T1.3** (theo-ui mirror, ver `theo-ui/CHANGELOG.md`) — Contract test producer-side com `prepublishOnly` gate.
+- **T2.1 (incl. fix EC-12 segunda iteração)** — `scripts/sync-template-versions.mjs` + `scripts/sync-template-versions.d.mts` (declaração de tipos pra que o unit test importe sem TS7016) + scripts `pnpm sync:templates` (write) + `pnpm check:templates` (check, default). Source-of-truth: `packages/theo/package.json:version` para `theokit`, `pnpm-lock.yaml` para `@usetheo/sdk`/`@usetheo/ui`, com fallback para sibling `package.json` quando dep é workspace-linked (caso do SDK). Walk recursivo 2 níveis cobre `services/agent-{node,python}` (EC-2 fix). EC-3 (`workspace:*` ignorado) + EC-4 (dep ausente ignorada) cobertos. Hook `version-packages` agora encadeia `changeset version && pnpm sync:templates`. Templates corrigidos: 4 entradas drift de `theokit@^0.1.0-alpha.{1,4}` → `^0.1.0-alpha.5` + 1 de `@usetheo/sdk@^1.0.0` → `^1.1.0`. Tests: `tests/unit/sync-template-versions.test.ts` (8 BDD).
+- **T2.2** — `.github/workflows/ci.yml` lint job ganha step `pnpm check:templates` (ADR 0019 gate). `.githooks/pre-commit` reescrito com 4 GATEs explícitos: GATE 0 (theo-ui link guard via `.bak` check, EC-3 fix), GATE 1 (secret scan), GATE 2 (lint-staged), GATE 3 (`check:templates` se arquivos de versão modificados). Ordem EC-3 obrigatória: link guard ANTES de check:templates — evita falso-positivo de drift quando lockfile tem `link:../theo-ui`.
+- **T3.1** — Workspace-link opt-in para cross-repo dev com `@usetheo/ui` (ADR 0020). Novo arquivo `pnpm-workspace.linked-ui.yaml` (inerte por default). Scripts `pnpm theo-ui:link` (com guards: sibling exists, `dist/vite-plugin.js` exists per EC-5, no `.bak` already) e `pnpm theo-ui:unlink` (restaura .bak idempotent). `.gitignore` cobre `pnpm-workspace.yaml.bak`. `CONTRIBUTING.md` ganha seção "Cross-repo dev: linking @usetheo/ui" com fluxo de 4 passos + cuidados EC-9 (one terminal/checkout) + EC-10 (two repos = two commits) + EC-link-9 (Ctrl+C recovery) + tabela documentando assimetria intencional SDK linked-default vs UI linked-opt-in. Tests: `tests/integration/theo-ui-link-flow.test.ts` (7 BDD cobrindo guards 1/2/3, succeed path, unlink idempotência, EC-3 hook ordering).
+
 ### Added (0.5.0 prereqs — R0.5.2 + R0.5.3, 2026-05-28)
 
 **Closes the two `0.4.0` prerequisites that the CLAUDE.md roadmap marks as BLOCKING for 0.5.0.** Plan: [`docs/plans/playwright-postgres-templates-ci-plan.md`](docs/plans/playwright-postgres-templates-ci-plan.md) (v1.1).

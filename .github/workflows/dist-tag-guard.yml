@@ -1,0 +1,52 @@
+name: Dist-tag Guard
+# theokit-evolution-ci-and-dx Phase 1B — drift detection for 4 packages.
+# Validates @latest >= @alpha/@next floor; fails CI if drift detected.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/validate-all-latest-tags.mjs'
+      - '.github/workflows/dist-tag-guard.yml'
+  schedule:
+    - cron: '0 6 * * *'  # Daily 06:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: dist-tag-guard
+  cancel-in-progress: true  # read-only check, latest wins
+
+jobs:
+  validate:
+    name: Validate all dist-tags
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate all dist-tags (v1.1 EC-2 — retry on network err)
+        run: |
+          # exit 0 = ok, exit 1 = drift (hard fail), exit 2 = network (retry up to 3x with backoff)
+          for attempt in 1 2 3; do
+            node scripts/validate-all-latest-tags.mjs
+            rc=$?
+            if [[ $rc -eq 0 ]]; then
+              echo "::notice::All dist-tags consistent"
+              exit 0
+            fi
+            if [[ $rc -eq 1 ]]; then
+              echo "::error::Dist-tag drift detected — see output above"
+              echo "::error::Fix: npm dist-tag add <pkg>@<version> latest"
+              exit 1
+            fi
+            # rc=2 → network; backoff 10s, 20s, 40s
+            if [[ $attempt -lt 3 ]]; then
+              sleep_s=$((10 * (2 ** (attempt - 1))))
+              echo "::warning::Network error (exit 2), retrying in ${sleep_s}s (attempt $attempt/3)"
+              sleep $sleep_s
+            fi
+          done
+          echo "::error::Network failure after 3 retries — npm registry unreachable"
+          exit 2

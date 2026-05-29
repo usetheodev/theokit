@@ -5,7 +5,7 @@
  */
 
 export type DevtoolsPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
-export type DevtoolsTab = 'requests' | 'routes' | 'errors' | 'csrf-readiness' | 'settings'
+export type DevtoolsTab = 'requests' | 'routes' | 'agents' | 'errors' | 'csrf-readiness' | 'settings'
 export type DevtoolsTheme = 'light' | 'dark' | 'system'
 
 export interface RequestRecord {
@@ -55,6 +55,27 @@ export interface RouteManifest {
   routes: RouteInfo[]
 }
 
+/**
+ * Per-agent-run telemetry surfaced to the Agents devtools tab.
+ *
+ * Emitted by `trackAgentRun` (server-side) via the dispatcher in dev mode;
+ * prod tree-shakes the entire wire (v1.1 EC-4 `__IS_DEV` IIFE guard).
+ * Type lives here (devtools/shared) since both producer (server/cost) and
+ * consumer (AgentsTab) need the shape; following architecture v3 ADR-0001
+ * rule "shared types in core/contracts" is the canonical home — for this
+ * one we keep it in devtools/shared to minimize churn in core/contracts/.
+ */
+export interface AgentRunRecord {
+  id: string
+  timestamp: number
+  userId: string
+  model: string
+  tokensInput: number
+  tokensOutput: number
+  costUsd: number
+  status: 'finished' | 'error' | 'aborted'
+}
+
 export interface DevtoolsState {
   open: boolean
   visible: boolean
@@ -63,6 +84,7 @@ export interface DevtoolsState {
   activeTab: DevtoolsTab
   requests: RequestRecord[]
   errors: ErrorRecord[]
+  agentRuns: AgentRunRecord[]
   routeManifest: RouteManifest | null
   activeRoutePath: string | null
   activeChain: string[]
@@ -79,8 +101,10 @@ export type DevtoolsAction =
   | { type: 'CSRF_WARN'; payload: CsrfWarnPayload }
   | { type: 'MANIFEST_UPDATED'; manifest: RouteManifest }
   | { type: 'ROUTE_MATCHED'; path: string; chain: string[] }
+  | { type: 'AGENT_RUN_ADD'; run: AgentRunRecord }
   | { type: 'RESET_REQUESTS' }
   | { type: 'RESET_ERRORS' }
+  | { type: 'RESET_AGENT_RUNS' }
 
 export const RING_BUFFER_CAP = 50
 export const MAX_QUEUE_SIZE = 100
@@ -94,6 +118,7 @@ export const initialState: DevtoolsState = {
   activeTab: 'requests',
   requests: [],
   errors: [],
+  agentRuns: [],
   routeManifest: null,
   activeRoutePath: null,
   activeChain: [],
@@ -104,3 +129,4 @@ export const CHANNEL_ERROR = 'theo:devtools:error' as const
 export const CHANNEL_CSRF_WARN = 'theo:devtools:csrf.warn' as const
 export const CHANNEL_MANIFEST = 'theo:devtools:manifest' as const
 export const CHANNEL_ROUTE_MATCHED = 'theo:devtools:route-matched' as const
+export const CHANNEL_AGENT_RUN = 'theo:devtools:agent.run' as const

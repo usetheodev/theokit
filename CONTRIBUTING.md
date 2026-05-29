@@ -110,6 +110,64 @@ description; the maintainer will queue the publish.
 For the 0.3.0 cutover specifically, see
 [docs/plans/theokit-0.3.0-cutover-execution-plan.md](docs/plans/theokit-0.3.0-cutover-execution-plan.md).
 
+## Cross-repo dev: linking @usetheo/ui
+
+Por default, `@usetheo/ui` é consumido como npm dep (peerDep `^0.11.0-next.0`).
+Edições locais em `../theo-ui/` NÃO refletem sem publish.
+
+Para iterar nos dois repos simultaneamente (ADR
+[`0020`](docs/adr/0020-cross-repo-workspace-link-opt-in.md)):
+
+```sh
+# 1. Pré-requisito: ../theo-ui já buildado (vite-plugin.js precisa existir em dist/)
+pnpm --dir ../theo-ui build
+
+# 2. Ativa workspace link cross-repo (preserva pnpm-workspace.yaml como .bak)
+pnpm theo-ui:link
+
+# 3. Itera com HMR
+pnpm dev
+# ... edita theo-ui/src/ e theokit/packages/theo/src/ ...
+
+# 4. Restaura antes de commit
+pnpm theo-ui:unlink
+```
+
+**Importante:** o pre-commit hook bloqueia commits enquanto
+`pnpm-workspace.yaml.bak` existe (GATE 0). Isso garante que CI sempre roda
+contra o `pnpm-workspace.yaml` canônico (publish-and-bump path), validando
+que o ciclo de release continua funcionando.
+
+CI nunca usa esse modo. Veja [ADR 0020](docs/adr/0020-cross-repo-workspace-link-opt-in.md).
+
+### Cuidados (EC-9, EC-10, EC-link-9)
+
+- **Use um terminal por checkout.** Rodar `pnpm theo-ui:link` em paralelo no
+  mesmo checkout pode disputar o `.bak` durante a janela de cópia (<100ms).
+  Não é race destrutivo (guard `if [ -f .bak ] abort` cobre), mas evite.
+- **Você está editando DOIS repos independentes.** Edições em `../theo-ui/src/`
+  ficam em `theo-ui/`; edições em `packages/theo/src/` ficam em `theokit/`.
+  São DOIS `git commit`, DOIS `git push`, DOIS PRs. O modo linked acelera HMR,
+  NÃO unifica commits.
+- **Se algo der errado e o link travar** (Ctrl+C durante `pnpm install`, etc):
+  `mv pnpm-workspace.yaml.bak pnpm-workspace.yaml && pnpm install` desfaz
+  manualmente.
+
+### Assimetria intencional: SDK linked default, UI linked opt-in
+
+`@usetheo/sdk` permanece como workspace link permanente em
+`pnpm-workspace.yaml`. UI fica de fora por default. A assimetria reflete o
+perfil de acoplamento:
+
+| Pillar | Acoplamento ao runtime do theokit | Workspace mode |
+|---|---|---|
+| `@usetheo/sdk` | runtime de produção (`server/agent/*`) | **link permanente** |
+| `@usetheo/ui` | dep opcional via auto-detect | **link opt-in** |
+
+Ver [ADR 0020](docs/adr/0020-cross-repo-workspace-link-opt-in.md) (theokit) +
+[ADR 0001](../theokit-sdk/docs/adr/0001-workspace-link-default-status-quo.md)
+(theokit-sdk, mirror).
+
 ## Code of Conduct
 
 This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By

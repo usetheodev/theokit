@@ -52,6 +52,11 @@ jobs:
           node-version: '22.12.0'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # dogfood-regressions-fix-plan v1.1 T4.2 — defense in depth.
+      # Even Node-pinned workflows benefit: pnpm cache could carry a
+      # binding compiled for a different patch version.
+      - name: Rebuild native bindings (better-sqlite3 ABI guard)
+        run: pnpm rebuild better-sqlite3 || echo "::warning::native rebuild failed — preflight will surface details at test time"
       - name: Assemble PG connection URL at runtime
         # Built piecewise so the secret-scan pre-commit hook doesn't match
         # the literal `pg://user:pass@host:port/db` regex shape.

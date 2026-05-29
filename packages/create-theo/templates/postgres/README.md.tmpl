@@ -1,0 +1,83 @@
+# {{name}}
+
+TheoKit project with Postgres + Drizzle ORM wired. Schema-first, migration-aware, typed end-to-end.
+
+> 📚 **Full docs:** https://docs.theokit.dev
+
+## Quick start
+
+```bash
+# 0. Provision Postgres
+#    Option A — local docker (one-liner):
+docker run --name pg -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres:16
+#    Option B — hosted: neon.tech, supabase.com, fly.io
+
+# 1. Set env
+cat > .env <<'EOF'
+DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres
+OPENROUTER_API_KEY=sk-or-v1-...
+EOF
+
+# 2. Generate + apply migrations
+pnpm db:generate
+pnpm db:migrate
+
+# 3. Boot the dev server
+npx theokit dev
+```
+
+Open the printed URL. The default surface includes a sample users API backed by Postgres.
+
+## Templates
+
+- **default** — TheoUI chat composer + agent route.
+- **dashboard** — nested layouts + sidebar.
+- **api-only** — server routes without React.
+- **postgres** (this one) — Drizzle ORM + migrations.
+- **saas** — full app with auth, billing, sessions.
+
+## What the framework auto-loads
+
+- **`.env` → `process.env`**. `DATABASE_URL` must be set before `pnpm db:migrate`.
+- **`.theo/` build output cleanup** on every `theokit build`.
+- **Drizzle schema** under `db/schema.ts` drives migrations + typed query builder.
+
+## Project structure
+
+```
+app/                  Frontend
+├── page.tsx          /              — sample UI
+server/
+├── routes/
+│   ├── health.ts     GET  /api/health
+│   └── users.ts      CRUD /api/users  — backed by db.users
+db/
+├── schema.ts         Drizzle schema (tables + relations)
+├── client.ts         Drizzle client (used by routes)
+└── migrations/       Generated SQL files (committed)
+drizzle.config.ts     Drizzle CLI config
+theo.config.ts        Framework config
+.env                  Secrets — never committed
+```
+
+## Common commands
+
+| Command | What it does |
+|---|---|
+| `npx theokit dev` | Dev server with HMR |
+| `npx theokit build` | Production build |
+| `npx theokit start` | Serve production build |
+| `pnpm db:generate` | Generate SQL migration from `db/schema.ts` |
+| `pnpm db:migrate` | Apply pending migrations to `DATABASE_URL` |
+| `pnpm db:studio` | Open Drizzle Studio UI |
+| `npm run typecheck` | TypeScript strict check |
+
+## Troubleshooting
+
+- **`pnpm db:migrate` fails with "ECONNREFUSED"** → check `DATABASE_URL` host:port + Postgres is running (`docker ps` or hosted dashboard).
+- **`relation "users" does not exist`** → you forgot `pnpm db:migrate`. Run it.
+- **Schema change not reflected** → `pnpm db:generate` first, then `pnpm db:migrate`.
+
+## License
+
+Apply your own. The TheoKit framework is Apache-2.0.

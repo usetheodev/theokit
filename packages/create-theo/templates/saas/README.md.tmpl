@@ -1,0 +1,103 @@
+# {{name}}
+
+TheoKit SaaS template — auth, sessions, billing-ready, and an agent route. The full stack for shipping an account-aware product on day one.
+
+> 📚 **Full docs:** https://docs.theokit.dev
+
+## Quick start
+
+```bash
+# 0. Provision Postgres (sessions + users)
+docker run --name pg -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres:16
+# Or use a hosted Postgres (neon.tech / supabase.com)
+
+# 1. Set env (generate a strong session secret)
+cat > .env <<EOF
+DATABASE_URL=postgres://postgres:dev@localhost:5432/postgres
+SESSION_SECRET=$(openssl rand -base64 32)
+OPENROUTER_API_KEY=sk-or-v1-...
+EOF
+
+# 2. Migrate the schema
+pnpm db:generate
+pnpm db:migrate
+
+# 3. Boot the dev server
+npx theokit dev
+```
+
+## Sample auth flow
+
+```bash
+# Register
+curl -X POST http://localhost:3000/api/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"strong-passphrase"}'
+
+# Login (saves session cookie)
+curl -X POST http://localhost:3000/api/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com","password":"strong-passphrase"}' \
+  -c cookies.txt
+
+# Authenticated request
+curl http://localhost:3000/api/me -b cookies.txt
+```
+
+## Templates
+
+- **default** — TheoUI chat composer + agent route.
+- **dashboard** — nested layouts + sidebar.
+- **api-only** — server routes without React.
+- **postgres** — Drizzle ORM + migrations.
+- **saas** (this one) — full app with auth, billing, sessions.
+
+## What the framework auto-loads
+
+- **`.env` → `process.env`**. `SESSION_SECRET`, `DATABASE_URL`, `OPENROUTER_API_KEY` all required.
+- **Encrypted sessions** (AES-256-GCM) via `SESSION_SECRET`.
+- **`.theo/` build output cleanup** on every `theokit build`.
+
+## Project structure
+
+```
+app/                  Frontend
+├── page.tsx          /            — landing
+server/
+├── routes/
+│   ├── login.ts      POST /api/login    — sets session cookie
+│   ├── logout.ts     POST /api/logout   — clears session
+│   ├── me.ts         GET  /api/me       — requireAuth() guarded
+│   └── agent.ts      POST /api/agent    — agent SSE, requireAuth()
+db/
+├── schema.ts         users + sessions tables (Drizzle)
+└── migrations/       generated SQL (committed)
+drizzle.config.ts     Drizzle config
+theo.config.ts        Framework config
+.env                  Secrets — never committed
+```
+
+## Common commands
+
+| Command | What it does |
+|---|---|
+| `npx theokit dev` | Dev server with HMR + auth |
+| `npx theokit build` | Production build |
+| `npx theokit start` | Serve production build |
+| `pnpm db:generate` | Generate SQL migration |
+| `pnpm db:migrate` | Apply migrations |
+| `npm run typecheck` | TypeScript strict check |
+
+## Adding billing
+
+Stripe is the canonical path — add `STRIPE_SECRET_KEY` to `.env`, mount `server/routes/billing/webhook.ts` via `defineWebhook`, and wire plan checks into `requireAuth()`.
+
+## Troubleshooting
+
+- **`SESSION_SECRET must be at least 32 bytes`** → regenerate with `openssl rand -base64 32`.
+- **`relation "users" does not exist`** → run `pnpm db:migrate` first.
+- **`401 Unauthorized` on `/api/me`** → login first; cookie must be sent (`-b cookies.txt`).
+
+## License
+
+Apply your own. The TheoKit framework is Apache-2.0.

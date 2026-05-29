@@ -14,6 +14,8 @@
  * invalid values fall through (treated as "missing") rather than throw.
  */
 
+import { tryResolveProvider } from './provider-resolver.js'
+
 // ──────────────────────────────────────────────────────────────────────────
 // Structural types — mirrors of SDK shapes we don't want to hard-import
 // (the SDK is an OPTIONAL peer per item #4's stance).
@@ -299,9 +301,64 @@ export async function createConversationHistory(
     args.response.headers.append('set-cookie', cookie)
   }
 
-  // 2. Resolve the agent via SDK.
+  // 2. Auto-resolve provider via Strategy pattern (FAANG-grade — zero
+  //    conditionals no consumer). If `options.apiKey` ausente, lê env vars
+  //    priorizadas (OPENROUTER > OPENAI > ANTHROPIC) e injeta apiKey +
+  //    providers.baseUrl. Consumer override: passar `options.apiKey` explícito
+  //    SOBREPÕE o auto-resolve (escape hatch). Ver `provider-resolver.ts` +
+  //    Dapr Conversation Registry pattern (`referencias/dapr/pkg/components/conversation/`).
+  const resolvedOptions = autoResolveProviderIfNeeded(args.options)
+
+  // 3. Resolve the agent via SDK.
   const sdk = await loadSdk()
-  const agent = await sdk.Agent.getOrCreate(conversationId, args.options)
+  const agent = await sdk.Agent.getOrCreate(conversationId, resolvedOptions)
 
   return { agent, conversationId, isNew }
+}
+
+/**
+ * Auto-inject provider config (apiKey + baseUrl) via Strategy pattern when
+ * consumer didn't pass apiKey explicit. Idempotent — se apiKey já set, noop.
+ *
+ * Output shape:
+ *   {
+ *     ...originalOptions,
+ *     apiKey: '<from-env>',
+ *     providers: { routes: [{ capability: 'chat', provider: '<resolved-name>', ... }] }
+ *   }
+ */
+function autoResolveProviderIfNeeded(options: SdkAgentOptions): SdkAgentOptions {
+  // Escape hatch — consumer override wins.
+  if (typeof options.apiKey === 'string' && options.apiKey.length > 0) {
+    return options
+  }
+  // Auto-resolve via Strategy registry.
+  //
+  // Finding A workaround (sdk-residual-behavior-2026-05-28): SDK silently
+  // returns canned "Hello! How can I assist you today?" content when no
+  // apiKey AND no provider env vars are present. Fail-fast HERE with an
+  // actionable error — template's try/catch yields `{type:'error'}` SSE
+  // event so consumer sees what's wrong.
+  const resolved = tryResolveProvider()
+  if (resolved === null) {
+    throw new Error(
+      'No LLM provider API key found in environment. ' +
+        'Set OPENROUTER_API_KEY (recommended — gateway to many models) OR ' +
+        'OPENAI_API_KEY OR ANTHROPIC_API_KEY in your .env. ' +
+        'Get a free OpenRouter key at https://openrouter.ai/keys. ' +
+        '(Pass `options.apiKey` explicitly to bypass auto-resolution.)',
+    )
+  }
+  // Inject apiKey + provider routing. SDK ProviderRoutingSettings shape.
+  // Note: we use `chat` capability since this is the conversation primitive;
+  // SDK may extend to embeddings/etc — those routes are separate concerns.
+  return {
+    ...options,
+    apiKey: resolved.apiKey,
+    providers: {
+      routes: [
+        { capability: 'chat', provider: resolved.name, baseUrl: resolved.baseUrl },
+      ],
+    },
+  } as SdkAgentOptions
 }

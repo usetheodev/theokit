@@ -1,0 +1,76 @@
+# {{name}}
+
+TheoKit dashboard project. Build the app your agent lives in — with nested layouts and a sidebar wired from day one.
+
+> 📚 **Full docs:** https://docs.theokit.dev
+
+## Quick start
+
+```bash
+# 1. Set your provider key (OpenRouter recommended — one key, any model)
+echo 'OPENROUTER_API_KEY=sk-or-v1-...' > .env
+
+# 2. Boot the dev server
+npx theokit dev
+```
+
+Open the printed URL. The default surface is a dashboard shell with sidebar nav + content area, ready to host your agent panels.
+
+## Templates
+
+- **default** — TheoUI chat composer + agent route.
+- **dashboard** (this one) — nested layouts + sidebar nav.
+- **api-only** — server routes without React.
+- **postgres** — Drizzle ORM + migrations.
+- **saas** — full app with auth, billing, sessions.
+
+## What the framework auto-loads
+
+- **`.env` → `process.env`**. Edit `.env`; restart the dev server.
+- **`.theo/` build output cleanup** on every `theokit build`.
+- **Tailwind + `@usetheo/ui` styling** auto-configured for the TheoUI surface.
+
+## Project structure
+
+```
+app/                  Frontend (file-based routing with nested layouts)
+├── layout.tsx        root wrapper — TheoUI provider + theme
+├── page.tsx          /              — dashboard home
+├── dashboard/
+│   ├── layout.tsx    /dashboard/*   — sidebar shell
+│   └── page.tsx      /dashboard     — primary panel
+server/               Backend (explicit routes)
+├── routes/
+│   └── health.ts     GET /api/health
+theo.config.ts        Framework config
+tailwind.config.ts    Tailwind theme tokens
+.env                  Secrets — never committed
+```
+
+## Common commands
+
+| Command | What it does |
+|---|---|
+| `npx theokit dev` | Dev server with HMR + devtools overlay |
+| `npx theokit build` | Production build → `.theo/` |
+| `npx theokit start` | Serve the production build |
+| `npx theokit check` | Lint for upgrade-readiness |
+| `npx theokit routes` | List all routes + actions detected |
+| `npm run typecheck` | TypeScript strict check (no emit) |
+
+## Add a new panel
+
+```bash
+mkdir -p app/dashboard/billing
+cat > app/dashboard/billing/page.tsx <<'EOF'
+export default function BillingPage() {
+  return <h2>Billing</h2>
+}
+EOF
+```
+
+The route appears at `/dashboard/billing` after HMR.
+
+## License
+
+Apply your own. The TheoKit framework is Apache-2.0.

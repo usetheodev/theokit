@@ -1,0 +1,154 @@
+name: Dogfood Stranger
+# theokit-evolution-ci-and-dx Phase 1A — opt-in dogfood gate (D1 + D8).
+# Manual + weekly schedule. NUNCA `on: push` (cost + duration).
+# Custo operacional: ~$0.10/mês (D11 EC-14 DOCUMENT).
+
+on:
+  workflow_dispatch:
+    inputs:
+      templates:
+        description: 'Templates to test (comma-separated or "all")'
+        default: 'all'
+        required: false
+  schedule:
+    - cron: '0 9 * * 1'  # Mondays 09:00 UTC
+
+concurrency:
+  group: dogfood-stranger
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    # v1.1 EC-1 MUST FIX — secret missing = fail fast antes da matrix.
+    # Sem isso, helpers SKIP gracioso = matrix exit 0 = false-positive PASS.
+    name: Preflight — verify OPENROUTER_API_KEY secret
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Verify secret present
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [[ -z "$OPENROUTER_API_KEY" ]]; then
+            echo "::error::OPENROUTER_API_KEY secret missing — dogfood cannot run without provider key"
+            echo "::error::Fix: gh secret set OPENROUTER_API_KEY --body=sk-or-v1-..."
+            exit 1
+          fi
+          echo "✓ OPENROUTER_API_KEY present (length: ${#OPENROUTER_API_KEY})"
+
+  multi-template-smoke:
+    name: Multi-template smoke (${{ matrix.template }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - template: dashboard
+            port: 4100
+          - template: api-only
+            port: 4200
+          - template: postgres
+            port: 4300
+          - template: saas
+            port: 4400
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Setup pnpm 11 via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.1.0 --activate
+      - name: Install lsof (helper dep)
+        run: sudo apt-get update && sudo apt-get install -y lsof curl
+      - name: Smoke ${{ matrix.template }}
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          OUTPUT=$(bash scripts/dogfood/multi-template-smoke.sh ${{ matrix.template }} ${{ matrix.port }})
+          echo "$OUTPUT"
+          RESULT=$(echo "$OUTPUT" | grep '^RESULT=' | cut -d= -f2)
+          REASON=$(echo "$OUTPUT" | grep '^REASON=' | cut -d= -f2-)
+          if [[ "$RESULT" != "PASS" && "$RESULT" != "SKIP" ]]; then
+            echo "::error::Template ${{ matrix.template }} FAILED: $REASON"
+            exit 1
+          fi
+          if [[ "$RESULT" == "SKIP" ]]; then
+            echo "::warning::Template ${{ matrix.template }} SKIPPED: $REASON"
+          fi
+
+  chaos-providers:
+    name: Chaos providers (D14 fault injection)
+    needs: [preflight, multi-template-smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable && corepack prepare pnpm@11.1.0 --activate
+      - run: sudo apt-get update && sudo apt-get install -y lsof curl
+      - name: Scaffold base sandbox
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          mkdir -p /tmp/chaos-sandbox && cd /tmp/chaos-sandbox
+          npx -y create-theokit@latest my-app --template=default --skip-install
+          cd my-app
+          echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY" > .env
+          pnpm install --prefer-offline || true
+          ls node_modules/theokit >/dev/null
+      - name: Run chaos scenarios (D14)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set +e
+          declare -A SCENARIO_PORTS=(
+            [invalid-key]=3100
+            [rate-limit]=3200
+            [nonexistent-model]=3300
+            [server-error]=3400
+          )
+          failed=0
+          for scenario in invalid-key rate-limit nonexistent-model server-error; do
+            PORT=${SCENARIO_PORTS[$scenario]}
+            OUT=$(bash "${GITHUB_WORKSPACE}/scripts/dogfood/chaos-providers.sh" "$scenario" /tmp/chaos-sandbox/my-app "$PORT")
+            echo "=== $scenario (port $PORT) ==="
+            echo "$OUT"
+            RES=$(echo "$OUT" | grep '^RESULT=' | cut -d= -f2)
+            REA=$(echo "$OUT" | grep '^REASON=' | cut -d= -f2-)
+            if [[ "$RES" == "PASS" ]]; then
+              echo "::notice::Chaos $scenario PASS — $REA"
+            elif [[ "$RES" == "SKIP" ]]; then
+              echo "::warning::Chaos $scenario SKIP — $REA"
+            else
+              echo "::error::Chaos $scenario FAIL — $REA"
+              failed=$((failed+1))
+            fi
+          done
+          exit $failed
+
+  upload-artifacts:
+    name: Upload dogfood report
+    needs: [multi-template-smoke, chaos-providers]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find reports
+        id: reports
+        run: |
+          mkdir -p reports
+          if [ -d .claude/knowledge-base/reviews/dogfood-stranger ]; then
+            cp .claude/knowledge-base/reviews/dogfood-stranger/*.md reports/ 2>/dev/null || true
+          fi
+          ls reports/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-stranger-report
+          path: reports/
+          if-no-files-found: warn

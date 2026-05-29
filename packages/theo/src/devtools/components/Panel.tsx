@@ -9,6 +9,7 @@ import { useDevtoolsContext } from '../hooks/useDevtoolsContext.js'
 import type { DevtoolsTab } from '../shared.js'
 import { tokens } from '../styles/tokens.js'
 
+import { AgentsTab } from './Tabs/AgentsTab.js'
 import { CsrfReadinessTab } from './Tabs/CsrfReadinessTab.js'
 import { ErrorsTab } from './Tabs/ErrorsTab.js'
 import { RequestsTab } from './Tabs/RequestsTab.js'
@@ -16,7 +17,14 @@ import { RoutesTab } from './Tabs/RoutesTab.js'
 import { SettingsTab } from './Tabs/SettingsTab.js'
 import { TheoLogo } from './TheoLogo.js'
 
-const TABS: DevtoolsTab[] = ['requests', 'routes', 'errors', 'csrf-readiness', 'settings']
+const TABS: DevtoolsTab[] = [
+  'requests',
+  'routes',
+  'agents',
+  'errors',
+  'csrf-readiness',
+  'settings',
+]
 
 // Style builder extracted to keep Panel's body under the line ceiling.
 function buildPanelStyles(
@@ -164,6 +172,7 @@ export function Panel() {
       <div className={bodyClass} data-testid="devtools-tab-body">
         {state.activeTab === 'requests' && <RequestsTab />}
         {state.activeTab === 'routes' && <RoutesTab />}
+        {state.activeTab === 'agents' && <AgentsTab />}
         {state.activeTab === 'errors' && <ErrorsTab />}
         {state.activeTab === 'csrf-readiness' && <CsrfReadinessTab />}
         {state.activeTab === 'settings' && <SettingsTab />}

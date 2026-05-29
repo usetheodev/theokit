@@ -1,8 +1,8 @@
 # Spike: `@usetheo/ui` Vite Plugin API Shape
 
-**Date:** 2026-05-22
-**Status:** PROPOSED — awaits cross-repo sign-off from UI repo maintainer (paulo)
-**Blocks:** Phase 3 of `docs/plans/framework-zero-config-polish-plan.md`
+**Date:** 2026-05-22 (proposed) / 2026-05-28 (accepted)
+**Status:** **ACCEPTED** via [ADR 0018](../adr/0018-usetheo-ui-vite-plugin-contract-versionado.md) (theokit-side) + [ADR 0001 do theo-ui](../../../theo-ui/docs/adr/0001-vite-plugin-subpath-export-contract.md) (UI-side mirror).
+**Blocks:** Phase 3 of `docs/plans/framework-zero-config-polish-plan.md` — UNBLOCKED.
 
 ## Goal
 

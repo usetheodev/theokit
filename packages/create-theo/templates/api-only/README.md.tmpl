@@ -1,0 +1,78 @@
+# {{name}}
+
+TheoKit API-only project. Backend routes with Zod validation + typed responses — no frontend bundle, no React.
+
+> 📚 **Full docs:** https://docs.theokit.dev
+
+## Quick start
+
+```bash
+# 1. Set your provider key if you wire an agent route later
+echo 'OPENROUTER_API_KEY=sk-or-v1-...' > .env
+
+# 2. Boot the dev server
+npx theokit dev
+
+# 3. Probe the health route
+curl http://localhost:3000/api/health
+```
+
+You should see `{"status":"ok"}`. The server is now serving the routes under `server/routes/`.
+
+## Templates
+
+- **default** — TheoUI chat composer + agent route.
+- **dashboard** — nested layouts + sidebar.
+- **api-only** (this one) — server routes without React.
+- **postgres** — Drizzle ORM + migrations.
+- **saas** — full app with auth, billing, sessions.
+
+## What the framework auto-loads
+
+- **`.env` → `process.env`**. Edit `.env`; restart the dev server.
+- **`.theo/` build output cleanup** on every `theokit build`.
+- **Route discovery** — every `server/routes/*.ts` becomes a wired endpoint.
+
+## Project structure
+
+```
+server/
+├── routes/
+│   ├── health.ts     GET  /api/health  — returns {status:"ok"}
+│   └── users.ts      CRUD /api/users   — Zod-validated body
+theo.config.ts        Framework config
+.env                  Secrets — never committed (.gitignore)
+```
+
+## Sample requests
+
+```bash
+# Health check
+curl http://localhost:3000/api/health
+
+# Create a user (POST with JSON body)
+curl -X POST http://localhost:3000/api/users \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Alice","email":"alice@example.com"}'
+
+# List users
+curl http://localhost:3000/api/users
+```
+
+## Common commands
+
+| Command | What it does |
+|---|---|
+| `npx theokit dev` | Dev server with HMR + structured logs |
+| `npx theokit build` | Production build → `.theo/` |
+| `npx theokit start` | Serve the production build |
+| `npx theokit routes` | List all routes detected |
+| `npm run typecheck` | TypeScript strict check (no emit) |
+
+## Add a new route
+
+Drop a `.ts` file in `server/routes/`. Use `defineRoute` from `theokit/server` for Zod-validated handlers, or export `GET`/`POST` directly.
+
+## License
+
+Apply your own. The TheoKit framework is Apache-2.0.

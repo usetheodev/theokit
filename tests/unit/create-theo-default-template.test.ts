@@ -44,9 +44,15 @@ describe('create-theokit default template — chat.ts parity with fixture', () =
     expect(src).toMatch(/yield\*\s+streamAgentRun\(/)
   })
 
-  it('template chat.ts does NOT mention openai (case-insensitive)', () => {
-    const src = readFileSync(TEMPLATE_CHAT, 'utf-8').toLowerCase()
-    expect(src).not.toContain('openai')
+  it('template chat.ts does NOT import the raw openai npm package', () => {
+    // FAANG-precise: comments mentioning "OpenAI Chat Completions" (the wire
+    // protocol) + env var names like OPENAI_API_KEY are domain reality.
+    // The anti-stack rule blocks actual imports/requires of the openai pkg.
+    const src = readFileSync(TEMPLATE_CHAT, 'utf-8')
+    const rawSdkImport =
+      /(?:from|require\(|import\()\s*['"]openai['"]/i.test(src) ||
+      /from\s+['"]@anthropic-ai\/sdk['"]/i.test(src)
+    expect(rawSdkImport).toBe(false)
   })
 
   it('item #5 — template chat.ts uses createConversationHistory (no dispose per request)', () => {

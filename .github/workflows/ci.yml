@@ -25,6 +25,8 @@ jobs:
         run: pnpm lint
       - name: Prettier (format check)
         run: pnpm format:check
+      - name: Check template version sync (ADR 0019)
+        run: pnpm check:templates
 
   typecheck-build:
     name: Typecheck + Build
@@ -54,6 +56,13 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      # dogfood-regressions-fix-plan v1.1 T4.2 — defense in depth against
+      # NODE_MODULE_VERSION mismatch. CRITICAL here because the matrix runs
+      # both Node 20 and Node 22 against the same pnpm store (cache); the
+      # binding installed under one Node version cannot dlopen under the
+      # other. Without this step the matrix would silently break.
+      - name: Rebuild native bindings (better-sqlite3 ABI guard)
+        run: pnpm rebuild better-sqlite3 || echo "::warning::native rebuild failed — preflight will surface details at test time"
       - run: pnpm test
       - run: pnpm test:types
 
@@ -68,6 +77,8 @@ jobs:
           node-version: 22
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
+      - name: Rebuild native bindings (better-sqlite3 ABI guard)
+        run: pnpm rebuild better-sqlite3 || echo "::warning::native rebuild failed — preflight will surface details at test time"
       - name: Run tests with coverage thresholds
         run: pnpm test:coverage
       - name: Upload coverage report
