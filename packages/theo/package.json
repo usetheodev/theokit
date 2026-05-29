@@ -1,6 +1,6 @@
 {
   "name": "theokit",
-  "version": "0.1.0-alpha.17",
+  "version": "0.2.0",
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {

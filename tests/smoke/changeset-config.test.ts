@@ -24,16 +24,28 @@ describe('Changeset Configuration', () => {
     expect(config.baseBranch).toBe('main')
   })
 
-  it('theo version should be 0.1.0-alpha.0', () => {
+  // 0.2.0 release (2026-05-28): exited alpha series. Gate now pins the
+  // stable line — versions must be valid semver, no longer pre-release.
+  it('theo version should be valid stable semver (post-alpha exit)', () => {
     const pkg = JSON.parse(readFileSync(resolve(rootDir, 'packages/theo/package.json'), 'utf-8'))
-    expect(pkg.version).toMatch(/0\.1\.0-alpha/)
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+(-[a-z0-9.]+)?$/)
+    expect(pkg.version).not.toMatch(/-alpha\./)
   })
 
-  it('create-theo version should be 0.1.0-alpha.0', () => {
+  it('create-theo version should be valid stable semver (post-alpha exit)', () => {
     const pkg = JSON.parse(
       readFileSync(resolve(rootDir, 'packages/create-theo/package.json'), 'utf-8'),
     )
-    expect(pkg.version).toMatch(/0\.1\.0-alpha/)
+    expect(pkg.version).toMatch(/^\d+\.\d+\.\d+(-[a-z0-9.]+)?$/)
+    expect(pkg.version).not.toMatch(/-alpha\./)
+  })
+
+  it('theo and create-theo versions are linked (stay in sync)', () => {
+    const theo = JSON.parse(readFileSync(resolve(rootDir, 'packages/theo/package.json'), 'utf-8'))
+    const create = JSON.parse(
+      readFileSync(resolve(rootDir, 'packages/create-theo/package.json'), 'utf-8'),
+    )
+    expect(theo.version).toBe(create.version)
   })
 
   it('root package.json should have changeset scripts', () => {
@@ -49,22 +61,21 @@ describe('CHANGELOG.md', () => {
     expect(existsSync(resolve(rootDir, 'packages/theo/CHANGELOG.md'))).toBe(true)
   })
 
-  it('theo CHANGELOG.md should have version 0.1.0-alpha.0', () => {
+  it('theo CHANGELOG.md should mention the current package.json version', () => {
+    const pkg = JSON.parse(readFileSync(resolve(rootDir, 'packages/theo/package.json'), 'utf-8'))
     const content = readFileSync(resolve(rootDir, 'packages/theo/CHANGELOG.md'), 'utf-8')
-    expect(content).toContain('0.1.0-alpha.0')
-  })
-
-  it('theo CHANGELOG.md should have [Unreleased] section', () => {
-    const content = readFileSync(resolve(rootDir, 'packages/theo/CHANGELOG.md'), 'utf-8')
-    expect(content).toContain('[Unreleased]')
+    expect(content).toContain(pkg.version)
   })
 
   it('create-theo CHANGELOG.md should exist', () => {
     expect(existsSync(resolve(rootDir, 'packages/create-theo/CHANGELOG.md'))).toBe(true)
   })
 
-  it('create-theo CHANGELOG.md should have version 0.1.0-alpha.0', () => {
+  it('create-theo CHANGELOG.md should mention the current package.json version', () => {
+    const pkg = JSON.parse(
+      readFileSync(resolve(rootDir, 'packages/create-theo/package.json'), 'utf-8'),
+    )
     const content = readFileSync(resolve(rootDir, 'packages/create-theo/CHANGELOG.md'), 'utf-8')
-    expect(content).toContain('0.1.0-alpha.0')
+    expect(content).toContain(pkg.version)
   })
 })
