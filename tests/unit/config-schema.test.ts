@@ -46,4 +46,39 @@ describe('theoConfigSchema', () => {
     const result = theoConfigSchema.parse({ port: 3000, database: 'postgres' } as any)
     expect(result).not.toHaveProperty('database')
   })
+
+  // T4.1 (canvas-ecosystem-refactor / ADR D6)
+  describe('viteOptimizeDeps', () => {
+    it('should accept viteOptimizeDeps as string array', () => {
+      const result = theoConfigSchema.safeParse({ viteOptimizeDeps: ['mermaid', 'shiki'] })
+      expect(result.success).toBe(true)
+      if (result.success) {
+        expect(result.data.viteOptimizeDeps).toEqual(['mermaid', 'shiki'])
+      }
+    })
+
+    it('should accept empty array', () => {
+      const result = theoConfigSchema.safeParse({ viteOptimizeDeps: [] })
+      expect(result.success).toBe(true)
+    })
+
+    it('should reject non-array (string)', () => {
+      const result = theoConfigSchema.safeParse({
+        viteOptimizeDeps: 'mermaid' as unknown as string[],
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('should reject array with non-string element', () => {
+      const result = theoConfigSchema.safeParse({
+        viteOptimizeDeps: ['mermaid', 42] as unknown as string[],
+      })
+      expect(result.success).toBe(false)
+    })
+
+    it('field is optional (omitted is valid)', () => {
+      const result = theoConfigSchema.parse({})
+      expect(result.viteOptimizeDeps).toBeUndefined()
+    })
+  })
 })

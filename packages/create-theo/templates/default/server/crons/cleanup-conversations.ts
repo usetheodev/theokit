@@ -1,5 +1,6 @@
 import { defineCron } from 'theokit/server/cron'
 import { readdir, stat, rm } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 /**
@@ -15,21 +16,21 @@ const AGENTS_DIR = '.theokit/agents'
 
 export default defineCron('cleanup-conversations', {
   schedule: '0 4 * * *', // Daily 04:00 UTC
-  handler: async ({ log }) => {
+  handler: async ({ traceId }) => {
     const root = resolve(process.cwd(), AGENTS_DIR)
     const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000
     let removed = 0
     let kept = 0
-    let entries: Awaited<ReturnType<typeof readdir>>
+    let entries: Dirent[]
     try {
-      entries = await readdir(root, { withFileTypes: true })
+      entries = (await readdir(root, { withFileTypes: true })) as unknown as Dirent[]
     } catch {
-      log.info({ msg: 'No agents dir yet — first run', dir: root })
+      console.info(JSON.stringify({ msg: 'No agents dir yet — first run', dir: root, traceId }))
       return
     }
     for (const entry of entries) {
       if (!entry.isDirectory()) continue
-      const agentDir = join(root, entry.name)
+      const agentDir = join(root, String(entry.name))
       const messagesFile = join(agentDir, 'messages.jsonl')
       try {
         const s = await stat(messagesFile)
@@ -45,6 +46,14 @@ export default defineCron('cleanup-conversations', {
         removed++
       }
     }
-    log.info({ msg: 'cleanup-conversations complete', removed, kept, maxAgeDays: MAX_AGE_DAYS })
+    console.info(
+      JSON.stringify({
+        msg: 'cleanup-conversations complete',
+        removed,
+        kept,
+        maxAgeDays: MAX_AGE_DAYS,
+        traceId,
+      }),
+    )
   },
 })

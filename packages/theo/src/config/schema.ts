@@ -379,6 +379,21 @@ export const theoConfigSchema = z
      */
     adapters: z.array(z.string()).optional(),
     /**
+     * Extra package names to pre-bundle via Vite's `optimizeDeps.include`.
+     *
+     * Framework auto-includes `@usetheo/ui` and `lucide-react` when present.
+     * Apps adding plugin peer-deps that rely on a runtime `import('<pkg>')`
+     * (dynamic specifier) — e.g. `@theokit/plugin-canvas` consumers
+     * installing `mermaid` for Mermaid SVG rendering — must declare those
+     * here so Vite can resolve the literal in dev mode without
+     * "Failed to resolve module specifier" errors. Production builds use
+     * tsup/esbuild bundling and are not affected.
+     *
+     * Example:
+     *   viteOptimizeDeps: ['mermaid']
+     */
+    viteOptimizeDeps: z.array(z.string()).optional(),
+    /**
      * Jobs backend (ADR D3 + T2.1). When configured, every request gets
      * `ctx.queue.enqueue` auto-wired via the outbox lifecycle. Pass a
      * `JobBackend` instance (InMemoryJobBackend, PostgresJobBackend, etc.).

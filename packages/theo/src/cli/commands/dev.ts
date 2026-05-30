@@ -60,6 +60,9 @@ export async function startDevServer(cwd: string, options?: DevOptions): Promise
       ssr: config.ssr,
       // Wave 2 (T3.1) — wire typed-client plugin when services declared.
       services: config.services,
+      // T4.1 (canvas-ecosystem-refactor / ADR D6) — passthrough peer-deps
+      // that plugins import dynamically (e.g., mermaid via plugin-canvas).
+      viteOptimizeDeps: config.viteOptimizeDeps,
     })
     server = await createServer({
       root: cwd,

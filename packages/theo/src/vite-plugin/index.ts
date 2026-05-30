@@ -77,6 +77,19 @@ export interface TheoPluginOptions {
    * per service with an OpenAPI URL. Empty `{}` → no-op.
    */
   services?: ServicesConfig
+  /**
+   * T4.1 (canvas-ecosystem-refactor / ADR D6) — extra package names appended
+   * to Vite `optimizeDeps.include`. Required when an installed plugin
+   * peer-dep is consumed via a literal `import('<pkg>')` (dynamic specifier)
+   * — Vite cannot trace those without a hint, and the browser receives a
+   * `Failed to resolve module specifier '<pkg>'` error.
+   *
+   * Default targets pre-bundled regardless: `@usetheo/ui`, `lucide-react`.
+   *
+   * Example:
+   *   viteOptimizeDeps: ['mermaid']
+   */
+  viteOptimizeDeps?: string[]
 }
 
 /**
@@ -142,6 +155,35 @@ export async function theoPluginAsync(
   }
 
   return [theoPlugin(rootOrOptions), ...uiPlugins, ...servicesPlugins]
+}
+
+/**
+ * Build the `optimizeDeps.include` array Vite uses to pre-bundle heavy
+ * deps at server startup. Detects `@usetheo/ui` and `lucide-react` in
+ * the consumer's `node_modules` (auto-include) and appends user-declared
+ * peer deps via `viteOptimizeDeps` (e.g., `mermaid` for plugin-canvas
+ * — without this hint Vite fails to resolve dynamic `import('mermaid')`
+ * inside an installed plugin at dev time). T4.1 of canvas-ecosystem-refactor.
+ */
+function buildOptimizeDepsInclude(
+  projectRoot: string,
+  viteOptimizeDeps: readonly string[] | undefined,
+): string[] {
+  const include: string[] = []
+  if (existsSync(resolve(projectRoot, 'node_modules', '@usetheo', 'ui'))) {
+    include.push('@usetheo/ui')
+  }
+  if (existsSync(resolve(projectRoot, 'node_modules', 'lucide-react'))) {
+    include.push('lucide-react')
+  }
+  if (Array.isArray(viteOptimizeDeps)) {
+    for (const pkg of viteOptimizeDeps) {
+      if (typeof pkg === 'string' && pkg.length > 0 && !include.includes(pkg)) {
+        include.push(pkg)
+      }
+    }
+  }
+  return include
 }
 
 // eslint-disable-next-line max-lines-per-function -- Vite plugin factory: state setup + hooks live together by Vite convention
@@ -214,13 +256,7 @@ export function theoPlugin(rootOrOptions?: string | TheoPluginOptions): Plugin {
       // Measured 2026-05-22: cold first GET / = 10s → ~1s with includes wired.
       // See https://vite.dev/guide/dep-pre-bundling — "lazy dependency
       // discovery" is the canonical mitigation.
-      const optimizeDepsInclude: string[] = []
-      if (existsSync(resolve(projectRoot, 'node_modules', '@usetheo', 'ui'))) {
-        optimizeDepsInclude.push('@usetheo/ui')
-      }
-      if (existsSync(resolve(projectRoot, 'node_modules', 'lucide-react'))) {
-        optimizeDepsInclude.push('lucide-react')
-      }
+      const optimizeDepsInclude = buildOptimizeDepsInclude(projectRoot, options.viteOptimizeDeps)
 
       // Perf: warm up the app's critical-path files so Vite transforms them
       // before the browser asks. Cuts the visible LCP when these files

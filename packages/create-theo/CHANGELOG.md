@@ -1,5 +1,19 @@
 # create-theo
 
+## 0.2.1
+
+### Patch Changes
+
+- **Template pins bumped to stable** — `theokit` `^0.1.0-alpha.16` → `^0.2.0`, `@usetheo/sdk` `^1.2.0` → `^1.3.0`, `@usetheo/ui` `^0.12.0-next.0` → `^0.12.0` across all 5 templates. Strangers now scaffold against current stable releases.
+- **`default/server/routes/chat.ts`** — model id prefixed with provider namespace (`openai/gpt-4o-mini` instead of bare `gpt-4o-mini`) so OpenRouter routing resolves correctly. Without the prefix the SDK fell back to a stub response.
+- **`default/app/page.tsx`** TS errors fixed — `AgentErrorCard` `kind="model"` → `kind="tool-failure"`, `description=` → `detail=`, `action=` → `actions=` (real props from `@usetheo/ui >= 0.12.0`). `QuickAction.label` narrowed to `string` before `handleSubmit()`.
+- **`default/server/crons/cleanup-conversations.ts`** — dropped non-existent `CronContext.log` for plain `console.info` JSON lines; typed `entries: Dirent[]` for `node:fs` strict mode.
+- **All 5 templates devDeps** — added `@types/node ^22.10.0` (resolves missing module errors).
+
+### Why
+
+`/dogfood-stranger` run 2026-05-30 surfaced 7 TS errors on a freshly scaffolded `default` project + a CRITICAL chat path failure (SDK returned canned response instead of calling the real provider). Root cause: bare model id + stale alpha pins incompatible with current `@usetheo/sdk` / `@usetheo/ui` releases. This patch fixes both at the template source.
+
 ## 0.2.0
 
 ### Minor Changes

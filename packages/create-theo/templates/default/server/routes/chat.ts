@@ -48,9 +48,12 @@ export const POST = defineAgentEndpoint({
         request,
         response: { headers: cookieHeaders },
         options: {
-          // model id literal — provider resolution NÃO depende de prefix inference.
-          // Stranger pode trocar livremente sem mexer em routing.
-          model: { id: 'gpt-4o-mini' },
+          // Model id is prefixed with the provider namespace. When using
+          // OPENROUTER_API_KEY (default), prefixes route to the correct
+          // upstream — `openai/`, `anthropic/`, `google/`, `meta-llama/`,
+          // `mistralai/`, `groq/`, etc. See https://openrouter.ai/models.
+          // Without the prefix the SDK falls back to a stub response.
+          model: { id: 'openai/gpt-4o-mini' },
           tools: [currentTime],
         },
       })
