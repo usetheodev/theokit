@@ -1,5 +1,25 @@
 # @usetheo/example-full-stack-agent
 
+## 0.0.1
+
+### Patch Changes
+
+- Updated dependencies [e761aac]
+- Updated dependencies [ee1b596]
+- Updated dependencies [ee1b596]
+- Updated dependencies [57cc1e4]
+- Updated dependencies [ee1b596]
+- Updated dependencies [ee1b596]
+- Updated dependencies [ee1b596]
+- Updated dependencies [4b97fee]
+- Updated dependencies [ee1b596]
+- Updated dependencies [ee1b596]
+- Updated dependencies [ee1b596]
+- Updated dependencies [ee1b596]
+- Updated dependencies [4b97fee]
+- Updated dependencies [ee1b596]
+  - theokit@0.1.0
+
 ## 0.0.1-alpha.8
 
 ### Patch Changes
