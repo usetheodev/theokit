@@ -45,4 +45,6 @@ over an existing handler loses one of the two silently. Compose explicitly —
 `async (ctx) => (await gate(ctx)) ?? (await mine(ctx))`; first veto wins.
 
 `PermissionStore`'s docblock now states that the class enforces nothing on its own, and records the
-precedence between the four surfaces that can refuse a tool.
+precedence among the surfaces IN THIS PACKAGE that can refuse a tool — saying plainly that the list
+is not exhaustive, because `@theokit/sdk` has its own permission system that neither knows about
+these nor is known by them.

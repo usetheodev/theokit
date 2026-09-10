@@ -208,9 +208,20 @@ declare const GATED: unique symbol
  *
  * ## What it does not do
  *
- * `as never` defeats it, like every brand. This refuses the accident — a capability author reaching
- * for the field because it is there — and not a caller who has decided to bypass the gate. Saying so
- * is the point: the comment it replaces claimed an invariant nothing enforced.
+ * `as never` defeats it, like every brand — and so does `Object.assign(draft, { settingSources: [...] })`,
+ * measured cast-free against the emitted `.d.ts`, including from inside a `Capability.apply`. That
+ * second one is a TypeScript-wide hole rather than a design choice here: `Object.assign<T, U>`
+ * returns `T & U` and checks nothing about `T`'s existing fields.
+ *
+ * Nine other routes ARE refused, each verified against the emitted declarations: `setOnce` with a
+ * raw array, `setOnce` through a generic wrapper, a direct `draft.settingSources =`, a spread of a
+ * compiled object, an object literal with `as`, `.concat`, `.map`, spread-widening, `satisfies`,
+ * and `.push`.
+ *
+ * So this refuses the accident — a capability author reaching for the field because it is there —
+ * with one named exception, and not a caller who has decided to bypass the gate. Naming the
+ * exception is the point: the comment this replaced claimed an invariant nothing enforced, and a
+ * replacement that overstated its own coverage would be the same defect one size smaller.
  *
  * ## Which roots the SDK actually READS
  *

@@ -42,8 +42,8 @@ const DIST_BUILT = existsSync(DIST_ENTRY)
  * nothing.
  *
  * What the barrel actually costs: `index.js` plus its chunk graph — seven files under `dist/`,
- * traced with `strace -e trace=openat` on a cold `import()`, and smaller than its chunk graph
- * combined.
+ * traced with `strace -e trace=openat` on a cold `import()`, of which `index.js` is smaller than
+ * the other six combined.
  *
  * "of which `index.js` itself is the smallest part" is what this sentence said for one round, and
  * it was the FOURTH wrong quantitative claim in the paragraph whose subject is getting this number
