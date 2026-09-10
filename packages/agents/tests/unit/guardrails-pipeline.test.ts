@@ -7,8 +7,12 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { runInputGuards, runOutputGuards } from '../../src/guardrails/index.js'
-import { MalformedGuardrailResultError, type Guardrail } from '../../src/guardrails/index.js'
+import {
+  MalformedGuardrailResultError,
+  runInputGuards,
+  runOutputGuards,
+  type Guardrail,
+} from '../../src/guardrails/index.js'
 
 const sloppy = (phase: 'checkInput' | 'checkOutput'): Guardrail => ({
   name: 'sloppy',
@@ -38,9 +42,46 @@ describe('a redact with no replacement text is reported, not silently ignored', 
 
   it('test_the_error_is_not_retryable', async () => {
     // A malformed guard does not become well-formed on a second attempt.
-    await runOutputGuards('x', [sloppy('checkOutput')]).catch((e: unknown) => {
-      expect((e as { isRetryable?: boolean }).isRetryable).toBe(false)
+    //
+    // `.rejects.toMatchObject`, not `.catch(cb)`. The first version used the callback form, which
+    // runs no assertion at all when the promise RESOLVES — review proved it by removing the throw
+    // and watching this test survive while its three neighbours died.
+    await expect(runOutputGuards('x', [sloppy('checkOutput')])).rejects.toMatchObject({
+      isRetryable: false,
+      code: 'GUARDRAIL_RESULT_MALFORMED',
     })
+  })
+})
+
+describe('a guard written as a method keeps its receiver', () => {
+  it('test_a_method_style_guard_can_use_this', async () => {
+    // The interface declares `checkInput?(text: string)` in METHOD syntax, so keeping a regex or a
+    // PII list on the instance is the natural way to write a guard. Extracting the method from the
+    // object to call it loses `this` — and no test in this repository wrote a guard that way, so the
+    // whole suite was blind to it until review probed for it.
+    const guard = {
+      name: 'method-style',
+      pattern: /sk-\w+/,
+      checkOutput(this: { pattern: RegExp }, text: string) {
+        return { action: 'redact' as const, text: text.replace(this.pattern, '[REDACTED]') }
+      },
+    }
+    await expect(runOutputGuards('the token is sk-abc', [guard as never])).resolves.toBe(
+      'the token is [REDACTED]',
+    )
+  })
+
+  it('test_a_class_style_guard_can_use_a_private_field', async () => {
+    class PiiGuard {
+      readonly name = 'class-style'
+      readonly #pattern = /sk-\w+/
+      checkInput(text: string) {
+        return { action: 'redact' as const, text: text.replace(this.#pattern, '[REDACTED]') }
+      }
+    }
+    await expect(runInputGuards('the token is sk-abc', [new PiiGuard()])).resolves.toBe(
+      'the token is [REDACTED]',
+    )
   })
 })
 

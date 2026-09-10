@@ -26,7 +26,14 @@ async function runGuards(
   for (const g of guards) {
     const fn = g[check]
     if (!fn) continue
-    const r = await fn(current)
+    // `.call(g, …)`, not `fn(…)`. Extracting the method from the object loses `this`, and the
+    // interface INVITES the style that needs it: `checkInput?(text: string)` is declared in method
+    // syntax, so keeping a regex or a PII list on the instance is the natural way to write a guard.
+    // Under a bare call those became `TypeError: Cannot read properties of undefined` — an error
+    // outside the TheokitAgentError hierarchy, invisible to isTransientError, presenting as a
+    // framework bug rather than the guard's. Found by review; the suite could not see it because no
+    // test in the repository writes a guard that uses `this`.
+    const r = await fn.call(g, current)
     if (r.action === 'block') {
       throw new GuardrailViolationError(g.name, phase, r.reason ?? 'blocked')
     }

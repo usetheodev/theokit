@@ -38,16 +38,6 @@ export interface Guardrail {
 /** Which boundary phase a violation happened in. */
 export type GuardrailPhase = 'input' | 'output'
 
-/** Thrown (fail-fast) when a guard returns `action: 'block'`. Typed per error-handling.md. */
-/**
- * M80 — extends {@link TheokitAgentError}, not plain `Error`.
- *
- * `isTransientError` is defined over `TheokitAgentError`, so a class outside that hierarchy is
- * INVISIBLE to it and the only recourse left to a consumer is matching on message text — a regex
- * over an eight-level `cause` chain, which is what one actually wrote. `code` is stable across a
- * rename of the class; `isRetryable` is DECLARED rather than defaulted, because a default would be a
- * retry policy nobody chose.
- */
 /**
  * A guard declared `redact` and supplied no replacement text.
  *
@@ -82,6 +72,15 @@ export class MalformedGuardrailResultError extends TheokitAgentError {
   }
 }
 
+/**
+ * Thrown (fail-fast) when a guard returns `action: 'block'`. Typed per error-handling.md.
+ *
+ * M80 — extends {@link TheokitAgentError}, not plain `Error`. `isTransientError` is defined over
+ * `TheokitAgentError`, so a class outside that hierarchy is INVISIBLE to it and the only recourse
+ * left to a consumer is matching on message text — a regex over an eight-level `cause` chain, which
+ * is what one actually wrote. `code` is stable across a rename of the class; `isRetryable` is
+ * DECLARED rather than defaulted, because a default would be a retry policy nobody chose.
+ */
 export class GuardrailViolationError extends TheokitAgentError {
   override readonly name = 'GuardrailViolationError'
   constructor(

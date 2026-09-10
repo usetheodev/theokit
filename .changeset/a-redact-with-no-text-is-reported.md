@@ -15,3 +15,6 @@ deliberate: the alternative is unredacted output reaching a model because a guar
 
 `MalformedGuardrailResultError` is exported from `@theokit/agents`, carries the guard's name and the
 phase, and is not retryable.
+
+This also reaches the streaming path (`moderateOutputStream`), which shares the same pipeline: a
+malformed guard there now throws where it previously continued.
