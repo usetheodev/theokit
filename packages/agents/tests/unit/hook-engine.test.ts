@@ -435,6 +435,30 @@ describe('M75 — a surface can be TOLD that a hook vetoed', () => {
  * implementations is real and is NOT a defect of ours.
  */
 
+describe('B-006 — an observational handler lands on its own key', () => {
+  /**
+   * The invariant the two-branch dispatch could not hold. It passed for both events by accident
+   * before the fix — `on_session_start` by its explicit arm, `post_assistant_reply` by being the
+   * fallback — and becomes load-bearing the moment a third observational event exists, which is
+   * precisely when nobody is looking.
+   *
+   * Asserted by driving the builder rather than by mutating `OBSERVATIONAL_EVENTS`: that constant is
+   * module-level shared state, and `rules/testing.md § 3` bans order-dependent tests.
+   */
+  it.each(['on_session_start', 'post_assistant_reply'] as const)(
+    'test_%s_lands_on_its_own_key',
+    (event) => {
+      const spec = { command: 'true', event, timeout_ms: 500 } as const
+      const handlers = buildHookHandlers([spec], {
+        cwd: process.cwd(),
+        trusted: true,
+        approved: new Set([hookFingerprint({ command: 'true', event, timeoutMs: 500 })]),
+      })
+      expect(Object.keys(handlers), `${event} did not land on its own key`).toEqual([event])
+    },
+  )
+})
+
 describe('M75 — an event that cannot fire says so, instead of failing silently', () => {
   /**
    * The defect a consumer migration exposed, in this module, measured rather than reasoned.

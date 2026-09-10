@@ -343,9 +343,9 @@ export function buildHookHandlers(
   for (const event of OBSERVATIONAL_EVENTS) {
     const list = runnable.filter((spec) => spec.event === event)
     if (list.length === 0) continue
-    const fire = buildObservationalHandler(event, list, options, warn, chainBudgetMs)
-    if (event === 'on_session_start') handlers.on_session_start = fire
-    else handlers.post_assistant_reply = fire
+    // B-006: assign by KEY. The previous two-branch form sent any THIRD observational event into its
+    // fallback arm, silently — the drift the list's comment above claims to prevent.
+    handlers[event] = buildObservationalHandler(event, list, options, warn, chainBudgetMs)
   }
 
   return handlers
