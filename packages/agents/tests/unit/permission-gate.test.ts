@@ -11,7 +11,11 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { grantGate, type GrantGateContext } from '../../src/auth/permission-gate.js'
+import {
+  grantGate,
+  type GrantGateContext,
+  type NotGoverned,
+} from '../../src/auth/permission-gate.js'
 import { PermissionStore } from '../../src/auth/permission-store.js'
 
 /** A store rooted in a throwaway home — no test touches `~`. */
@@ -92,6 +96,24 @@ describe('grantGate', () => {
     await expect(
       gate(ctx('run_shell', 'a destructive command')),
       'governed: true must mean CHECK IT, never "let it through"',
+    ).resolves.toMatchObject({ block: true })
+  })
+
+  it('test_a_governed_undefined_classification_is_not_waved_through', async () => {
+    // The mutation an `eslint --fix` performs, pinned. The rule wants `!classification.governed`;
+    // `!undefined` is `true`, so that form waves through a JS consumer whose classifier returns
+    // `{ governed: undefined }` — and a sixth review round proved the whole suite stayed green
+    // under exactly that rewrite. The suppression comment sat directly above the line it warned
+    // against, which is what a comment is worth when nothing measures it.
+    //
+    // `undefined` reads as governed, `query` is then undefined, `isGranted` throws, the catch
+    // denies. Fail-closed by construction rather than by intent.
+    const { store } = fixture()
+    const gate = grantGate(store, () => ({ governed: undefined }) as unknown as NotGoverned)
+
+    await expect(
+      gate(ctx('run_shell', 'a destructive command')),
+      'a classifier that says nothing must not be read as saying "not governed"',
     ).resolves.toMatchObject({ block: true })
   })
 

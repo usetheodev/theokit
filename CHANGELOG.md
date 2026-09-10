@@ -45,7 +45,7 @@ own `CHANGELOG.md`.
 
 - `settingSources.plugins`, taking the same trust grant as `project` — the root the SDK genuinely reads (`includesSetting` is called with exactly `project` and `plugins`) and the facade withheld. `team` and `mdm` stay absent because the SDK never reads them (B-004)
 
-- `grantGate(store, classify)` in `@theokit/agents/auth` — adapts a `PermissionStore` to the `pre_tool_call` veto seam, so a standing grant can actually refuse a tool. The store previously said "deny by default, always" with zero callers of `isGranted`: a grant and its revocation produced identical behaviour. Nothing is enforced unless a consumer attaches the handler. `PermissionStore`'s docblock now says so, and records the precedence between the four surfaces that can refuse a tool (B-003)
+- `grantGate(store, classify)` in `@theokit/agents/auth` — adapts a `PermissionStore` to the `pre_tool_call` veto seam, so a standing grant can actually refuse a tool. The store previously said "deny by default, always" with zero callers of `isGranted`: a grant and its revocation produced identical behaviour. Nothing is enforced unless a consumer attaches the handler. `PermissionStore`'s docblock now says so, and records the precedence among the surfaces in this package that can refuse a tool — and says plainly that the list is not exhaustive, because `@theokit/sdk` has its own permission system that neither knows about these nor is known by them (B-003)
 
 - `settingSources.claudeCode.import` names WHICH surfaces of a foreign configuration root to take — `hooks`, `plugins`, `skills`, `subagents`. Absent still means all of them; an empty list is refused rather than guessed, because "none" and "unset, so all" differ by whether `.claude/hooks.json` executes shell (#686)
 

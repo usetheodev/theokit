@@ -32,8 +32,13 @@ rename also says something true: this gates on a standing grant the operator mad
 permission engine is a separate system — neither satisfies the other.
 
 A classifier that throws DENIES, naming the throw, rather than ending the turn. A corrupt store
-denies and carries its read error into the veto message, because an operator staring at an
-unexpected prompt needs to tell "you have no grant" from "your grants stopped applying".
+denies with a message that says so — "the permission store could not be read, so no grant applies" —
+distinct from "no standing grant matches", so an operator can tell the two apart.
+
+The read error's own text is deliberately NOT in that message: the veto travels to the model, and
+`lastReadError.message` carries the absolute store path and its file mode. It stays on
+`store.lastReadError` for the operator, which is where the actionable remedy (`chmod 600 …`) lives.
+The scope IS still interpolated, so this narrows the exposure rather than eliminating it.
 
 **Composing with a `pre_tool_call` you already have**: the field is singular, so assigning the gate
 over an existing handler loses one of the two silently. Compose explicitly —

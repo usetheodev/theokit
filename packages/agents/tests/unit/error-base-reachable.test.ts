@@ -42,8 +42,12 @@ const DIST_BUILT = existsSync(DIST_ENTRY)
  * nothing.
  *
  * What the barrel actually costs: `index.js` plus its chunk graph — seven files under `dist/`,
- * traced with `strace -e trace=openat` on a cold `import()`, of which `index.js` itself is the
- * smallest part.
+ * traced with `strace -e trace=openat` on a cold `import()`, and smaller than its chunk graph
+ * combined.
+ *
+ * "of which `index.js` itself is the smallest part" is what this sentence said for one round, and
+ * it was the FOURTH wrong quantitative claim in the paragraph whose subject is getting this number
+ * wrong: measured, `index.js` is the third largest of the seven and bigger than four of them.
  *
  * NO BYTE COUNT, deliberately, after three rounds of getting one wrong. "Multi-megabyte" was
  * invented; "~330 KB" was `du -cb dist/*.js`, every entry point in the package including ones this

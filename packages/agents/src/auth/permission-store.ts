@@ -49,24 +49,33 @@
  * "Deny by default, always" — an enforcement claim — beside an `isGranted` with zero callers, which
  * is the fabricated mechanism this repository refuses everywhere else.
  *
- * {@link permissionGate} is the supported way to put it in force: it adapts this store to
+ * {@link grantGate} is the supported way to put it in force: it adapts this store to
  * `pre_tool_call`, the only hook with veto power, which runs before the tool by construction.
  *
- * ## Precedence, when more than one surface has an opinion
+ * ## Precedence, among the surfaces INSIDE THIS PACKAGE
  *
- * Four things can refuse a tool, and they do not negotiate — each is consulted by whoever wired it:
+ * These do not negotiate — each is consulted by whoever wired it:
  *
  * | Surface | Decides | Runs |
  * |---|---|---|
  * | `defineAgent({ approvals })` | this tool PAUSES for a human | at compile time into `compiled.hitl` |
  * | `.approval()` | the same, through the builder | same |
+ * | `ApprovalPosture: 'auto-reject'` | refuses without asking | at approval time (`bridge/approval-posture.ts:206`) |
  * | a `pre_tool_call` hook | veto, with a message | before the tool |
- * | {@link permissionGate} | veto, from a standing grant | before the tool, AS a `pre_tool_call` hook |
+ * | `createToolHooksPlugin({ beforeToolCall })` | veto | before the tool, as a plugin |
+ * | {@link grantGate} | veto, from a standing grant | before the tool, as a `pre_tool_call` hook |
  *
- * The last two share one field. `HookHandlers.pre_tool_call` is singular, so assigning one over the
- * other loses it silently — compose them explicitly; {@link permissionGate}'s docblock shows the
- * line. The HITL surfaces are orthogonal: a tool can be both gated by a grant and gated by a human,
- * and a veto here means the human is never asked.
+ * **This is not the complete map, and an earlier version said "four things can refuse a tool" as
+ * though it were.** `@theokit/sdk` has its own permission system — `PermissionEngine`,
+ * `PermissionPlugin`, file hooks (`preToolUse`), a fork whitelist — which neither knows about these
+ * nor is known by them. A table presenting itself as exhaustive is worse than no table, because a
+ * reader stops at it.
+ *
+ * `pre_tool_call` handlers written through `HookHandlers` share ONE field, so assigning one over
+ * another loses it silently — compose them explicitly; {@link grantGate}'s docblock shows the line.
+ * Plugins do not have that problem: the SDK keeps plugin hooks in an array and runs all of them,
+ * first block winning. The HITL surfaces are orthogonal to a grant: a tool can be gated by both,
+ * and a veto from a grant means the human is never asked.
  */
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'

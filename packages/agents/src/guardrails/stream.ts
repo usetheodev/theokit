@@ -42,6 +42,14 @@ import type { Guardrail } from './types.js'
  *                    `moderateOutputStream` over that kind, not widen one `extractText` to cover
  *                    both.
  *
+ *                    `replaced` is `undefined` in exactly one case, and the type says so rather
+ *                    than asserting it away: no event in the stream carried text and the guard
+ *                    produced some from `''`. There is nothing to preserve, so the caller builds
+ *                    from the text alone. Note the boundary — an event whose extracted text is the
+ *                    EMPTY STRING is still text-carrying, and can be the one replaced. For
+ *                    `[text('secret'), text('')]` the moderated string lands on the trailing empty
+ *                    delta, so a `{ ...replaced }` caller inherits the terminator's metadata rather
+ *                    than the content-bearing event's.
  * @param rebuildResult applies the moderated text to the generator's RETURN value.
  *
  *                      A stream has two channels and this function moderated one of them for a
@@ -63,14 +71,6 @@ import type { Guardrail } from './types.js'
  *                      returning it unchanged drops the redaction, and no type can tell the two
  *                      apart.
  *
- *                    `replaced` is `undefined` in exactly one case, and the type says so rather
- *                    than asserting it away: no event in the stream carried text and the guard
- *                    produced some from `''`. There is nothing to preserve, so the caller builds
- *                    from the text alone. Note the boundary — an event whose extracted text is the
- *                    EMPTY STRING is still text-carrying, and can be the one replaced. For
- *                    `[text('secret'), text('')]` the moderated string lands on the trailing empty
- *                    delta, so a `{ ...replaced }` caller inherits the terminator's metadata rather
- *                    than the content-bearing event's.
  */
 export async function* moderateOutputStream<E, R>(
   inner: AsyncGenerator<E, R>,
