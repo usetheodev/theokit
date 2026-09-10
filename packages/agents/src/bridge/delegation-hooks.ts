@@ -130,6 +130,78 @@ function composeObservers(
 }
 
 /**
+ * Join both contributions, parent first.
+ *
+ * `PreUserSendResult` carries only `recalledContext`, and the seam is additive by the SDK's design —
+ * no raw-prompt mutation is exposed to plugins. So composing means both contributions reach the
+ * model in order, never that one silences the other. When only one side returns text, that text is
+ * used unchanged: joining it with an empty string would add a stray newline the model then reads.
+ */
+function chainRecall(
+  parent: NonNullable<HookHandlers['pre_user_send']>,
+  own: NonNullable<HookHandlers['pre_user_send']>,
+): NonNullable<HookHandlers['pre_user_send']> {
+  return async (ctx) => {
+    const parts = [await parent(ctx), await own(ctx)]
+      .map((r) => r?.recalledContext)
+      .filter((text): text is string => text !== undefined && text.length > 0)
+    return parts.length > 0 ? { recalledContext: parts.join('\n') } : undefined
+  }
+}
+
+/**
+ * How `inheritHooks` treats every hook a member can declare.
+ *
+ * Total over `keyof HookHandlers`, and that totality IS the guard: adding a key to the interface
+ * without deciding its composition is `TS2741`, not a silent inheritance of the spread's
+ * replace-the-parent default. That default is what this item exists to remove, and leaving the next
+ * key to inherit it would reintroduce the same defect one event later.
+ *
+ * `exempt` is a real answer, kept available on purpose — but it has to be written down by somebody.
+ * The mechanism is B-006's, one commit old, for the same class of defect.
+ */
+const COMPOSITION: Readonly<Record<keyof HookHandlers, 'chained' | 'exempt'>> = {
+  pre_tool_call: 'chained',
+  post_tool_call: 'chained',
+  on_session_start: 'chained',
+  on_session_end: 'chained',
+  post_assistant_reply: 'chained',
+  transform_llm_output: 'chained',
+  transform_tool_result: 'chained',
+  pre_user_send: 'chained',
+}
+
+/** The keys `inheritHooks` composes — read by the test that proves the table matches behaviour. */
+export const CHAINED_HOOKS = Object.entries(COMPOSITION)
+  .filter(([, mode]) => mode === 'chained')
+  .map(([key]) => key as keyof HookHandlers)
+
+/**
+ * Compose the three value-returning hooks, in place.
+ *
+ * Its own function for the reason `composeObservers` is: `inheritHooks` reads as the composition
+ * RULES, and burying six near-identical lines among the veto logic hides both. Extracting it also
+ * kept the function under the complexity budget, which is the lint rule noticing the same thing.
+ *
+ * `transform_tool_result` and `pre_user_send` were absent here until B-007. Both took the spread in
+ * `inheritHooks`, so a member's handler REPLACED its parent's — the opposite of the property that
+ * function documents. `transform_tool_result` is wired today, so a parent redacting tool output lost
+ * that redaction to any member that also transformed.
+ */
+function composeTransforms(
+  merged: HookHandlers,
+  parent: HookHandlers | undefined,
+  own: HookHandlers | undefined,
+): void {
+  const llm = bothOf(parent?.transform_llm_output, own?.transform_llm_output)
+  if (llm) merged.transform_llm_output = chainTransform(llm[0], llm[1])
+  const toolResult = bothOf(parent?.transform_tool_result, own?.transform_tool_result)
+  if (toolResult) merged.transform_tool_result = chainTransform(toolResult[0], toolResult[1])
+  const recall = bothOf(parent?.pre_user_send, own?.pre_user_send)
+  if (recall) merged.pre_user_send = chainRecall(recall[0], recall[1])
+}
+
+/**
  * Compose the hooks a delegated member actually runs under.
  *
  * A gate is never SYNTHESIZED: when neither side declared `pre_tool_call`, the member gets none, and
@@ -154,12 +226,7 @@ export function inheritHooks(
 
   composeObservers(merged, parent, own)
 
-  if (parent?.transform_llm_output && own?.transform_llm_output) {
-    merged.transform_llm_output = chainTransform(
-      parent.transform_llm_output,
-      own.transform_llm_output,
-    )
-  }
+  composeTransforms(merged, parent, own)
 
   return merged
 }
