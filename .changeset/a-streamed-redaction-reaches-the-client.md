@@ -15,15 +15,26 @@ moderated text, given the text-carrying event it replaces. It is required rather
 optional would let the function compute a redaction it cannot apply, which is the defect being
 removed. Only the caller knows how to construct its own events.
 
-`replaced` exists because `extractText` may match SEVERAL event kinds while `rebuildText` builds
-exactly one. A consumer moderating reasoning as well as visible text is doing the obvious thing,
-and without the parameter those collapse into one event of the kind `rebuildText` builds —
-measured: a `thinking` event and a visible one became a single visible event, promoting the model's
-private reasoning into assistant output. Handing over the replaced event lets the caller keep its
-kind and its metadata. `replaced` is `undefined` whenever no event in the stream carried text —
-including a stream that carried only tool calls. It is never a non-text event: an event that is not
-being replaced must not be handed to a function whose job is to build the replacement, or a caller
-spreading it emits a duplicate of it.
+**`extractText` MUST match exactly one event kind.** When it matches several, they COLLAPSE INTO
+ONE — measured: `[thinking('CoT: the key is sk-abc'), message(' Here you go.')]` yields a single
+`message` reading `"CoT: the key is [R] Here you go."`, with no `thinking` event surviving. A
+consumer who wants reasoning moderated runs a SECOND pass over that kind rather than widening one
+extractor.
+
+`replaced` does not prevent that collapse, and an earlier draft of this entry said it did. What it
+buys is narrower: the surviving event keeps the KIND and metadata of the text-carrying event it
+replaces, instead of being rebuilt from the text alone. `replaced` is `undefined` whenever no event
+in the stream carried text, including a stream of only tool calls; it is never a non-text event,
+because a caller spreading one would emit a duplicate of it.
+
+**Second signature change**: a fifth argument, `rebuildResult: (text, result) => R`, applies the
+moderated text to the generator's RETURN value. A stream has two channels and the first release of
+this fix moderated one: the events were redacted while `step.value` — the aggregate `run()` returns
+— still carried the original text. Measured: the guard computed `"the key is [R]"` and
+`run().response` was `"the key is sk-abc123"`, so **`run()`, the primary non-streaming API, kept
+delivering the secret**. That was this fix's own defect one channel over. Required for the same
+reason `rebuildText` is; passed rather than re-derived, because re-running the guards on the
+aggregate would apply a non-idempotent guard twice.
 
 When the text is unchanged, the buffered events are replayed verbatim as before. When it changed,
 the **last** text-carrying event is REPLACED by a newly built event carrying the whole moderated

@@ -41,11 +41,21 @@ const DIST_BUILT = existsSync(DIST_ENTRY)
  * paid for the whole barrel inside vitest's 5-second per-test budget, and the later tests paid
  * nothing.
  *
- * What the barrel actually costs, traced rather than estimated (`strace -e trace=openat` on a cold
- * `import()`): 8 files under `dist/`, 179,974 bytes — `index.js` is 37,484 of them and the chunk
- * graph is 142,490 (~139 KB). Two earlier wordings were wrong here in the direction that flattered
- * the fix: "multi-megabyte", then "~330 KB", the latter being `du -cb dist/*.js` — every entry point
- * in the package, including `auth.js` and `tools.js`, which this import does not pull.
+ * What the barrel actually costs: `index.js` plus its chunk graph — seven files under `dist/`,
+ * traced with `strace -e trace=openat` on a cold `import()`, of which `index.js` itself is the
+ * smallest part.
+ *
+ * NO BYTE COUNT, deliberately, after three rounds of getting one wrong. "Multi-megabyte" was
+ * invented; "~330 KB" was `du -cb dist/*.js`, every entry point in the package including ones this
+ * import never pulls; "179,974 across 8 files" counted `openat` LINES rather than successful opens
+ * — the eighth was `dist/package.json` returning ENOENT thirty-six times — and was measured against
+ * a dist built before an edit in the same commit. A fourth measurement here read 180,360.
+ *
+ * Each correction was smaller than the last and each was still wrong, because the quantity itself
+ * is unstable: it is a build output, and it moves whenever the bundler does. A docblock that quotes
+ * it is quoting something that will be false by the next release, so it does not quote it. What
+ * matters for this file is the SHAPE — a module graph, loaded once in a hook — and that does not
+ * move.
  *
  * Measured 2026-09-10: four tests failed with `Test timed out in 5000ms` at load average 32.9 and
  * the same four passed idle, minutes apart. A timeout is indistinguishable from a regression until

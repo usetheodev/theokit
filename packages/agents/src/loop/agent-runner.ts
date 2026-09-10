@@ -261,6 +261,10 @@ export class AgentRunner {
           // replaced — unused here because `extractText` above matches exactly ONE kind, which is
           // the contract that keeps a collapse from crossing kinds.
           (content) => ({ type: 'text_delta', content }),
+          // The aggregate channel. `run()` drains this generator and returns exactly this value,
+          // and `response` is accumulated upstream from the same `text_delta` events `extractText`
+          // reads — so the moderated string replaces it directly.
+          (content, result) => ({ ...result, response: content }),
         )
       })()
     }

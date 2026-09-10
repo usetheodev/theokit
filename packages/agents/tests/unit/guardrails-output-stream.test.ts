@@ -29,6 +29,12 @@ const rebuildText = (content: string, _replaced: Ev | undefined) => ({
   content,
 })
 const extractText = (e: Ev): string | undefined => (e.type === 'text_delta' ? e.content : undefined)
+/**
+ * These fixtures return a marker string ('RESULT'), not moderated text, so keeping it is correct
+ * rather than a no-op. `test_the_aggregate_return_value_is_moderated_too` is the one that carries
+ * real text, and it is what pins the second channel.
+ */
+const keepResult = <R>(_moderated: string, result: R): R => result
 
 async function collect<E, R>(gen: AsyncGenerator<E, R>): Promise<{ events: E[]; ret: R }> {
   const events: E[] = []
@@ -49,7 +55,7 @@ describe('moderateOutputStream', () => {
       { type: 'done' },
     ]
     const { events: out, ret } = await collect(
-      moderateOutputStream(source(events), guards, extractText, rebuildText),
+      moderateOutputStream(source(events), guards, extractText, rebuildText, keepResult),
     )
     expect(out).toEqual(events)
     expect(ret).toBe('RESULT')
@@ -62,7 +68,7 @@ describe('moderateOutputStream', () => {
       { type: 'text_delta', content: 'is 42' },
       { type: 'done' },
     ]
-    const gen = moderateOutputStream(source(events), guards, extractText, rebuildText)
+    const gen = moderateOutputStream(source(events), guards, extractText, rebuildText, keepResult)
     await expect(collect(gen)).rejects.toBeInstanceOf(GuardrailViolationError)
   })
 
@@ -70,7 +76,7 @@ describe('moderateOutputStream', () => {
     const inputOnly: Guardrail = { name: 'in', checkInput: () => ({ action: 'allow' }) }
     const events = [{ type: 'text_delta', content: 'x' }, { type: 'done' }]
     const { events: out } = await collect(
-      moderateOutputStream(source(events), [inputOnly], extractText, rebuildText),
+      moderateOutputStream(source(events), [inputOnly], extractText, rebuildText, keepResult),
     )
     expect(out).toEqual(events)
   })
@@ -111,6 +117,7 @@ describe('B-012 — a computed redaction reaches the client', () => {
           type: 'text_delta',
           content: text,
         }),
+        keepResult,
       ),
     )
     const text = events
@@ -130,6 +137,7 @@ describe('B-012 — a computed redaction reaches the client', () => {
           type: 'text_delta',
           content: text,
         }),
+        keepResult,
       ),
     )
     expect(
@@ -161,6 +169,8 @@ describe('B-012 — what a redaction costs, pinned', () => {
       [redactor],
       (e) => e.content,
       (content) => ({ type: 'text_delta', content }),
+      // `R` here is a marker string, not moderated text — identity is correct, not a no-op.
+      (_t, r) => r,
     )
     let s = await g.next()
     while (!s.done) {
@@ -198,11 +208,13 @@ describe('B-012 — what a redaction costs, pinned', () => {
   })
 
   it('test_the_replaced_event_is_handed_to_rebuildText', async () => {
-    // The review finding this closes: `extractText` may match SEVERAL event kinds while
-    // `rebuildText` builds exactly one. Measured pre-fix — a `thinking` event and a `message`
-    // collapsed into a single `text_delta`, promoting the model's private reasoning into visible
-    // output. A security fix must not open a disclosure path of its own, so the caller now receives
-    // the event being replaced and can keep its kind and its metadata.
+    // What `replaced` actually buys, stated correctly after a fourth review round caught the
+    // earlier wording asserting the opposite of what this very fixture produces.
+    //
+    // It does NOT stop a cross-kind collapse. Measured: two text-carrying kinds still collapse into
+    // one event — see `test_matching_two_kinds_collapses_them_and_that_is_the_contract` below. What
+    // it buys is that the SURVIVING event keeps the kind and metadata of the one it replaces,
+    // rather than being rebuilt from the text alone.
     async function* src(): AsyncGenerator<Ev, string> {
       yield { type: 'thinking', content: 'the key is sk-abc' }
       yield { type: 'message', content: ' visible', id: 'm2' }
@@ -214,13 +226,15 @@ describe('B-012 — what a redaction costs, pinned', () => {
       [redactor],
       (e) => e.content,
       (content, replaced) => ({ ...replaced, type: replaced?.type ?? 'text_delta', content }),
+      // `R` here is a marker string, not moderated text — identity is correct, not a no-op.
+      (_t, r) => r,
     )
     let s2 = await g.next()
     while (!s2.done) {
       out.push(s2.value)
       s2 = await g.next()
     }
-    // The kind survives — reasoning does NOT become visible output — and so does `id`.
+    // The kind of the LAST text-carrying event survives, and so does its `id`.
     expect(out.map((e) => e.type)).toEqual(['message'])
     expect(out[0]?.id).toBe('m2')
     expect(out[0]?.content).toBe('the key is [R] visible')
@@ -249,6 +263,7 @@ describe('B-012 — what a redaction costs, pinned', () => {
         seen.push(replaced)
         return { type: 'text_delta', content }
       },
+      (_t, r) => r,
     )
     let s2 = await g.next()
     while (!s2.done) {
@@ -257,6 +272,60 @@ describe('B-012 — what a redaction costs, pinned', () => {
     }
     expect(seen).toEqual([undefined])
     expect(out).toEqual([{ type: 'text_delta', content: 'NOTICE' }])
+  })
+
+  it('test_matching_two_kinds_collapses_them_and_that_is_the_contract', async () => {
+    // Pinned because three documents claimed the opposite. `extractText` matching two kinds does
+    // NOT keep them apart — they collapse into one event, and if one of them was reasoning, the
+    // reasoning ends up inside a visible event. That is why the docblock requires exactly one kind
+    // rather than suggesting it, and why a consumer who wants reasoning moderated runs a SECOND
+    // pass over that kind instead of widening one extractor.
+    async function* twoKinds(): AsyncGenerator<Ev, string> {
+      yield { type: 'thinking', content: 'CoT: the key is sk-abc' }
+      yield { type: 'message', content: ' Here you go.' }
+      return 'done'
+    }
+    const out: Ev[] = []
+    const g = moderateOutputStream(
+      twoKinds(),
+      [redactor],
+      (e) => e.content,
+      (content, replaced) => ({ ...replaced, type: replaced?.type ?? 'text_delta', content }),
+      keepResult,
+    )
+    let s2 = await g.next()
+    while (!s2.done) {
+      out.push(s2.value)
+      s2 = await g.next()
+    }
+
+    expect(out).toHaveLength(1)
+    expect(out[0]?.type, 'the surviving kind is the LAST text-carrying one').toBe('message')
+    expect(
+      out[0]?.content,
+      'the reasoning is inside a visible event — the collapse `replaced` does not prevent',
+    ).toBe('CoT: the key is [R] Here you go.')
+  })
+
+  it('test_the_aggregate_return_value_is_moderated_too', async () => {
+    // The fourth-round BLOCKER, pinned where it can be seen cheapest. Every earlier test in this
+    // file returned a marker string nobody asserted on, so a stream could redact its EVENTS and
+    // return the original text — which is what `run()` hands the caller.
+    async function* withAggregate(): AsyncGenerator<Ev, { response: string }> {
+      yield { type: 'text_delta', content: 'the key is ' }
+      yield { type: 'text_delta', content: 'sk-abc' }
+      return { response: 'the key is sk-abc' }
+    }
+    const g = moderateOutputStream(
+      withAggregate(),
+      [redactor],
+      (e) => e.content,
+      (content) => ({ type: 'text_delta', content }),
+      (content, result) => ({ ...result, response: content }),
+    )
+    let s2 = await g.next()
+    while (!s2.done) s2 = await g.next()
+    expect(s2.value.response).toBe('the key is [R]')
   })
 
   it('test_an_equal_but_newly_allocated_string_takes_the_fast_path', async () => {
@@ -280,6 +349,8 @@ describe('B-012 — what a redaction costs, pinned', () => {
       [identity],
       (e) => e.content,
       (content) => ({ type: 'text_delta', content }),
+      // `R` here is a marker string, not moderated text — identity is correct, not a no-op.
+      (_t, r) => r,
     )
     let s2 = await g.next()
     while (!s2.done) {
@@ -332,6 +403,7 @@ describe('B-012 — what a redaction costs, pinned', () => {
         seen.push(replaced)
         return { type: 'text_delta', content }
       },
+      (_t, r) => r,
     )
     let s = await g.next()
     while (!s.done) {

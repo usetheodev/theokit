@@ -21,18 +21,47 @@ import type { Guardrail } from './types.js'
  *                    replaces. Required, not optional (B-012): optional would let this function
  *                    compute a redaction it cannot apply, which is the defect it was added to remove.
  *
- *                    The second parameter arrived from review, and the reason is a disclosure path
- *                    the first version created. `extractText` may match SEVERAL event kinds — a
- *                    consumer moderating reasoning as well as visible text is doing the obvious
- *                    thing — while `rebuildText` builds exactly one. Measured: a `thinking` event
- *                    and a `text_delta` collapsed into a single `text_delta`, promoting the model's
- *                    private reasoning into visible assistant output. Pre-fix that was impossible,
- *                    because events were replayed verbatim.
+ *                    **`extractText` MUST match exactly one event kind.** This is the parameter's
+ *                    real contract and it is a constraint, not a convenience.
  *
- *                    Handing the caller the event being replaced lets them keep its kind, its id,
- *                    its citations — anything the moderated text alone does not carry. What the
- *                    function still cannot do is preserve the DROPPED events' payloads; a consumer
- *                    whose text events carry per-event metadata should moderate one kind only.
+ *                    When it matches several, they COLLAPSE INTO ONE. Measured against the built
+ *                    artifact: `[thinking('CoT: the key is sk-abc'), message(' Here you go.')]`
+ *                    yields a single `message` reading `"CoT: the key is [R] Here you go."` — the
+ *                    model's private reasoning inside a visible event, and no `thinking` event
+ *                    survives. Reverse the order and the visible answer is swallowed into a
+ *                    `thinking` event instead.
+ *
+ *                    `replaced` does NOT prevent that, and an earlier version of this docblock, of
+ *                    the changeset and of a test comment all said it did. What it buys is narrower
+ *                    and worth having: the surviving event keeps the KIND and the metadata of the
+ *                    text-carrying event it replaces, instead of being rebuilt from the text alone.
+ *                    Without it, `[thinking, message]` collapsed into whatever kind `rebuildText`
+ *                    hard-coded; with it, the caller chooses. The collapse itself is unchanged.
+ *
+ *                    So a consumer who wants reasoning moderated must run a SECOND
+ *                    `moderateOutputStream` over that kind, not widen one `extractText` to cover
+ *                    both.
+ *
+ * @param rebuildResult applies the moderated text to the generator's RETURN value.
+ *
+ *                      A stream has two channels and this function moderated one of them for a
+ *                      release. The events were redacted; `step.value` — the aggregate a caller
+ *                      reads from `run()`, or from the generator's return — was accumulated
+ *                      upstream from the PRE-moderation events and carried the original text.
+ *                      Measured against the built artifact: the guard computed `"the key is [R]"`
+ *                      and `run().response` was `"the key is sk-abc123"`.
+ *
+ *                      That is this function's own defect, verbatim, one channel over: the
+ *                      redaction was computed and not applied. Required for the same reason
+ *                      `rebuildText` is — optional would restore it under a nicer name — and
+ *                      passed rather than re-derived, because re-running `runOutputGuards` on the
+ *                      aggregate would apply a non-idempotent guard twice (a disclaimer appender
+ *                      would append two disclaimers).
+ *
+ *                      Return `result` unchanged when it carries no moderated text. That is
+ *                      correct and not a no-op only in that case; when it DOES carry the text,
+ *                      returning it unchanged drops the redaction, and no type can tell the two
+ *                      apart.
  *
  *                    `replaced` is `undefined` in exactly one case, and the type says so rather
  *                    than asserting it away: no event in the stream carried text and the guard
@@ -48,6 +77,7 @@ export async function* moderateOutputStream<E, R>(
   guards: readonly Guardrail[],
   extractText: (event: E) => string | undefined,
   rebuildText: (text: string, replaced: E | undefined) => E,
+  rebuildResult: (text: string, result: R) => R,
 ): AsyncGenerator<E, R> {
   const hasOutputGuard = guards.some((g) => g.checkOutput != null)
   // Fast path: nothing to moderate — pass through, streaming preserved.
@@ -138,5 +168,7 @@ export async function* moderateOutputStream<E, R>(
   // arguments: a duplicated invocation, produced by a redaction. Three documents stated `replaced`
   // was absent here while the code handed over a live event.
   if (last === -1) yield rebuildText(moderated, undefined)
-  return step.value
+  // The aggregate travels the same fix as the events. On the fast path above it is untouched by
+  // construction: `moderated === accumulated`, so there is nothing to apply.
+  return rebuildResult(moderated, step.value)
 }

@@ -11,7 +11,7 @@ import { join } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { permissionGate, type PermissionGateContext } from '../../src/auth/permission-gate.js'
+import { grantGate, type GrantGateContext } from '../../src/auth/permission-gate.js'
 import { PermissionStore } from '../../src/auth/permission-store.js'
 
 /** A store rooted in a throwaway home — no test touches `~`. */
@@ -22,19 +22,18 @@ function fixture(now?: () => number): { store: PermissionStore; scope: string } 
   return { store: new PermissionStore(now === undefined ? { home } : { home, now }), scope }
 }
 
-function ctx(name: string, command: string): PermissionGateContext {
+function ctx(name: string, command: string): GrantGateContext {
   return { name, args: { command }, agentId: 'a', runId: 'r' }
 }
 
-describe('permissionGate', () => {
+describe('grantGate', () => {
   it('test_a_tool_with_no_grant_is_refused_before_its_handler', async () => {
     // The whole item in one assertion: the decision is a veto, and `pre_tool_call` runs BEFORE the
     // tool by construction, so a refusal here is a refusal before the side effect.
     const { store, scope } = fixture()
-    const gate = permissionGate(store, (c) => ({
-      tool: c.name,
-      scope,
-      command: String(c.args.command),
+    const gate = grantGate(store, (c) => ({
+      governed: true,
+      query: { tool: c.name, scope, command: String(c.args.command) },
     }))
 
     await expect(gate(ctx('run_shell', 'npm test'))).resolves.toMatchObject({ block: true })
@@ -43,10 +42,9 @@ describe('permissionGate', () => {
   it('test_a_granted_tool_is_not_vetoed', async () => {
     const { store, scope } = fixture()
     store.grant({ tool: 'run_shell', scope, command: 'npm test' })
-    const gate = permissionGate(store, (c) => ({
-      tool: c.name,
-      scope,
-      command: String(c.args.command),
+    const gate = grantGate(store, (c) => ({
+      governed: true,
+      query: { tool: c.name, scope, command: String(c.args.command) },
     }))
 
     await expect(gate(ctx('run_shell', 'npm test'))).resolves.toBeUndefined()
@@ -59,10 +57,9 @@ describe('permissionGate', () => {
     const query = { tool: 'run_shell', scope, command: 'npm test' }
     store.grant(query)
     store.revoke(query)
-    const gate = permissionGate(store, (c) => ({
-      tool: c.name,
-      scope,
-      command: String(c.args.command),
+    const gate = grantGate(store, (c) => ({
+      governed: true,
+      query: { tool: c.name, scope, command: String(c.args.command) },
     }))
 
     await expect(gate(ctx('run_shell', 'npm test'))).resolves.toMatchObject({ block: true })
@@ -72,10 +69,40 @@ describe('permissionGate', () => {
     // EC-2 — what NFR-001 actually asserts. Without this, "zero change when nothing is gated" rests
     // on the export being additive rather than on the handler's behaviour.
     const { store } = fixture()
-    const gate = permissionGate(store, () => ({ governed: false }))
+    const gate = grantGate(store, () => ({ governed: false as const }))
 
     await expect(gate(ctx('run_shell', 'rm -rf /'))).resolves.toBeUndefined()
     await expect(gate(ctx('anything', 'at all'))).resolves.toBeUndefined()
+  })
+
+  it('test_a_governed_true_classification_is_checked_not_waved_through', async () => {
+    // The fail-open this shape exists to prevent, and the test whose absence let it ship. The first
+    // version discriminated on whether the `governed` KEY was present, so a consumer writing a
+    // policy record `{ governed: true, scope }` and spreading it — the most natural reading of "yes,
+    // govern this" — got `undefined` back and an ungranted command ran. Measured against the built
+    // artifact before the fix. TypeScript did not stop it: a fresh literal with an excess property
+    // errors, the same object through a variable or a spread does not.
+    const { store, scope } = fixture()
+    const policy = { governed: true as const, scope }
+    const gate = grantGate(store, (c) => ({
+      ...policy,
+      query: { tool: c.name, scope: policy.scope, command: String(c.args.command) },
+    }))
+
+    await expect(
+      gate(ctx('run_shell', 'a destructive command')),
+      'governed: true must mean CHECK IT, never "let it through"',
+    ).resolves.toMatchObject({ block: true })
+  })
+
+  it('test_a_non_object_classification_denies_instead_of_ending_the_turn', async () => {
+    // R2's other half. `runPreToolCallHooks` has no catch, so a TypeError escaping this handler ends
+    // the turn — the exact outcome the deny-on-throw path exists to prevent, reachable from a JS
+    // consumer or any `as` cast returning null.
+    const { store } = fixture()
+    const gate = grantGate(store, () => null as unknown as ReturnType<() => never>)
+
+    await expect(gate(ctx('run_shell', 'npm test'))).resolves.toMatchObject({ block: true })
   })
 
   it('test_a_classifier_that_throws_denies_rather_than_ending_the_turn', async () => {
@@ -83,7 +110,7 @@ describe('permissionGate', () => {
     // throwing would end the turn over a decision the consumer's own code failed to make.
     const { store, scope } = fixture()
     store.grant({ tool: 'run_shell', scope, command: 'npm test' })
-    const gate = permissionGate(store, () => {
+    const gate = grantGate(store, () => {
       throw new Error('classifier blew up')
     })
 
@@ -99,10 +126,13 @@ describe('permissionGate', () => {
     // EC-3 — the store already decides this (`permission-store.ts:116`, "Deny, do not throw"). The
     // gate must not undo it by letting a throw escape from somewhere else.
     const { store } = fixture()
-    const gate = permissionGate(store, (c) => ({
-      tool: c.name,
-      scope: '/definitely/not/a/real/directory/anywhere',
-      command: String(c.args.command),
+    const gate = grantGate(store, (c) => ({
+      governed: true,
+      query: {
+        tool: c.name,
+        scope: '/definitely/not/a/real/directory/anywhere',
+        command: String(c.args.command),
+      },
     }))
 
     await expect(gate(ctx('run_shell', 'npm test'))).resolves.toMatchObject({ block: true })
@@ -114,10 +144,9 @@ describe('permissionGate', () => {
     let clock = 1_000_000
     const { store, scope } = fixture(() => clock)
     store.grant({ tool: 'run_shell', scope, command: 'npm test' }, { ttlMs: 60_000 })
-    const gate = permissionGate(store, (c) => ({
-      tool: c.name,
-      scope,
-      command: String(c.args.command),
+    const gate = grantGate(store, (c) => ({
+      governed: true,
+      query: { tool: c.name, scope, command: String(c.args.command) },
     }))
 
     clock = 1_059_999
@@ -135,10 +164,9 @@ describe('permissionGate', () => {
     mkdirSync(join(home, '.theokit'))
     writeFileSync(join(home, '.theokit', 'tool-permissions.json'), '{"grants":[', 'utf8')
     const store = new PermissionStore({ home })
-    const gate = permissionGate(store, (c) => ({
-      tool: c.name,
-      scope,
-      command: String(c.args.command),
+    const gate = grantGate(store, (c) => ({
+      governed: true,
+      query: { tool: c.name, scope, command: String(c.args.command) },
     }))
 
     const decision = await gate(ctx('run_shell', 'npm test'))

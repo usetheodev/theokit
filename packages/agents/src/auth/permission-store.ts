@@ -35,10 +35,15 @@
  *
  * ## This class DOES NOT ENFORCE ANYTHING ON ITS OWN
  *
- * The posture above is what `isGranted` ANSWERS, not what the framework does. Nothing in this
- * package calls it: no tool path consults a store, and no option accepts one. Until something asks,
- * a grant and its revocation produce identical behaviour, and `.theokit/tool-permissions.json` is a
- * file an operator can read and cannot rely on.
+ * The posture above is what `isGranted` ANSWERS, not what the framework does. **No tool path
+ * consults a store by default and no option accepts one**, so until a consumer attaches
+ * {@link grantGate}, a grant and its revocation produce identical behaviour and
+ * `.theokit/tool-permissions.json` is a file an operator can read and cannot rely on.
+ *
+ * The previous wording was "nothing in this package calls it", which the commit that added this
+ * paragraph made false in the same diff: `auth/permission-gate.ts` is in this package and calls
+ * `isGranted`. Corrected on review — a sentence written to fix a stale enforcement claim should not
+ * itself go stale on arrival.
  *
  * That sentence is here because its absence was a defect. For one release this docblock said
  * "Deny by default, always" — an enforcement claim — beside an `isGranted` with zero callers, which

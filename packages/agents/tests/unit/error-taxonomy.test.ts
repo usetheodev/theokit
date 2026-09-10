@@ -147,7 +147,11 @@ const GUARDRAIL_TYPES = () => import('../../src/guardrails/types.js')
 
 beforeAll(async () => {
   for (const file of sourceFiles(AGENTS_SRC)) sources.set(file, readFileSync(file, 'utf8'))
-  for (const load of new Set([...CASES.map((c) => c.load), GUARDRAIL_TYPES])) {
+  // No `new Set(...)` here. It was written as a dedup and deduplicated nothing: a Set of functions
+  // keys on IDENTITY, and every thunk is a distinct arrow, so eight cases over five modules gave a
+  // Set of nine. Node memoises the module itself, so the redundant thunk calls cost nothing
+  // measurable — an inert guard reading as a real one was the only thing wrong with it.
+  for (const load of [...CASES.map((c) => c.load), GUARDRAIL_TYPES]) {
     modules.set(load, (await load()) as Record<string, unknown>)
   }
 })
@@ -155,9 +159,14 @@ beforeAll(async () => {
 /**
  * Reads a pre-imported module.
  *
- * With one list this can only fire if the hook did not run — it no longer catches list drift,
- * because there is no second list to drift from. It stays for the message: `modules.get()`
- * returning `undefined` surfaces as `Cannot read properties of undefined` several frames away.
+ * What this still catches, stated correctly after a review pointed out the previous sentence was
+ * false: a NAMED thunk — `GUARDRAIL_TYPES` and any successor — omitted from the array literal in
+ * `beforeAll`. That literal IS a second list, hand-maintained, so drift did not disappear when
+ * `MODULE_SPECS` did; it shrank to one entry. The per-case thunks cannot drift, because the case
+ * carries its own.
+ *
+ * It stays for the message either way: `modules.get()` returning `undefined` surfaces as
+ * `Cannot read properties of undefined` several frames from the cause.
  */
 function loaded(load: () => Promise<unknown>): Record<string, unknown> {
   const mod = modules.get(load)
@@ -209,7 +218,7 @@ describe('the boundary-facing errors carry a stable code and an explicit retryab
       expect(Ctor, `${testCase.name} is not exported from ${testCase.mod}`).toBeTypeOf('function')
 
       // Each case carries its OWN constructor arguments. The arities and types genuinely differ
-      // across the seven, and a generic placeholder tuple made one of them throw inside its own
+      // across the eight, and a generic placeholder tuple made one of them throw inside its own
       // message template — proving nothing about the contract under test.
       const instance = new (Ctor as new (...args: readonly unknown[]) => TheokitAgentError)(
         ...testCase.args,

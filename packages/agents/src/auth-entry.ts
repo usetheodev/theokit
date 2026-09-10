@@ -188,8 +188,10 @@ export {
  * apply it.
  */
 export {
-  permissionGate,
+  grantGate,
   type Classification,
+  type Governed,
+  type GrantGateContext,
   type NotGoverned,
-  type PermissionGateContext,
+  type Veto,
 } from './auth/permission-gate.js'
