@@ -186,23 +186,21 @@ describe('the reasons are true — each covering seam is exercised, not asserted
     await expect(runOutputGuards('original', [redactor])).resolves.toBe('REPLACED')
   })
 
-  it('test_redact_without_replacement_text_silently_passes_the_original_TODAY', async () => {
-    // A live defect, pinned rather than fixed: `pipeline.ts:39` (output) and `:22` (input) both read
-    // `r.action === 'redact' && r.text !== undefined`, so a guard declaring `redact` with no
-    // replacement redacts NOTHING and says nothing. The operator believes a guard is in place when
-    // none is — what this package's own hook docblock calls "worse than no hook at all".
+  it('test_redact_without_replacement_text_is_now_reported', async () => {
+    // This test was a characterization tripwire, pinning a live defect: `redact` with no replacement
+    // text redacted nothing and said nothing, on both pipeline paths. B-001 could not fix it — a
+    // behaviour change to the guardrail pipeline was out of that item's scope — so it asserted the
+    // broken behaviour and promised to FAIL the day someone corrected it.
     //
-    // Fixing it is a behaviour change to the guardrail pipeline, outside B-001. These assertions
-    // FAIL the day someone corrects either path, which is the notification a future implementer
-    // wants. BOTH paths are pinned: the first version covered only the output one, so a fix to
-    // `runInputGuards` would have passed in silence and the two paths would have drifted.
+    // B-008 corrected it. The tripwire fired, and it is UPDATED rather than deleted: the assertion
+    // now pins the fix, so the seam B-001's warning recommends is one that actually redacts.
     const sloppy: Guardrail = {
       name: 's',
       checkInput: () => ({ action: 'redact', reason: 'no text' }),
       checkOutput: () => ({ action: 'redact', reason: 'no text' }),
     }
-    await expect(runOutputGuards('original', [sloppy])).resolves.toBe('original')
-    await expect(runInputGuards('original', [sloppy])).resolves.toBe('original')
+    await expect(runOutputGuards('original', [sloppy])).rejects.toThrow(/no replacement text/)
+    await expect(runInputGuards('original', [sloppy])).rejects.toThrow(/no replacement text/)
   })
 
   it('test_processInput_registers_a_pre_user_send_handler_that_contributes_text', async () => {

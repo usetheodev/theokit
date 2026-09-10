@@ -48,6 +48,40 @@ export type GuardrailPhase = 'input' | 'output'
  * rename of the class; `isRetryable` is DECLARED rather than defaulted, because a default would be a
  * retry policy nobody chose.
  */
+/**
+ * A guard declared `redact` and supplied no replacement text.
+ *
+ * Distinct from {@link GuardrailViolationError} on purpose: that one says the guard REFUSED
+ * something, which is a decision working as designed. This says the guard is MALFORMED — it asked
+ * for a redaction and gave nothing to redact with, so nothing was redacted.
+ *
+ * Until B-008 this condition was silent: `pipeline.ts` tested `r.text !== undefined` and moved on, so
+ * the caller received the original text and believed a guard had run on it. That is the shape this
+ * package's hook engine calls "worse than no hook at all" — a belief in a protection that is not
+ * there. Throwing is fail-fast per `rules/error-handling.md § 2`, and the alternative was leaving
+ * unredacted output to reach a model because a guard was written wrong.
+ *
+ * `''` is NOT this case. An empty replacement is a guard choosing to erase everything, which is the
+ * strongest redaction available, and treating it as absent would invert the defect.
+ */
+export class MalformedGuardrailResultError extends TheokitAgentError {
+  override readonly name = 'MalformedGuardrailResultError'
+  constructor(
+    public readonly guardName: string,
+    public readonly phase: GuardrailPhase,
+  ) {
+    super(
+      `Guardrail "${guardName}" returned action 'redact' for ${phase} with no replacement text. ` +
+        `Nothing was redacted. Supply \`text\` (\`''\` erases), or return 'allow' or 'block'.`,
+      {
+        code: 'GUARDRAIL_RESULT_MALFORMED',
+        // A guard written wrong is not written right on the next attempt.
+        isRetryable: false,
+      },
+    )
+  }
+}
+
 export class GuardrailViolationError extends TheokitAgentError {
   override readonly name = 'GuardrailViolationError'
   constructor(
