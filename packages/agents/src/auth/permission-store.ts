@@ -32,6 +32,36 @@
  * and an expired grant all answer `false`. A corrupt store additionally REPORTS
  * (`lastReadError`) — reading as empty is indistinguishable from being empty, and the operator
  * would never learn their grants stopped applying.
+ *
+ * ## This class DOES NOT ENFORCE ANYTHING ON ITS OWN
+ *
+ * The posture above is what `isGranted` ANSWERS, not what the framework does. Nothing in this
+ * package calls it: no tool path consults a store, and no option accepts one. Until something asks,
+ * a grant and its revocation produce identical behaviour, and `.theokit/tool-permissions.json` is a
+ * file an operator can read and cannot rely on.
+ *
+ * That sentence is here because its absence was a defect. For one release this docblock said
+ * "Deny by default, always" — an enforcement claim — beside an `isGranted` with zero callers, which
+ * is the fabricated mechanism this repository refuses everywhere else.
+ *
+ * {@link permissionGate} is the supported way to put it in force: it adapts this store to
+ * `pre_tool_call`, the only hook with veto power, which runs before the tool by construction.
+ *
+ * ## Precedence, when more than one surface has an opinion
+ *
+ * Four things can refuse a tool, and they do not negotiate — each is consulted by whoever wired it:
+ *
+ * | Surface | Decides | Runs |
+ * |---|---|---|
+ * | `defineAgent({ approvals })` | this tool PAUSES for a human | at compile time into `compiled.hitl` |
+ * | `.approval()` | the same, through the builder | same |
+ * | a `pre_tool_call` hook | veto, with a message | before the tool |
+ * | {@link permissionGate} | veto, from a standing grant | before the tool, AS a `pre_tool_call` hook |
+ *
+ * The last two share one field. `HookHandlers.pre_tool_call` is singular, so assigning one over the
+ * other loses it silently — compose them explicitly; {@link permissionGate}'s docblock shows the
+ * line. The HITL surfaces are orthogonal: a tool can be both gated by a grant and gated by a human,
+ * and a veto here means the human is never asked.
  */
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
