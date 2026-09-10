@@ -44,19 +44,64 @@ function sourceFiles(dir: string): string[] {
 /**
  * Every source file, READ ONCE.
  *
- * B-009: the walk ran at collection and the read ran inside each `it()`, so scanning 400-odd files
- * sat inside vitest's 5-second per-test budget. Measured 2026-09-10: this file timed out at load
- * average 32.9 and passed idle minutes later — a failure indistinguishable from a regression until
- * somebody measured the load, which cost two investigations before anyone did.
+ * B-009: the walk ran at collection and the read ran inside one `it()`, so reading 147 files sat
+ * inside vitest's 5-second per-test budget. Measured 2026-09-10: this file timed out at load average
+ * 32.9 and passed idle minutes later — a failure indistinguishable from a regression until somebody
+ * measured the load, which cost two investigations before anyone did.
  *
- * Reading once in a hook with its own allowance is the fix. Raising the budget is not: it moves the
- * same failure to higher load, and CI runners are shared.
+ * Reading once in a hook with its own allowance is the fix. Raising the per-test budget is not: it
+ * moves the same failure to higher load, and CI runners are shared.
+ *
+ * The hook carries NO explicit timeout, corrected on review. It had `30_000`, which exceeded this
+ * item's own ceiling of 15000ms and bought nothing measurable: vitest's default `hookTimeout` is
+ * 10000ms, already 2x the per-test budget and an order above this hook's measured cost of ~51ms.
+ * An allowance nobody needs is the same defect the item is about, wearing a hook's name.
  */
 const sources = new Map<string, string>()
 
-beforeAll(() => {
+/**
+ * Every module the cases construct from, IMPORTED ONCE.
+ *
+ * The read above was the smaller half, and shipping only it was an incomplete fix — found on
+ * review, measured: `await import(...)` inside each case cost 2505-2670ms against the 5000ms
+ * budget, while the read this commit's predecessor moved cost 63ms. Five distinct modules across
+ * eight cases; vitest memoizes per module, so the FIRST case paid for all of them and paid it
+ * inside a per-test budget.
+ */
+const modules = new Map<string, Record<string, unknown>>()
+
+/**
+ * Thunks with LITERAL specifiers, not `import(variable)`: a variable specifier is not statically
+ * analysable, so the bundler cannot resolve it and the import would fall back to runtime resolution
+ * — which is the cost being moved out of the budget in the first place.
+ */
+const MODULE_SPECS: Readonly<Record<string, () => Promise<unknown>>> = {
+  '../../src/in-process-turn.js': () => import('../../src/in-process-turn.js'),
+  '../../src/client/in-process-transport.js': () =>
+    import('../../src/client/in-process-transport.js'),
+  '../../src/guardrails/types.js': () => import('../../src/guardrails/types.js'),
+  '../../src/bridge/delegation-types.js': () => import('../../src/bridge/delegation-types.js'),
+  '../../src/bridge/agent-endpoint.js': () => import('../../src/bridge/agent-endpoint.js'),
+}
+
+beforeAll(async () => {
   for (const file of sourceFiles(AGENTS_SRC)) sources.set(file, readFileSync(file, 'utf8'))
-}, 30_000)
+  for (const [spec, load] of Object.entries(MODULE_SPECS)) {
+    modules.set(spec, (await load()) as Record<string, unknown>)
+  }
+})
+
+/** Reads a pre-imported module, refusing to silently fall back to an in-test import. */
+function loaded(spec: string): Record<string, unknown> {
+  const mod = modules.get(spec)
+  if (mod === undefined) {
+    // Not defensive padding: MODULE_SPECS and the case table are two lists, and a case whose module
+    // is missing from the first would otherwise import it inside the budget again — the defect
+    // silently restored. Failing names which list is short.
+    throw new Error(`${spec} is not in MODULE_SPECS — add it, or the import returns to the budget`)
+  }
+  return mod
+}
 
 describe('no error class in packages/agents/src extends plain Error', () => {
   const files = () => [...sources.keys()]
@@ -146,9 +191,10 @@ describe('the boundary-facing errors carry a stable code and an explicit retryab
   ] as const
 
   for (const testCase of cases) {
-    it(`test_${testCase.name}_is_a_TheokitAgentError_with_a_code`, async () => {
-      const mod = (await import(testCase.mod)) as Record<string, unknown>
-      const Ctor = mod[testCase.name] as new (...args: never[]) => TheokitAgentError
+    it(`test_${testCase.name}_is_a_TheokitAgentError_with_a_code`, () => {
+      const Ctor = loaded(testCase.mod)[testCase.name] as new (
+        ...args: never[]
+      ) => TheokitAgentError
       expect(Ctor, `${testCase.name} is not exported from ${testCase.mod}`).toBeTypeOf('function')
 
       // Each case carries its OWN constructor arguments. The arities and types genuinely differ
@@ -173,13 +219,21 @@ describe('the boundary-facing errors carry a stable code and an explicit retryab
     })
   }
 
-  it('test_a_guardrail_violation_exposes_its_guard_and_phase_as_readable_fields', async () => {
+  it('test_a_guardrail_violation_exposes_its_guard_and_phase_as_readable_fields', () => {
     // The first version of this test asserted that the case was in the array above — which is to say
     // it asserted nothing about the code. What matters is that the fields the HTTP boundary's
     // extractor reads are actually THERE, so telemetry counts blocks per guard without parsing a
     // message. A count derived from message text breaks the first time somebody improves the
     // wording, and the improvement looks harmless right up until the dashboard goes flat.
-    const { GuardrailViolationError } = await import('../../src/guardrails/types.js')
+    const GuardrailViolationError = loaded('../../src/guardrails/types.js')
+      .GuardrailViolationError as new (
+      g: string,
+      p: string,
+      r: string,
+    ) => Error & {
+      guardName: string
+      phase: string
+    }
     const error = new GuardrailViolationError('pii-detector', 'input', 'ssn found')
 
     expect(error.guardName).toBe('pii-detector')

@@ -37,21 +37,31 @@ const DIST_BUILT = existsSync(DIST_ENTRY)
 /**
  * The layer's published root barrel, loaded ONCE in `beforeAll` rather than per test.
  *
- * B-009: the import used to sit inside each `it()`, which put a multi-megabyte bundle read inside
- * vitest's 5-second per-test budget. Measured 2026-09-10: four tests failed with `Test timed out in
- * 5000ms` at load average 32.9 and the same four passed idle, minutes apart. A timeout is
- * indistinguishable from a regression until somebody measures the load, and it cost two
- * investigations before anyone did.
+ * B-009: the import used to sit inside the `it()` bodies. Node memoizes a module, so the FIRST test
+ * paid for the whole barrel — `dist/index.js` is ~37 KB but pulls the layer's chunk graph, ~330 KB
+ * of emitted JS — inside vitest's 5-second per-test budget, and the later tests paid nothing.
+ * Corrected on review: the earlier wording said "each `it()`" and "multi-megabyte", and both were
+ * wrong in the direction that flattered the fix.
+ *
+ * Measured 2026-09-10: four tests failed with `Test timed out in 5000ms` at load average 32.9 and
+ * the same four passed idle, minutes apart. A timeout is indistinguishable from a regression until
+ * somebody measures the load, and it cost two investigations before anyone did.
  *
  * The fix is not a bigger budget — that only moves the failure to higher load, and CI runners are
- * shared. It is doing the I/O once, in a hook with its own generous allowance, so the assertions
- * that follow touch nothing but memory.
+ * shared. It is doing the I/O once, in a hook, so the assertions that follow touch nothing but
+ * memory. Independently measured after the change: the worst test went from 3382ms to 4ms under a
+ * concurrently running suite. THAT is the evidence the fix works; five green runs are not, because
+ * the unfixed version also passes five green runs at the same load.
+ *
+ * The hook carries no explicit timeout. It had `30_000`, which exceeded this item's own 15000ms
+ * ceiling while vitest's default `hookTimeout` of 10000ms is already an order above the hook's
+ * measured cost of ~590-775ms.
  */
 let barrel: Record<string, unknown> | undefined
 
 beforeAll(async () => {
   if (DIST_BUILT) barrel = (await import(DIST_ENTRY)) as Record<string, unknown>
-}, 30_000)
+})
 
 /** The already-loaded barrel. Throws rather than re-importing, so a slow read cannot come back. */
 function layer(): Record<string, unknown> {
