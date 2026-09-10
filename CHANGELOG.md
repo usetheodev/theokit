@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- **BREAKING for hand-built compiled options:** `resolveSettingSources` returns a branded `GatedSettingSource[]` and `CompiledAgentOptions.settingSources` takes it, so a raw root no longer typechecks. `define-agent.ts` claimed that field could only hold authorised roots; measured, `setOnce(draft, 'settingSources', ['mdm'], 'cap')` compiled cast-free, and a `Capability` is the documented way to extend the builder. Build roots through `resolveSettingSources` (B-004)
+
 - The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability already lives, instead of saying the handler "does not exist yet". Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput` and `createToolHooksPlugin({ processInput })` — so the old message sent consumers to wait for work that will not come. The third, `on_session_end`, is named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an ending
 
 ### Fixed
@@ -40,6 +42,8 @@ own `CHANGELOG.md`.
 ## [@theokit/agents 13.0.0-next.8] - 2026-09-08
 
 ### Added
+
+- `settingSources.plugins`, taking the same trust grant as `project` — the root the SDK genuinely reads (`includesSetting` is called with exactly `project` and `plugins`) and the facade withheld. `team` and `mdm` stay absent because the SDK never reads them (B-004)
 
 - `grantGate(store, classify)` in `@theokit/agents/auth` — adapts a `PermissionStore` to the `pre_tool_call` veto seam, so a standing grant can actually refuse a tool. The store previously said "deny by default, always" with zero callers of `isGranted`: a grant and its revocation produced identical behaviour. Nothing is enforced unless a consumer attaches the handler. `PermissionStore`'s docblock now says so, and records the precedence between the four surfaces that can refuse a tool (B-003)
 

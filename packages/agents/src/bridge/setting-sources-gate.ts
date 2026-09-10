@@ -65,6 +65,18 @@ export interface SettingSourcesSelection {
   /** `<cwd>/.theokit/` — controlled by whoever wrote the open repository. Requires evidence. */
   readonly project?: ProjectSettingsGrant
   /**
+   * `<cwd>/.theokit/plugins` and any declared foreign dialect's plugin root — executable bundles.
+   *
+   * Same grant as `project`, deliberately: `PluginsManager.refresh` loads code out of the same
+   * cwd-controlled tree, and the tree usually arrived with the clone.
+   *
+   * Absent from this interface until 2026-09-10, while `includesSetting` reads it
+   * (`local-agent.ts:175`) — so a consumer wanting plugins had to bypass this facade, which is the
+   * door it exists to close. `team` and `mdm` remain absent for the opposite reason: the SDK never
+   * reads them.
+   */
+  readonly plugins?: ProjectSettingsGrant
+  /**
    * `<cwd>/.claude/` — a FOREIGN configuration dialect, read only once declared
    * (`usetheokit/theokit-sdk#524`).
    *
@@ -175,13 +187,52 @@ export class UntrustedSettingSourceError extends TheokitAgentError {
  *
  * @throws {UntrustedSettingSourceError} when `project` is requested and the posture does not grant it.
  */
+declare const GATED: unique symbol
+
+/**
+ * A root that some `TrustPosture` authorised — mintable ONLY by {@link resolveSettingSources}.
+ *
+ * ## Why a brand rather than a check
+ *
+ * `define-agent.ts` claimed `CompiledAgentOptions.settingSources` "can only ever hold roots that
+ * some posture authorized". Measured 2026-09-10 against the emitted `.d.ts`:
+ * `setOnce(draft, 'settingSources', ['mdm','team','user','plugins'], 'cap')` typechecked CAST-FREE.
+ * A consumer writing a `Capability` — the documented way to extend the builder — reached the field
+ * directly, and `project`, the root this gate exists to protect, is one of the two the SDK reads.
+ *
+ * The obvious fix was to read `draft.provenance` and refuse a write from a capability. It does not
+ * work, measured: the LEGITIMATE builder path also writes through `setOnce`
+ * (`capability/agent-capabilities.ts:155`), so provenance names a capability either way. What
+ * actually differs is where the VALUE came from, and a brand is a value's provenance carried in its
+ * type.
+ *
+ * ## What it does not do
+ *
+ * `as never` defeats it, like every brand. This refuses the accident — a capability author reaching
+ * for the field because it is there — and not a caller who has decided to bypass the gate. Saying so
+ * is the point: the comment it replaces claimed an invariant nothing enforced.
+ *
+ * ## Which roots the SDK actually READS
+ *
+ * `includesSetting` is called with exactly `"project"` and `"plugins"`
+ * (`theokit-sdk/packages/sdk/src/internal/local-agent/local-agent.ts:174-175`). `user`, `team` and
+ * `mdm` are accepted by the option and never consulted, so forwarding them would be a name the
+ * runtime discards. `user` is still resolved here because it costs nothing and the SDK may start
+ * reading it; `team` and `mdm` are deliberately absent from {@link SettingSourcesSelection} rather
+ * than plumbed through to be ignored.
+ */
+export type GatedSettingSource = SettingSource & { readonly [GATED]: true }
+
 export function resolveSettingSources(
   selection: SettingSourcesSelection | undefined,
-): readonly SettingSource[] {
+): readonly GatedSettingSource[] {
   if (selection === undefined) return []
 
-  const sources: SettingSource[] = []
-  if (selection.user === true) sources.push('user')
+  // The one place the brand is minted. Every push below has passed its posture check first, which is
+  // the property the type then carries for the rest of the program.
+  const sources: GatedSettingSource[] = []
+  const gated = (root: SettingSource): GatedSettingSource => root as GatedSettingSource
+  if (selection.user === true) sources.push(gated('user'))
 
   const grant = selection.project
   if (grant !== undefined) {
@@ -196,7 +247,27 @@ export function resolveSettingSources(
         'projectSettings',
       )
     }
-    sources.push('project')
+    sources.push(gated('project'))
+  }
+
+  // `plugins` takes the SAME grant as `project`, and not a weaker one: `PluginsManager.refresh`
+  // loads executable bundles from `pluginBundleRoots(cwd, compatSources)` — the same cwd-controlled
+  // tree `project` protects, which usually arrived with the clone. It is also the root this facade
+  // withheld while the SDK genuinely reads it, which is the half of B-004 that survived measurement.
+  const pluginsGrant = selection.plugins
+  if (pluginsGrant !== undefined) {
+    const posture = pluginsGrant.trustedBy
+    if (!posture.allows.projectSettings) {
+      throw new UntrustedSettingSourceError(
+        `the \`plugins\` setting source loads executable plugin bundles from <cwd>/.theokit/plugins ` +
+          `and from any declared foreign dialect, and the posture does not grant \`projectSettings\` ` +
+          `(level: ${posture.level}, decided by: ${posture.source}). Grant it with a trusted ` +
+          `posture, or omit \`plugins\` to load none.`,
+        posture.source,
+        'projectSettings',
+      )
+    }
+    sources.push(gated('plugins'))
   }
 
   return sources

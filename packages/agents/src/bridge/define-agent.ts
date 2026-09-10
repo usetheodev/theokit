@@ -271,10 +271,17 @@ export function compileAgentDefinition(def: AgentDefinition): CompiledAgentOptio
     ...(def.approvals !== undefined ? { hitl: compileApprovals(def) } : {}),
     // M13 — skills: a static list → SDK skills.enabled; a resolver → carried for the request path.
     ...compileSkillsSelection(def.skills),
-    // theokit-file-based-config + M68 — the selection is resolved HERE, at the earliest point every
-    // authoring path converges on, so `CompiledAgentOptions.settingSources` can only ever hold
-    // roots that some posture authorized. Refusing at compile time rather than at run assembly is
-    // `error-handling.md` § 3: validate at the entry, fail before the value travels.
+    // theokit-file-based-config + M68 — the selection is resolved here, and refusing at compile time
+    // rather than at run assembly is `error-handling.md` § 3: validate at the entry, fail before the
+    // value travels.
+    //
+    // This comment used to add "so `CompiledAgentOptions.settingSources` can only ever hold roots
+    // that some posture authorized", and it was false. This is NOT "the earliest point every
+    // authoring path converges on": a `Capability` is an authoring path and writes the draft
+    // directly, so `setOnce(draft, 'settingSources', ['mdm'], 'cap')` typechecked cast-free —
+    // measured against the emitted `.d.ts`. What holds the invariant now is the TYPE:
+    // `resolveSettingSources` returns `GatedSettingSource[]`, a brand only it mints, so a raw root
+    // no longer fits the field. See its docblock for what that does and does not cover.
     ...(def.settingSources !== undefined
       ? { settingSources: resolveSettingSources(def.settingSources) }
       : {}),
