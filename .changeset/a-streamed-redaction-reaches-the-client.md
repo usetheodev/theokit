@@ -16,4 +16,10 @@ removed. Only the caller knows how to construct its own events.
 
 When the text is unchanged, the buffered events are replayed verbatim as before. When it changed,
 the first text-carrying event becomes the whole moderated string and the remaining text events are
-dropped; events carrying no text pass through in position, so a redaction never costs a tool call.
+dropped. Events carrying no text are never dropped.
+
+**Known consequence:** when text events straddle a non-text event, their relative order does not
+survive a redaction. Given `text('tok ') , tool_call , text('sk-abc')` the client now receives
+`text('tok [R]') , tool_call` — text that followed the tool call precedes it. No position is correct,
+because the redaction is about the whole string and the event boundaries are gone by the time it
+exists. A test pins this so it is found here rather than in a transcript that stopped making sense.

@@ -135,3 +135,87 @@ describe('B-012 — a computed redaction reaches the client', () => {
     ).toContain('tool_call')
   })
 })
+
+describe('B-012 — what a redaction costs, pinned', () => {
+  interface Ev {
+    type: string
+    content?: string
+  }
+  const redactor: Guardrail = {
+    name: 'r',
+    checkOutput: (t) => ({ action: 'redact', text: t.replace(/sk-\w+/, '[R]') }),
+  }
+  const drive = async (events: Ev[]) => {
+    async function* src(): AsyncGenerator<Ev, string> {
+      for (const e of events) yield e
+      return 'done'
+    }
+    const out: Ev[] = []
+    const g = moderateOutputStream(
+      src(),
+      [redactor],
+      (e) => e.content,
+      (content) => ({ type: 'text_delta', content }),
+    )
+    let s = await g.next()
+    while (!s.done) {
+      out.push(s.value)
+      s = await g.next()
+    }
+    return out
+  }
+
+  it('test_stream_order_is_not_preserved_across_a_redaction', async () => {
+    // Measured, not assumed, and pinned so nobody rediscovers it from a transcript that stopped
+    // making sense. Text that FOLLOWED a tool call comes out before it, because the moderated string
+    // lands on the first text event and the guard never saw the boundaries.
+    const out = await drive([
+      { type: 'text_delta', content: 'tok ' },
+      { type: 'tool_call' },
+      { type: 'text_delta', content: 'sk-abc' },
+    ])
+    expect(out.map((e) => e.type)).toEqual(['text_delta', 'tool_call'])
+    expect(out[0]?.content).toBe('tok [R]')
+  })
+
+  it('test_a_non_text_event_is_never_dropped_by_a_redaction', async () => {
+    // The half that must hold whatever the ordering does: a redaction may reorder, never delete.
+    const out = await drive([
+      { type: 'text_delta', content: 'a' },
+      { type: 'tool_call' },
+      { type: 'text_delta', content: ' sk-abc' },
+      { type: 'done' },
+    ])
+    expect(out.filter((e) => e.type !== 'text_delta').map((e) => e.type)).toEqual([
+      'tool_call',
+      'done',
+    ])
+  })
+
+  it('test_a_guard_may_add_text_to_a_stream_that_had_none', async () => {
+    // The `if (!emittedText)` tail is reachable: a guard moderating '' into something non-empty owes
+    // the client that text, and there is no existing text event to carry it.
+    async function* noText(): AsyncGenerator<Ev, string> {
+      yield { type: 'tool_call' }
+      return 'done'
+    }
+    const inject: Guardrail = {
+      name: 'i',
+      checkOutput: () => ({ action: 'redact', text: 'NOTICE' }),
+    }
+    const out: Ev[] = []
+    const g = moderateOutputStream(
+      noText(),
+      [inject],
+      (e) => e.content,
+      (content) => ({ type: 'text_delta', content }),
+    )
+    let s = await g.next()
+    while (!s.done) {
+      out.push(s.value)
+      s = await g.next()
+    }
+    expect(out.map((e) => e.type)).toEqual(['tool_call', 'text_delta'])
+    expect(out[1]?.content).toBe('NOTICE')
+  })
+})

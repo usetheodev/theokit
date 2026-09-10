@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- `moderateOutputStream` delivers the redacted text to the client instead of computing it and replaying the original events. A guard that redacted correctly had its work discarded — measured: `[REDACTED]` computed, `sk-abc123` delivered. **Signature change**: a fourth argument builds the moderated event, required so a redaction cannot be computed and dropped (B-012)
+- `moderateOutputStream` delivers the redacted text to the client instead of computing it and replaying the original events. A guard that redacted correctly had its work discarded — measured: `[REDACTED]` computed, `sk-abc123` delivered. **Signature change**: a fourth argument builds the moderated event, required so a redaction cannot be computed and dropped. **Known consequence**: when text events straddle a non-text event, their relative order does not survive a redaction — pinned by a test (B-012)
 
 - A guardrail returning `action: 'redact'` with no replacement `text` now throws `MalformedGuardrailResultError` instead of redacting nothing in silence. Both pipeline paths are one function now, so they cannot diverge. **Behaviour change**: a guard relying on the previous no-op will throw — `text: ''` is unaffected and always was a real redaction (B-008)
 

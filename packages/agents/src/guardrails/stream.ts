@@ -54,10 +54,27 @@ export async function* moderateOutputStream<E, R>(
     return step.value
   }
 
-  // The text changed. The guard saw ONE string and never saw the event boundaries, so splitting its
-  // answer back across N deltas would be a guess presented as a boundary. The first text event
-  // carries the whole moderated string; the remaining text events are dropped. Everything carrying
-  // no text passes through in position, so a redaction never costs a tool call.
+  // The text changed, and reassembling it costs something that has to be said out loud.
+  //
+  // The guard saw ONE string and never saw the event boundaries, so splitting its answer back across
+  // N deltas would be a guess presented as a boundary. The whole moderated string therefore lands on
+  // the FIRST text-carrying event and the later text events are dropped.
+  //
+  // KNOWN CONSEQUENCE, measured rather than discovered later: when text events straddle a non-text
+  // event, their relative order does not survive. Given
+  //
+  //     text('tok ') , tool_call , text('sk-abc')
+  //
+  // the client receives `text('tok [R]') , tool_call` — text that FOLLOWED the tool call now
+  // precedes it. If the model was commenting on a tool result, that comment moves ahead of the
+  // result it comments on.
+  //
+  // No position is correct, because the redaction is about the whole string and the boundaries are
+  // gone by the time it exists. Emitting at the LAST text event moves the problem rather than
+  // solving it. The alternatives that would solve it — refusing to moderate a straddling stream, or
+  // asking guards to work per event — are both larger than this defect and belong to their own
+  // measurement. What must not happen is this being found by someone reading a transcript that
+  // stopped making sense; `stream-order-is-not-preserved-across-a-redaction` pins it.
   let emittedText = false
   for (const event of buffered) {
     if (extractText(event) === undefined) {
