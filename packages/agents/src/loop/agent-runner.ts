@@ -257,7 +257,9 @@ export class AgentRunner {
           guardrails,
           (e) => (e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined),
           // B-012: how to re-emit moderated text. Required, so a redaction cannot be computed here
-          // and silently dropped on the way to the client.
+          // and silently dropped on the way to the client. The second parameter is the event being
+          // replaced — unused here because `extractText` above matches exactly ONE kind, which is
+          // the contract that keeps a collapse from crossing kinds.
           (content) => ({ type: 'text_delta', content }),
         )
       })()

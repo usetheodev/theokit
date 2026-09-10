@@ -17,15 +17,33 @@ import type { Guardrail } from './types.js'
  * @param inner       the source stream (yields events, returns a result).
  * @param guards      the guardrails; only those with `checkOutput` participate.
  * @param extractText pulls the human-visible text out of an event (return `undefined` for non-text).
- * @param rebuildText builds ONE event carrying the moderated text. Required, not optional (B-012):
- *                    optional would let this function compute a redaction it cannot apply, which is
- *                    the defect it was added to remove. Only the caller knows its own event shape.
+ * @param rebuildText builds ONE event carrying the moderated text, GIVEN the text-carrying event it
+ *                    replaces. Required, not optional (B-012): optional would let this function
+ *                    compute a redaction it cannot apply, which is the defect it was added to remove.
+ *
+ *                    The second parameter arrived from review, and the reason is a disclosure path
+ *                    the first version created. `extractText` may match SEVERAL event kinds — a
+ *                    consumer moderating reasoning as well as visible text is doing the obvious
+ *                    thing — while `rebuildText` builds exactly one. Measured: a `thinking` event
+ *                    and a `text_delta` collapsed into a single `text_delta`, promoting the model's
+ *                    private reasoning into visible assistant output. Pre-fix that was impossible,
+ *                    because events were replayed verbatim.
+ *
+ *                    Handing the caller the event being replaced lets them keep its kind, its id,
+ *                    its citations — anything the moderated text alone does not carry. What the
+ *                    function still cannot do is preserve the DROPPED events' payloads; a consumer
+ *                    whose text events carry per-event metadata should moderate one kind only.
+ *
+ *                    `replaced` is `undefined` in exactly one case, and the type says so rather
+ *                    than asserting it away: the stream carried no text-carrying event at all and
+ *                    the guard produced text from `''`. There is nothing to preserve, so the
+ *                    caller builds from the text alone.
  */
 export async function* moderateOutputStream<E, R>(
   inner: AsyncGenerator<E, R>,
   guards: readonly Guardrail[],
   extractText: (event: E) => string | undefined,
-  rebuildText: (text: string) => E,
+  rebuildText: (text: string, replaced: E | undefined) => E,
 ): AsyncGenerator<E, R> {
   const hasOutputGuard = guards.some((g) => g.checkOutput != null)
   // Fast path: nothing to moderate — pass through, streaming preserved.
@@ -57,36 +75,57 @@ export async function* moderateOutputStream<E, R>(
   // The text changed, and reassembling it costs something that has to be said out loud.
   //
   // The guard saw ONE string and never saw the event boundaries, so splitting its answer back across
-  // N deltas would be a guess presented as a boundary. The whole moderated string therefore lands on
-  // the FIRST text-carrying event and the later text events are dropped.
+  // N deltas would be a guess presented as a boundary. The whole moderated string lands on the LAST
+  // text-carrying event, and the earlier ones are dropped.
+  //
+  // LAST rather than FIRST, changed on review, and the reasoning is worth keeping because the first
+  // version argued from symmetry and the consequences are not symmetric. The stream is fully
+  // buffered — nothing is emitted until `inner` is exhausted — so emitting text early buys no
+  // time-to-first-token, and FIRST's only advantage was a simpler loop. What it cost was ordering a
+  // COMPLETION CLAIM before the work that produced it: the client read "Done." and then watched four
+  // tool events execute. LAST misplaces a preamble instead — "Let me look that up." arriving after
+  // the lookup — which is scene-setting, not a state assertion. It also matches how chat surfaces
+  // render: tool activity as steps, then the assistant message.
   //
   // KNOWN CONSEQUENCE, measured rather than discovered later: when text events straddle a non-text
   // event, their relative order does not survive. Given
   //
   //     text('tok ') , tool_call , text('sk-abc')
   //
-  // the client receives `text('tok [R]') , tool_call` — text that FOLLOWED the tool call now
-  // precedes it. If the model was commenting on a tool result, that comment moves ahead of the
-  // result it comments on.
+  // the client receives `tool_call , text('tok [R]')` — text that PRECEDED the tool call now
+  // follows it. LAST keeps the terminator in place (a trailing non-text event still arrives last)
+  // and keeps completion claims after the work, which is why it was chosen; what it cannot keep is
+  // the interleaving, because the redaction is about the whole string and the boundaries are gone
+  // by the time it exists.
   //
-  // No position is correct, because the redaction is about the whole string and the boundaries are
-  // gone by the time it exists. Emitting at the LAST text event moves the problem rather than
-  // solving it. The alternatives that would solve it — refusing to moderate a straddling stream, or
-  // asking guards to work per event — are both larger than this defect and belong to their own
+  // The alternatives that WOULD keep it — refusing to moderate a straddling stream, or asking
+  // guards to work per event — are both larger than this defect and belong to their own
   // measurement. What must not happen is this being found by someone reading a transcript that
   // stopped making sense; `stream-order-is-not-preserved-across-a-redaction` pins it.
-  let emittedText = false
-  for (const event of buffered) {
-    if (extractText(event) === undefined) {
+  //
+  // A guard that rewrites UNCONDITIONALLY — a disclaimer appender, a trim, an NFC normaliser —
+  // takes this path on every stream that carries a tool call, and adds a text event to rounds that
+  // produced none. Measured on review; the cost is not proportional to how much the guard changed.
+  // Indices computed once: `extractText` is the caller's function and may be neither cheap nor pure,
+  // and the first version called it a second time per event on this path (review, finding 6).
+  const textAt = buffered.map((event) => extractText(event) !== undefined)
+  const last = textAt.lastIndexOf(true)
+
+  for (const [index, event] of buffered.entries()) {
+    if (!textAt[index]) {
       yield event
       continue
     }
-    if (!emittedText) {
-      emittedText = true
-      yield rebuildText(moderated)
-    }
+    if (index === last) yield rebuildText(moderated, event)
   }
-  // A guard that redacted every text event away still owes the client the moderated string.
-  if (!emittedText) yield rebuildText(moderated)
+  // The stream carried NO text-carrying event and the guard produced some — there is nothing to
+  // replace, so one is built from the text alone. Corrected on review: the previous comment named
+  // "a guard that redacted every text event away", which cannot reach here, because such a guard
+  // still replaces its last text event with `content: ''`.
+  //
+  // `buffered[0]` is `undefined` when the stream was entirely empty, and the signature admits that
+  // rather than asserting it away — discarding the moderation instead would be the very defect
+  // B-012 exists to fix, one layer down.
+  if (last === -1) yield rebuildText(moderated, buffered[0])
   return step.value
 }

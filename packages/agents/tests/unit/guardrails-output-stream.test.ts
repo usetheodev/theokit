@@ -24,7 +24,10 @@ async function* source(events: Ev[], ret = 'RESULT'): AsyncGenerator<Ev, string>
 }
 
 /** B-012 made this argument required, so a redaction cannot be computed and dropped. */
-const rebuildText = (content: string) => ({ type: 'text_delta', content })
+const rebuildText = (content: string, _replaced: Ev | undefined) => ({
+  type: 'text_delta',
+  content,
+})
 const extractText = (e: Ev): string | undefined => (e.type === 'text_delta' ? e.content : undefined)
 
 async function collect<E, R>(gen: AsyncGenerator<E, R>): Promise<{ events: E[]; ret: R }> {
@@ -140,6 +143,8 @@ describe('B-012 — what a redaction costs, pinned', () => {
   interface Ev {
     type: string
     content?: string
+    /** Per-event metadata a redaction must be able to preserve — see the rebuildText test. */
+    id?: string
   }
   const redactor: Guardrail = {
     name: 'r',
@@ -167,15 +172,121 @@ describe('B-012 — what a redaction costs, pinned', () => {
 
   it('test_stream_order_is_not_preserved_across_a_redaction', async () => {
     // Measured, not assumed, and pinned so nobody rediscovers it from a transcript that stopped
-    // making sense. Text that FOLLOWED a tool call comes out before it, because the moderated string
-    // lands on the first text event and the guard never saw the boundaries.
+    // making sense. Text that PRECEDED a tool call comes out after it, because the moderated string
+    // lands on the LAST text event and the guard never saw the boundaries.
     const out = await drive([
       { type: 'text_delta', content: 'tok ' },
       { type: 'tool_call' },
       { type: 'text_delta', content: 'sk-abc' },
     ])
-    expect(out.map((e) => e.type)).toEqual(['text_delta', 'tool_call'])
-    expect(out[0]?.content).toBe('tok [R]')
+    expect(out.map((e) => e.type)).toEqual(['tool_call', 'text_delta'])
+    expect(out[1]?.content).toBe('tok [R]')
+  })
+
+  it('test_a_terminator_after_the_last_text_keeps_its_place', async () => {
+    // Why LAST beats FIRST, in the one place the difference is observable rather than aesthetic:
+    // the moderated text lands on the last TEXT-CARRYING event, not at the end of the stream, so a
+    // trailing non-text event still arrives last. FIRST additionally put any completion claim the
+    // model made ahead of the work that produced it.
+    const out = await drive([
+      { type: 'text_delta', content: 'a ' },
+      { type: 'tool_call' },
+      { type: 'text_delta', content: 'sk-abc' },
+      { type: 'done' },
+    ])
+    expect(out.map((e) => e.type)).toEqual(['tool_call', 'text_delta', 'done'])
+  })
+
+  it('test_the_replaced_event_is_handed_to_rebuildText', async () => {
+    // The review finding this closes: `extractText` may match SEVERAL event kinds while
+    // `rebuildText` builds exactly one. Measured pre-fix — a `thinking` event and a `message`
+    // collapsed into a single `text_delta`, promoting the model's private reasoning into visible
+    // output. A security fix must not open a disclosure path of its own, so the caller now receives
+    // the event being replaced and can keep its kind and its metadata.
+    async function* src(): AsyncGenerator<Ev, string> {
+      yield { type: 'thinking', content: 'the key is sk-abc' }
+      yield { type: 'message', content: ' visible', id: 'm2' }
+      return 'done'
+    }
+    const out: Ev[] = []
+    const g = moderateOutputStream(
+      src(),
+      [redactor],
+      (e) => e.content,
+      (content, replaced) => ({ ...replaced, type: replaced?.type ?? 'text_delta', content }),
+    )
+    let s2 = await g.next()
+    while (!s2.done) {
+      out.push(s2.value)
+      s2 = await g.next()
+    }
+    // The kind survives — reasoning does NOT become visible output — and so does `id`.
+    expect(out.map((e) => e.type)).toEqual(['message'])
+    expect(out[0]?.id).toBe('m2')
+    expect(out[0]?.content).toBe('the key is [R] visible')
+  })
+
+  it('test_an_empty_stream_moderated_into_text_hands_undefined_to_rebuildText', async () => {
+    // The one case where `replaced` is undefined, and the reason the signature admits it instead of
+    // asserting it away: nothing was buffered, so there is no event whose kind or metadata could be
+    // preserved. Discarding the moderation here would be B-012's own defect one layer down.
+    const notice: Guardrail = {
+      name: 'notice',
+      checkOutput: (t) => ({ action: 'redact', text: t === '' ? 'NOTICE' : t }),
+    }
+    // Yielding nothing IS the case under test: a stream that carried no event at all.
+    // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
+    async function* empty(): AsyncGenerator<Ev, string> {
+      return 'done'
+    }
+    const seen: (Ev | undefined)[] = []
+    const out: Ev[] = []
+    const g = moderateOutputStream(
+      empty(),
+      [notice],
+      (e) => e.content,
+      (content, replaced) => {
+        seen.push(replaced)
+        return { type: 'text_delta', content }
+      },
+    )
+    let s2 = await g.next()
+    while (!s2.done) {
+      out.push(s2.value)
+      s2 = await g.next()
+    }
+    expect(seen).toEqual([undefined])
+    expect(out).toEqual([{ type: 'text_delta', content: 'NOTICE' }])
+  })
+
+  it('test_an_equal_but_newly_allocated_string_takes_the_fast_path', async () => {
+    // `moderated === accumulated` compares string PRIMITIVES, so value equality is what is tested
+    // and a guard returning a fresh allocation of the same bytes still replays verbatim. Measured on
+    // review and unpinned until now; without this, a future `Object.is`/reference rewrite would
+    // silently start collapsing every stream that carries a tool call.
+    const identity: Guardrail = {
+      name: 'identity',
+      checkOutput: (t) => ({ action: 'redact', text: t.split('').join('') }),
+    }
+    async function* src(): AsyncGenerator<Ev, string> {
+      yield { type: 'text_delta', content: 'a' }
+      yield { type: 'tool_call' }
+      yield { type: 'text_delta', content: 'b' }
+      return 'done'
+    }
+    const out: Ev[] = []
+    const g = moderateOutputStream(
+      src(),
+      [identity],
+      (e) => e.content,
+      (content) => ({ type: 'text_delta', content }),
+    )
+    let s2 = await g.next()
+    while (!s2.done) {
+      out.push(s2.value)
+      s2 = await g.next()
+    }
+    expect(out.map((e) => e.type)).toEqual(['text_delta', 'tool_call', 'text_delta'])
   })
 
   it('test_a_non_text_event_is_never_dropped_by_a_redaction', async () => {
@@ -193,8 +304,9 @@ describe('B-012 — what a redaction costs, pinned', () => {
   })
 
   it('test_a_guard_may_add_text_to_a_stream_that_had_none', async () => {
-    // The `if (!emittedText)` tail is reachable: a guard moderating '' into something non-empty owes
-    // the client that text, and there is no existing text event to carry it.
+    // The tail is reachable: a guard moderating '' into something non-empty owes the client that
+    // text, and there is no existing text event to carry it. Note what does NOT reach it — a guard
+    // that redacts every text event AWAY still replaces its last text event with `content: ''`.
     async function* noText(): AsyncGenerator<Ev, string> {
       yield { type: 'tool_call' }
       return 'done'
