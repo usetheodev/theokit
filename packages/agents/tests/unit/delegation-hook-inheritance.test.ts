@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-import { inheritHooks } from '../../src/bridge/delegation-hooks.js'
+import { CHAINED_HOOKS, EXEMPT_HOOKS, inheritHooks } from '../../src/bridge/delegation-hooks.js'
 import type { HookHandlers } from '../../src/bridge/hook-handlers.js'
 
 /** A `pre_tool_call` context is opaque to this module — it only forwards it. */
@@ -143,6 +143,90 @@ describe('inheritHooks', () => {
     )
 
     expect(folded).toBe('base|parent|member')
+  })
+
+  it('test_every_chained_key_actually_runs_both_handlers', async () => {
+    // R3: the COMPOSITION table is a claim until something checks it against behaviour. Marking a key
+    // `chained` and never composing it would pass a type check and mean nothing — the shape of
+    // defect this whole item exists to remove.
+    expect(CHAINED_HOOKS.length, 'the composition table is empty').toBeGreaterThan(0)
+
+    for (const key of CHAINED_HOOKS) {
+      const parentRan = vi.fn()
+      const ownRan = vi.fn()
+      // One shape fits every slot for this purpose: each handler records that it ran and returns a
+      // value the slot tolerates. Transforms get their input back; the rest ignore the return.
+      const handler = (spy: () => void) => (a: unknown) => {
+        spy()
+        return a
+      }
+      const merged = inheritHooks(
+        { [key]: handler(parentRan) } as HookHandlers,
+        { [key]: handler(ownRan) } as HookHandlers,
+      )
+      await (merged[key] as (...args: unknown[]) => unknown)?.('base', {})
+      expect(
+        parentRan,
+        `${key} is marked chained and the parent handler never ran`,
+      ).toHaveBeenCalled()
+      expect(ownRan, `${key} is marked chained and the member handler never ran`).toHaveBeenCalled()
+    }
+  })
+
+  it('test_every_exempt_key_really_is_the_raw_spread', () => {
+    // The other half of the table, added after review measured that `exempt` was unfalsifiable:
+    // flipping a genuinely-composed key to `exempt` failed nothing at all. Now mislabelling in
+    // EITHER direction is red — a key called exempt must actually let the member win.
+    for (const key of EXEMPT_HOOKS) {
+      const own = (() => undefined) as never
+      const merged = inheritHooks(
+        { [key]: () => undefined } as HookHandlers,
+        { [key]: own } as HookHandlers,
+      )
+      expect(merged[key], `${key} is marked exempt but something composed it`).toBe(own)
+    }
+  })
+
+  it('test_transform_tool_result_chains_parent_then_member', async () => {
+    // B-007: wired today, so a parent redacting tool output has that redaction silently dropped by
+    // any member that also transforms. The module states the opposite as its security property.
+    // Generic, because `transform_tool_result` is `<T>(results: T, …) => T`. A non-generic handler
+    // here is the same erasure that broke the DTS build.
+    const parent: HookHandlers = {
+      transform_tool_result: <T>(r: T): T => `${String(r)}|parent` as T,
+    }
+    const own: HookHandlers = { transform_tool_result: <T>(r: T): T => `${String(r)}|member` as T }
+
+    const folded = await inheritHooks(parent, own).transform_tool_result?.(
+      'base',
+      {} as unknown as Parameters<NonNullable<HookHandlers['transform_tool_result']>>[1],
+    )
+
+    expect(folded, "the parent's transform was dropped").toBe('base|parent|member')
+  })
+
+  it('test_pre_user_send_contributions_are_both_kept', async () => {
+    // Additive by the shape's design: PreUserSendResult carries only recalledContext, so composing
+    // means both contributions reach the model, parent first. A member cannot suppress the parent.
+    const parent: HookHandlers = { pre_user_send: () => ({ recalledContext: 'from-parent' }) }
+    const own: HookHandlers = { pre_user_send: () => ({ recalledContext: 'from-member' }) }
+
+    const result = await inheritHooks(parent, own).pre_user_send?.(
+      {} as unknown as Parameters<NonNullable<HookHandlers['pre_user_send']>>[0],
+    )
+
+    expect(result?.recalledContext, "the parent's contribution was dropped").toBe(
+      'from-parent\n\nfrom-member',
+    )
+  })
+
+  it('test_a_lone_pre_user_send_is_used_unchanged', async () => {
+    // The case a fix must NOT break: with nothing to chain, the single handler stands as it is.
+    const own: HookHandlers = { pre_user_send: () => ({ recalledContext: 'alone' }) }
+    const result = await inheritHooks(undefined, own).pre_user_send?.(
+      {} as unknown as Parameters<NonNullable<HookHandlers['pre_user_send']>>[0],
+    )
+    expect(result?.recalledContext).toBe('alone')
   })
 
   it('nested_inheritance_is_transitive', async () => {

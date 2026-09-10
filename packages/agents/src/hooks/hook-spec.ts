@@ -8,6 +8,7 @@ import type { HookHandlers } from '../bridge/hook-handlers.js'
 
 import { hookFingerprint, type HookIdentity } from './hook-fingerprint.js'
 import { CHAIN_BUDGET_MULTIPLIER, runHookCommand } from './hook-runner.js'
+import { unwiredEventAdvice } from './unwired-events.js'
 
 /**
  * M75 — declarative hooks: from a line in a config file to a bounded, trusted subprocess.
@@ -194,13 +195,22 @@ const IGNORE_WARNING = (): void => undefined
  * schema accepts or claim handlers that do not exist. Adding a handler below means adding its event
  * here, and the warning stops firing for it on its own.
  */
-const WIRED_EVENTS = new Set<HookEvent>([
+const WIRED_EVENT_LIST = [
   'pre_tool_call',
   'post_tool_call',
   'transform_tool_result',
   'on_session_start',
   'post_assistant_reply',
-])
+] as const
+
+/**
+ * The wired events, as a TYPE. `unwired-events.ts` derives `Exclude<HookEvent, WiredEvent>` from it,
+ * which makes the reason record total: wiring an event without deleting its reason, or un-wiring one
+ * without adding a reason, becomes a compile error instead of something a runtime guard must find.
+ */
+export type WiredEvent = (typeof WIRED_EVENT_LIST)[number]
+
+const WIRED_EVENTS = new Set<HookEvent>(WIRED_EVENT_LIST)
 
 /**
  * Compile specs into the `HookHandlers` the seam already accepts.
@@ -244,11 +254,9 @@ export function buildHookHandlers(
   // Wiring the rest is real work. Saying so is one branch, and it is the half that cannot wait.
   for (const spec of runnable) {
     if (!WIRED_EVENTS.has(spec.event)) {
-      warn(
-        `hook declared on "${spec.event}" will NOT fire: this engine wires ` +
-          `${[...WIRED_EVENTS].join(' and ')} only. The event is accepted by the schema and the ` +
-          `approval is real — the handler does not exist yet.`,
-      )
+      // B-001: the tail said "does not exist yet" — work that will not come for two of these three.
+      // It now names where the capability already lives; `unwired-events.ts` carries the measurement.
+      warn(`hook declared on "${spec.event}" will NOT fire — ${unwiredEventAdvice(spec.event)}`)
     }
   }
 
@@ -332,13 +340,12 @@ export function buildHookHandlers(
     )
   }
 
-  for (const event of OBSERVATIONAL_EVENTS) {
-    const list = runnable.filter((spec) => spec.event === event)
-    if (list.length === 0) continue
-    const fire = buildObservationalHandler(event, list, options, warn, chainBudgetMs)
-    if (event === 'on_session_start') handlers.on_session_start = fire
-    else handlers.post_assistant_reply = fire
-  }
+  assignObservationalHandlers(
+    handlers,
+    OBSERVATIONAL_EVENTS,
+    (event, list) => buildObservationalHandler(event, list, options, warn, chainBudgetMs),
+    runnable,
+  )
 
   return handlers
 }
@@ -396,8 +403,51 @@ export function fenceHookOutput(output: string): string {
   return `${open}\n${escaped}\n${close}`
 }
 
-/** The two observational events this engine wires. Separate so the loop above cannot drift. */
-const OBSERVATIONAL_EVENTS = ['on_session_start', 'post_assistant_reply'] as const
+/**
+ * The observational events this engine wires. `assignObservationalHandlers` gives each one its own
+ * key, so adding a name here is safe — with one exception the type now refuses.
+ *
+ * `Exclude` is that refusal (B-006 review, F2). The observational pass runs LAST, after
+ * `pre_tool_call`, `post_tool_call` and `transform_tool_result` have their purpose-built handlers.
+ * Naming one of those three here used to replace a matcher-aware handler with a bare observer —
+ * compile-clean, suite-clean, and the matcher plus the `{tool, args, result}` payload silently gone.
+ * Measured during review, not reasoned. The old two-branch form corrupted a DIFFERENT key; this form
+ * destroyed a capability in place, which is why the type has to say no rather than a comment.
+ */
+const OBSERVATIONAL_EVENTS = [
+  'on_session_start',
+  'post_assistant_reply',
+] as const satisfies readonly ObservationalEvent[]
+
+/**
+ * An event whose handler slot ACCEPTS a bare observer — derived from the shape, not from a list.
+ *
+ * Review (B-006, F3) measured that an `Exclude<>` list is the wrong instrument here: it keeps out the
+ * three events another pass already handles, and lets in `pre_user_send` and `transform_llm_output`,
+ * whose handlers RETURN A VALUE the runtime consumes. Wiring an observer there compiles and then
+ * always answers `undefined` — a decision hook that silently decides nothing.
+ *
+ * BOTH halves are needed, and measuring showed why. Assignability alone lets `post_tool_call`
+ * through — its slot genuinely accepts a bare observer, and the reason it must stay out is not its
+ * shape but that an earlier pass already built it a matcher-aware handler. The `Exclude` alone was
+ * the reviewer's proposal and lets `pre_user_send` through, whose slot returns a value the runtime
+ * reads. Each half catches what the other misses:
+ *
+ * | Named here | Assignability | Exclude | Caught by |
+ * |---|---|---|---|
+ * | `pre_user_send` | rejects — returns a value | allows | the mapped type |
+ * | `post_tool_call` | allows — shape fits | rejects | the Exclude |
+ * | `on_session_end` | allows | allows | neither — correctly, it is observational and unclaimed |
+ */
+export type ObservationalEvent = Exclude<
+  {
+    [K in keyof HookHandlers]-?: (() => Promise<void>) extends NonNullable<HookHandlers[K]>
+      ? K
+      : never
+  }[keyof HookHandlers] &
+    HookEvent,
+  'pre_tool_call' | 'post_tool_call' | 'transform_tool_result'
+>
 
 /**
  * `transform_tool_result` — a hook that reads a tool's RESULT and appends feedback the model sees.
@@ -486,6 +536,33 @@ function buildTransformHandler(
  * They fire after the fact and return nothing, so a broken notifier must never be why a completed
  * turn is discarded.
  */
+/**
+ * Give each observational event its own key on `handlers`.
+ *
+ * Takes the event list as a PARAMETER rather than reading the module constant, and that is the whole
+ * reason it exists as a separate function: a test can pass three events and assert three distinct
+ * keys without mutating shared module state (`rules/testing.md § 3` — no order-dependent tests).
+ *
+ * Review measured the cost of not doing this. The first version of B-006's fix was inlined, and
+ * reverting it left 1607 tests and `tsc` green — a correction nothing would have noticed being
+ * undone. `make` is injected for the same reason: the test supplies a marker instead of a real
+ * subprocess handler.
+ */
+export function assignObservationalHandlers(
+  handlers: HookHandlers,
+  events: readonly ObservationalEvent[],
+  make: (event: ObservationalEvent, specs: readonly HookSpec[]) => () => Promise<void>,
+  specs: readonly HookSpec[] = [],
+): void {
+  for (const event of events) {
+    const list = specs.filter((spec) => spec.event === event)
+    if (list.length === 0) continue
+    // Assign by KEY. The two-branch form this replaced sent any THIRD observational event into its
+    // fallback arm, silently — the drift the list's own comment claimed to prevent.
+    handlers[event] = make(event, list)
+  }
+}
+
 function buildObservationalHandler(
   event: HookEvent,
   list: readonly HookSpec[],
