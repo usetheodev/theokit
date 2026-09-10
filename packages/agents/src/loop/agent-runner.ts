@@ -252,8 +252,13 @@ export class AgentRunner {
         const safe = await runInputGuards(message, guardrails)
         // Output guards moderate the accumulated text before it reaches the client (M9).
         // `moderateOutputStream` is a transparent pass-through when no output guard is present.
-        return yield* moderateOutputStream(runUnguarded(safe), guardrails, (e) =>
-          e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined,
+        return yield* moderateOutputStream(
+          runUnguarded(safe),
+          guardrails,
+          (e) => (e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined),
+          // B-012: how to re-emit moderated text. Required, so a redaction cannot be computed here
+          // and silently dropped on the way to the client.
+          (content) => ({ type: 'text_delta', content }),
         )
       })()
     }

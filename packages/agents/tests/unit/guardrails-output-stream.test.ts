@@ -23,6 +23,8 @@ async function* source(events: Ev[], ret = 'RESULT'): AsyncGenerator<Ev, string>
   return ret
 }
 
+/** B-012 made this argument required, so a redaction cannot be computed and dropped. */
+const rebuildText = (content: string) => ({ type: 'text_delta', content })
 const extractText = (e: Ev): string | undefined => (e.type === 'text_delta' ? e.content : undefined)
 
 async function collect<E, R>(gen: AsyncGenerator<E, R>): Promise<{ events: E[]; ret: R }> {
@@ -44,7 +46,7 @@ describe('moderateOutputStream', () => {
       { type: 'done' },
     ]
     const { events: out, ret } = await collect(
-      moderateOutputStream(source(events), guards, extractText),
+      moderateOutputStream(source(events), guards, extractText, rebuildText),
     )
     expect(out).toEqual(events)
     expect(ret).toBe('RESULT')
@@ -57,7 +59,7 @@ describe('moderateOutputStream', () => {
       { type: 'text_delta', content: 'is 42' },
       { type: 'done' },
     ]
-    const gen = moderateOutputStream(source(events), guards, extractText)
+    const gen = moderateOutputStream(source(events), guards, extractText, rebuildText)
     await expect(collect(gen)).rejects.toBeInstanceOf(GuardrailViolationError)
   })
 
@@ -65,8 +67,71 @@ describe('moderateOutputStream', () => {
     const inputOnly: Guardrail = { name: 'in', checkInput: () => ({ action: 'allow' }) }
     const events = [{ type: 'text_delta', content: 'x' }, { type: 'done' }]
     const { events: out } = await collect(
-      moderateOutputStream(source(events), [inputOnly], extractText),
+      moderateOutputStream(source(events), [inputOnly], extractText, rebuildText),
     )
     expect(out).toEqual(events)
+  })
+})
+
+describe('B-012 — a computed redaction reaches the client', () => {
+  interface Ev {
+    type: string
+    content?: string
+  }
+  async function* source(): AsyncGenerator<Ev, string> {
+    yield { type: 'text_delta', content: 'the token is ' }
+    yield { type: 'tool_call', content: undefined }
+    yield { type: 'text_delta', content: 'sk-abc123' }
+    return 'done'
+  }
+  const redactor: Guardrail = {
+    name: 'redactor',
+    checkOutput: (t) => ({ action: 'redact', text: t.replace(/sk-\w+/, '[REDACTED]') }),
+  }
+  const collect = async (g: AsyncGenerator<Ev, string>) => {
+    const out: Ev[] = []
+    let step = await g.next()
+    while (!step.done) {
+      out.push(step.value)
+      step = await g.next()
+    }
+    return out
+  }
+
+  it('test_the_stream_delivers_the_redacted_text', async () => {
+    const events = await collect(
+      moderateOutputStream(
+        source(),
+        [redactor],
+        (e) => e.content,
+        (text) => ({
+          type: 'text_delta',
+          content: text,
+        }),
+      ),
+    )
+    const text = events
+      .filter((e) => e.type === 'text_delta')
+      .map((e) => e.content)
+      .join('')
+    expect(text, 'the client received the unredacted secret').toBe('the token is [REDACTED]')
+  })
+
+  it('test_non_text_events_survive_a_redaction', async () => {
+    const events = await collect(
+      moderateOutputStream(
+        source(),
+        [redactor],
+        (e) => e.content,
+        (text) => ({
+          type: 'text_delta',
+          content: text,
+        }),
+      ),
+    )
+    expect(
+      events.map((e) => e.type),
+      'a redaction dropped the tool call',
+    ).toContain('tool_call')
   })
 })
