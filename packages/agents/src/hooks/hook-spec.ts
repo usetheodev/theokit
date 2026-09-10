@@ -8,6 +8,7 @@ import type { HookHandlers } from '../bridge/hook-handlers.js'
 
 import { hookFingerprint, type HookIdentity } from './hook-fingerprint.js'
 import { CHAIN_BUDGET_MULTIPLIER, runHookCommand } from './hook-runner.js'
+import { unwiredEventAdvice } from './unwired-events.js'
 
 /**
  * M75 — declarative hooks: from a line in a config file to a bounded, trusted subprocess.
@@ -244,11 +245,9 @@ export function buildHookHandlers(
   // Wiring the rest is real work. Saying so is one branch, and it is the half that cannot wait.
   for (const spec of runnable) {
     if (!WIRED_EVENTS.has(spec.event)) {
-      warn(
-        `hook declared on "${spec.event}" will NOT fire: this engine wires ` +
-          `${[...WIRED_EVENTS].join(' and ')} only. The event is accepted by the schema and the ` +
-          `approval is real — the handler does not exist yet.`,
-      )
+      // B-001: the tail said "does not exist yet" — work that will not come for two of these three.
+      // It now names where the capability already lives; `unwired-events.ts` carries the measurement.
+      warn(`hook declared on "${spec.event}" will NOT fire — ${unwiredEventAdvice(spec.event)}`)
     }
   }
 

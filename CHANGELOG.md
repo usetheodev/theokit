@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability already lives, instead of saying the handler "does not exist yet". Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput` and `createToolHooksPlugin({ processInput })` — so the old message sent consumers to wait for work that will not come. The third, `on_session_end`, is named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an ending (#B-001)
+
 ## [@theokit/agents 13.0.0-next.11] - 2026-09-08
 
 Released with no entry under `[Unreleased]`. Per-package detail is in each package's

@@ -121,3 +121,6 @@ code-review-output/
 
 # Written by `pnpm release`; read by verify-release-published.mjs within the same job.
 .release-publish.log
+
+# Personal maintenance registry — not project documentation (see ~/.claude/CLAUDE.md).
+BACKLOG.md
