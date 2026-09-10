@@ -20,15 +20,18 @@ exactly one. A consumer moderating reasoning as well as visible text is doing th
 and without the parameter those collapse into one event of the kind `rebuildText` builds —
 measured: a `thinking` event and a visible one became a single visible event, promoting the model's
 private reasoning into assistant output. Handing over the replaced event lets the caller keep its
-kind and its metadata. `replaced` is `undefined` only when the stream carried no text-carrying
-event at all.
+kind and its metadata. `replaced` is `undefined` whenever no event in the stream carried text —
+including a stream that carried only tool calls. It is never a non-text event: an event that is not
+being replaced must not be handed to a function whose job is to build the replacement, or a caller
+spreading it emits a duplicate of it.
 
 When the text is unchanged, the buffered events are replayed verbatim as before. When it changed,
 the **last** text-carrying event is REPLACED by a newly built event carrying the whole moderated
 string, and the earlier text events are dropped. Events carrying no text are never dropped. Note
 "replaced", not "modified": any non-text payload the surviving event carried is lost, as is that of
 the dropped ones — a consumer whose text events carry per-event metadata should moderate one kind
-only, or rebuild from `replaced`.
+only, or rebuild from `replaced`. An event whose extracted text is the EMPTY STRING is still
+text-carrying and can be the one replaced.
 
 **Known consequence:** when text events straddle a non-text event, their relative order does not
 survive a redaction. Given `text('tok ') , tool_call , text('sk-abc')` the client now receives

@@ -35,9 +35,13 @@ import type { Guardrail } from './types.js'
  *                    whose text events carry per-event metadata should moderate one kind only.
  *
  *                    `replaced` is `undefined` in exactly one case, and the type says so rather
- *                    than asserting it away: the stream carried no text-carrying event at all and
- *                    the guard produced text from `''`. There is nothing to preserve, so the
- *                    caller builds from the text alone.
+ *                    than asserting it away: no event in the stream carried text and the guard
+ *                    produced some from `''`. There is nothing to preserve, so the caller builds
+ *                    from the text alone. Note the boundary — an event whose extracted text is the
+ *                    EMPTY STRING is still text-carrying, and can be the one replaced. For
+ *                    `[text('secret'), text('')]` the moderated string lands on the trailing empty
+ *                    delta, so a `{ ...replaced }` caller inherits the terminator's metadata rather
+ *                    than the content-bearing event's.
  */
 export async function* moderateOutputStream<E, R>(
   inner: AsyncGenerator<E, R>,
@@ -50,6 +54,9 @@ export async function* moderateOutputStream<E, R>(
   if (!hasOutputGuard) return yield* inner
 
   const buffered: E[] = []
+  /** Parallel to `buffered`: which events carried text. Recorded HERE so `extractText` is called
+   *  exactly once per event — see the note above `last`. */
+  const textAt: boolean[] = []
   let accumulated = ''
   let step = await inner.next()
   while (!step.done) {
@@ -57,6 +64,7 @@ export async function* moderateOutputStream<E, R>(
     const text = extractText(event)
     if (text !== undefined) accumulated += text
     buffered.push(event)
+    textAt.push(text !== undefined)
     step = await inner.next()
   }
 
@@ -106,9 +114,10 @@ export async function* moderateOutputStream<E, R>(
   // A guard that rewrites UNCONDITIONALLY — a disclaimer appender, a trim, an NFC normaliser —
   // takes this path on every stream that carries a tool call, and adds a text event to rounds that
   // produced none. Measured on review; the cost is not proportional to how much the guard changed.
-  // Indices computed once: `extractText` is the caller's function and may be neither cheap nor pure,
-  // and the first version called it a second time per event on this path (review, finding 6).
-  const textAt = buffered.map((event) => extractText(event) !== undefined)
+  // `textAt` is recorded during accumulation, where `extractText` is called anyway — see the
+  // accumulation loop. An earlier version mapped over `buffered` here, which RELOCATED the second
+  // call per event instead of removing it: measured 8 calls before and 8 after, for a comment that
+  // claimed a saving. `extractText` is the caller's function and may be neither cheap nor pure.
   const last = textAt.lastIndexOf(true)
 
   for (const [index, event] of buffered.entries()) {
@@ -119,13 +128,15 @@ export async function* moderateOutputStream<E, R>(
     if (index === last) yield rebuildText(moderated, event)
   }
   // The stream carried NO text-carrying event and the guard produced some — there is nothing to
-  // replace, so one is built from the text alone. Corrected on review: the previous comment named
-  // "a guard that redacted every text event away", which cannot reach here, because such a guard
-  // still replaces its last text event with `content: ''`.
+  // replace, so `undefined` is passed and the caller builds from the text alone.
   //
-  // `buffered[0]` is `undefined` when the stream was entirely empty, and the signature admits that
-  // rather than asserting it away — discarding the moderation instead would be the very defect
-  // B-012 exists to fix, one layer down.
-  if (last === -1) yield rebuildText(moderated, buffered[0])
+  // This line read `buffered[0]` for one round, and that was the defect this whole function exists
+  // to remove, restored on its last branch. For `[tool_call]` — reachable with any guard that
+  // rewrites unconditionally — `buffered[0]` IS the tool call, which is not being replaced and is
+  // still yielded. A caller following the pattern this module's own test documents as correct,
+  // `{ ...replaced, content }`, would emit a SECOND tool call carrying the first one's id and
+  // arguments: a duplicated invocation, produced by a redaction. Three documents stated `replaced`
+  // was absent here while the code handed over a live event.
+  if (last === -1) yield rebuildText(moderated, undefined)
   return step.value
 }

@@ -307,6 +307,13 @@ describe('B-012 — what a redaction costs, pinned', () => {
     // The tail is reachable: a guard moderating '' into something non-empty owes the client that
     // text, and there is no existing text event to carry it. Note what does NOT reach it — a guard
     // that redacts every text event AWAY still replaces its last text event with `content: ''`.
+    //
+    // The `replaced` assertion below is the one that matters, and its absence let a real defect
+    // through two reviews. This branch passed `buffered[0]` for one round, which for THIS stream is
+    // the tool call — an event that is not being replaced and is also still yielded. A caller
+    // spreading it, as `test_the_replaced_event_is_handed_to_rebuildText` documents, would emit a
+    // second tool call carrying the first one's id and arguments. The suite looked like it covered
+    // this branch and pinned nothing on it.
     async function* noText(): AsyncGenerator<Ev, string> {
       yield { type: 'tool_call' }
       return 'done'
@@ -316,11 +323,15 @@ describe('B-012 — what a redaction costs, pinned', () => {
       checkOutput: () => ({ action: 'redact', text: 'NOTICE' }),
     }
     const out: Ev[] = []
+    const seen: (Ev | undefined)[] = []
     const g = moderateOutputStream(
       noText(),
       [inject],
       (e) => e.content,
-      (content) => ({ type: 'text_delta', content }),
+      (content, replaced) => {
+        seen.push(replaced)
+        return { type: 'text_delta', content }
+      },
     )
     let s = await g.next()
     while (!s.done) {
@@ -329,5 +340,6 @@ describe('B-012 — what a redaction costs, pinned', () => {
     }
     expect(out.map((e) => e.type)).toEqual(['tool_call', 'text_delta'])
     expect(out[1]?.content).toBe('NOTICE')
+    expect(seen, 'a non-text event is not "the event being replaced"').toEqual([undefined])
   })
 })

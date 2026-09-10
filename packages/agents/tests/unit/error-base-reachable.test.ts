@@ -38,10 +38,14 @@ const DIST_BUILT = existsSync(DIST_ENTRY)
  * The layer's published root barrel, loaded ONCE in `beforeAll` rather than per test.
  *
  * B-009: the import used to sit inside the `it()` bodies. Node memoizes a module, so the FIRST test
- * paid for the whole barrel — `dist/index.js` is ~37 KB but pulls the layer's chunk graph, ~330 KB
- * of emitted JS — inside vitest's 5-second per-test budget, and the later tests paid nothing.
- * Corrected on review: the earlier wording said "each `it()`" and "multi-megabyte", and both were
- * wrong in the direction that flattered the fix.
+ * paid for the whole barrel inside vitest's 5-second per-test budget, and the later tests paid
+ * nothing.
+ *
+ * What the barrel actually costs, traced rather than estimated (`strace -e trace=openat` on a cold
+ * `import()`): 8 files under `dist/`, 179,974 bytes — `index.js` is 37,484 of them and the chunk
+ * graph is 142,490 (~139 KB). Two earlier wordings were wrong here in the direction that flattered
+ * the fix: "multi-megabyte", then "~330 KB", the latter being `du -cb dist/*.js` — every entry point
+ * in the package, including `auth.js` and `tools.js`, which this import does not pull.
  *
  * Measured 2026-09-10: four tests failed with `Test timed out in 5000ms` at load average 32.9 and
  * the same four passed idle, minutes apart. A timeout is indistinguishable from a regression until
@@ -54,8 +58,8 @@ const DIST_BUILT = existsSync(DIST_ENTRY)
  * the unfixed version also passes five green runs at the same load.
  *
  * The hook carries no explicit timeout. It had `30_000`, which exceeded this item's own 15000ms
- * ceiling while vitest's default `hookTimeout` of 10000ms is already an order above the hook's
- * measured cost of ~590-775ms.
+ * ceiling, while vitest's default `hookTimeout` is 10000ms — verified against the installed vitest
+ * by timing out a deliberately slow hook, not read from documentation.
  */
 let barrel: Record<string, unknown> | undefined
 

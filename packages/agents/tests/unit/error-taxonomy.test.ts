@@ -52,54 +52,116 @@ function sourceFiles(dir: string): string[] {
  * Reading once in a hook with its own allowance is the fix. Raising the per-test budget is not: it
  * moves the same failure to higher load, and CI runners are shared.
  *
- * The hook carries NO explicit timeout, corrected on review. It had `30_000`, which exceeded this
- * item's own ceiling of 15000ms and bought nothing measurable: vitest's default `hookTimeout` is
- * 10000ms, already 2x the per-test budget and an order above this hook's measured cost of ~51ms.
- * An allowance nobody needs is the same defect the item is about, wearing a hook's name.
+ * The hook carries NO explicit timeout. It had `30_000`, which exceeded this item's own ceiling of
+ * 15000ms, while vitest's default `hookTimeout` is 10000ms — verified against the installed vitest
+ * rather than taken from documentation, by timing out a deliberately slow hook.
+ *
+ * The cost figure here is the hook AS IT NOW STANDS, and the correction matters because the first
+ * version of this paragraph cited ~51ms — the cost BEFORE this same commit added five module
+ * imports to it. Measured 2026-09-10: the file read is 4-5ms and the imports are 382-409ms, so the
+ * hook costs ~390-410ms at load 3.5 and an independent measurement put it at ~1.3s at load 14. The
+ * default leaves roughly 7x headroom at that load, not the two orders the old number implied.
+ *
+ * Quoting a stale figure in the paragraph whose subject is correcting flattering figures is the
+ * defect this file is about, one level up.
  */
 const sources = new Map<string, string>()
+
+const CASES = [
+  {
+    mod: '../../src/guardrails/types.js',
+    load: () => import('../../src/guardrails/types.js'),
+    name: 'GuardrailViolationError',
+    args: ['pii', 'input', 'blocked'],
+    retryable: false,
+  },
+  {
+    mod: '../../src/guardrails/types.js',
+    load: () => import('../../src/guardrails/types.js'),
+    name: 'MalformedGuardrailResultError',
+    args: ['pii', 'output'],
+    retryable: false,
+  },
+  {
+    mod: '../../src/guardrails/types.js',
+    load: () => import('../../src/guardrails/types.js'),
+    name: 'CostBudgetExceededError',
+    args: [100, 50],
+    retryable: false,
+  },
+  {
+    mod: '../../src/bridge/delegation-types.js',
+    load: () => import('../../src/bridge/delegation-types.js'),
+    name: 'DelegationError',
+    args: ['planner', new Error('inner')],
+    retryable: false,
+  },
+  {
+    mod: '../../src/bridge/delegation-types.js',
+    load: () => import('../../src/bridge/delegation-types.js'),
+    name: 'DelegationBudgetExceededError',
+    args: ['planner', 1.5, 1],
+    retryable: false,
+  },
+  {
+    mod: '../../src/in-process-turn.js',
+    load: () => import('../../src/in-process-turn.js'),
+    name: 'InProcessApprovalRequiredError',
+    args: [['run_shell']],
+    retryable: false,
+  },
+  {
+    mod: '../../src/client/in-process-transport.js',
+    load: () => import('../../src/client/in-process-transport.js'),
+    name: 'ApprovalAbortedError',
+    args: ['approval-1', 'cancelled'],
+    retryable: false,
+  },
+  {
+    mod: '../../src/bridge/agent-endpoint.js',
+    load: () => import('../../src/bridge/agent-endpoint.js'),
+    name: 'AgentDefinitionError',
+    args: ['agents/x.ts'],
+    retryable: false,
+  },
+] as const
 
 /**
  * Every module the cases construct from, IMPORTED ONCE.
  *
  * The read above was the smaller half, and shipping only it was an incomplete fix — found on
  * review, measured: `await import(...)` inside each case cost 2505-2670ms against the 5000ms
- * budget, while the read this commit's predecessor moved cost 63ms. Five distinct modules across
- * eight cases; vitest memoizes per module, so the FIRST case paid for all of them and paid it
- * inside a per-test budget.
+ * budget, while the read moved before it cost 63ms. vitest memoizes per module, so the FIRST case
+ * paid for all of them, inside a per-test budget.
+ *
+ * The loader is a thunk on the CASE, not a separate list keyed by a `mod` string. A second list
+ * needs a guard against a case whose module is missing from it, and a guard that exists only
+ * because two lists can disagree stops existing when they are one (`rules/parsimony-ladder.md`
+ * rung 1). `import(variable)` is not an option: a variable specifier is not statically analysable,
+ * so it falls back to runtime resolution — the cost being moved out of the budget.
  */
-const modules = new Map<string, Record<string, unknown>>()
+const modules = new Map<() => Promise<unknown>, Record<string, unknown>>()
 
-/**
- * Thunks with LITERAL specifiers, not `import(variable)`: a variable specifier is not statically
- * analysable, so the bundler cannot resolve it and the import would fall back to runtime resolution
- * — which is the cost being moved out of the budget in the first place.
- */
-const MODULE_SPECS: Readonly<Record<string, () => Promise<unknown>>> = {
-  '../../src/in-process-turn.js': () => import('../../src/in-process-turn.js'),
-  '../../src/client/in-process-transport.js': () =>
-    import('../../src/client/in-process-transport.js'),
-  '../../src/guardrails/types.js': () => import('../../src/guardrails/types.js'),
-  '../../src/bridge/delegation-types.js': () => import('../../src/bridge/delegation-types.js'),
-  '../../src/bridge/agent-endpoint.js': () => import('../../src/bridge/agent-endpoint.js'),
-}
+/** Named, so the guardrail test does not reach in via `CASES[0]` and couple itself to order. */
+const GUARDRAIL_TYPES = () => import('../../src/guardrails/types.js')
 
 beforeAll(async () => {
   for (const file of sourceFiles(AGENTS_SRC)) sources.set(file, readFileSync(file, 'utf8'))
-  for (const [spec, load] of Object.entries(MODULE_SPECS)) {
-    modules.set(spec, (await load()) as Record<string, unknown>)
+  for (const load of new Set([...CASES.map((c) => c.load), GUARDRAIL_TYPES])) {
+    modules.set(load, (await load()) as Record<string, unknown>)
   }
 })
 
-/** Reads a pre-imported module, refusing to silently fall back to an in-test import. */
-function loaded(spec: string): Record<string, unknown> {
-  const mod = modules.get(spec)
-  if (mod === undefined) {
-    // Not defensive padding: MODULE_SPECS and the case table are two lists, and a case whose module
-    // is missing from the first would otherwise import it inside the budget again — the defect
-    // silently restored. Failing names which list is short.
-    throw new Error(`${spec} is not in MODULE_SPECS — add it, or the import returns to the budget`)
-  }
+/**
+ * Reads a pre-imported module.
+ *
+ * With one list this can only fire if the hook did not run — it no longer catches list drift,
+ * because there is no second list to drift from. It stays for the message: `modules.get()`
+ * returning `undefined` surfaces as `Cannot read properties of undefined` several frames away.
+ */
+function loaded(load: () => Promise<unknown>): Record<string, unknown> {
+  const mod = modules.get(load)
+  if (mod === undefined) throw new Error('module was not pre-imported — see beforeAll')
   return mod
 }
 
@@ -139,60 +201,9 @@ describe('the boundary-facing errors carry a stable code and an explicit retryab
    * (`code`, `isRetryable`) that no scan can derive. A missing entry is caught by the scan; a wrong
    * decision is caught here.
    */
-  const cases = [
-    {
-      mod: '../../src/guardrails/types.js',
-      name: 'GuardrailViolationError',
-      args: ['pii', 'input', 'blocked'],
-      retryable: false,
-    },
-    {
-      mod: '../../src/guardrails/types.js',
-      name: 'MalformedGuardrailResultError',
-      args: ['pii', 'output'],
-      retryable: false,
-    },
-    {
-      mod: '../../src/guardrails/types.js',
-      name: 'CostBudgetExceededError',
-      args: [100, 50],
-      retryable: false,
-    },
-    {
-      mod: '../../src/bridge/delegation-types.js',
-      name: 'DelegationError',
-      args: ['planner', new Error('inner')],
-      retryable: false,
-    },
-    {
-      mod: '../../src/bridge/delegation-types.js',
-      name: 'DelegationBudgetExceededError',
-      args: ['planner', 1.5, 1],
-      retryable: false,
-    },
-    {
-      mod: '../../src/in-process-turn.js',
-      name: 'InProcessApprovalRequiredError',
-      args: [['run_shell']],
-      retryable: false,
-    },
-    {
-      mod: '../../src/client/in-process-transport.js',
-      name: 'ApprovalAbortedError',
-      args: ['approval-1', 'cancelled'],
-      retryable: false,
-    },
-    {
-      mod: '../../src/bridge/agent-endpoint.js',
-      name: 'AgentDefinitionError',
-      args: ['agents/x.ts'],
-      retryable: false,
-    },
-  ] as const
-
-  for (const testCase of cases) {
+  for (const testCase of CASES) {
     it(`test_${testCase.name}_is_a_TheokitAgentError_with_a_code`, () => {
-      const Ctor = loaded(testCase.mod)[testCase.name] as new (
+      const Ctor = loaded(testCase.load)[testCase.name] as new (
         ...args: never[]
       ) => TheokitAgentError
       expect(Ctor, `${testCase.name} is not exported from ${testCase.mod}`).toBeTypeOf('function')
@@ -225,8 +236,7 @@ describe('the boundary-facing errors carry a stable code and an explicit retryab
     // extractor reads are actually THERE, so telemetry counts blocks per guard without parsing a
     // message. A count derived from message text breaks the first time somebody improves the
     // wording, and the improvement looks harmless right up until the dashboard goes flat.
-    const GuardrailViolationError = loaded('../../src/guardrails/types.js')
-      .GuardrailViolationError as new (
+    const GuardrailViolationError = loaded(GUARDRAIL_TYPES).GuardrailViolationError as new (
       g: string,
       p: string,
       r: string,
