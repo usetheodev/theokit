@@ -87,6 +87,12 @@ describe('the boundary-facing errors carry a stable code and an explicit retryab
     },
     {
       mod: '../../src/guardrails/types.js',
+      name: 'MalformedGuardrailResultError',
+      args: ['pii', 'output'],
+      retryable: false,
+    },
+    {
+      mod: '../../src/guardrails/types.js',
       name: 'CostBudgetExceededError',
       args: [100, 50],
       retryable: false,

@@ -10,6 +10,8 @@ import {
   fenceHookOutput,
   parseHookSpecs,
 } from '../../src/hooks/hook-spec.js'
+import { assignObservationalHandlers } from '../../src/hooks/hook-spec.js'
+import type { HookHandlers } from '../../src/bridge/hook-handlers.js'
 import { MAX_OUTPUT_BYTES, runHookCommand } from '../../src/hooks/hook-runner.js'
 
 /**
@@ -434,6 +436,60 @@ describe('M75 — a surface can be TOLD that a hook vetoed', () => {
  * There is no fix here. What remains is the record that the difference between the two
  * implementations is real and is NOT a defect of ours.
  */
+
+describe('B-006 — an observational handler lands on its own key', () => {
+  /**
+   * The regression guard the first version of this fix did not have. Review measured that reverting
+   * the production change left 1607 tests and `tsc` green — a correction nothing would notice being
+   * undone, which `rules/testing.md § 3` forbids ("every bug fix starts with a failing regression
+   * test").
+   *
+   * Three events, passed as an ARGUMENT. That is why `assignObservationalHandlers` takes its list as
+   * a parameter: the third case is the one that matters and the module constant holds two, so the
+   * only alternatives were mutating shared state (banned) or not covering it (what happened).
+   */
+  const marker = (name: string) => Object.assign(async (): Promise<void> => {}, { forEvent: name })
+
+  it('test_a_third_observational_event_lands_on_its_own_key', () => {
+    const handlers: HookHandlers = {}
+    const events = ['on_session_start', 'post_assistant_reply', 'on_session_end'] as const
+    const specs = events.map((event) => ({ command: 'true', event, timeout_ms: 500 }))
+    assignObservationalHandlers(handlers, events, (event) => marker(event), specs)
+    expect(
+      Object.keys(handlers).sort((a, b) => a.localeCompare(b)),
+      'a third observational event did not get its own key — the misroute is back',
+    ).toEqual([...events].sort((a, b) => a.localeCompare(b)))
+  })
+
+  it('test_each_handler_is_the_one_built_for_ITS_event', () => {
+    // Distinct keys are not enough: the old defect put a REAL handler on the WRONG key, which this
+    // would miss if it only counted them. Each slot must hold the marker made for that event.
+    const handlers: HookHandlers = {}
+    const events = ['on_session_start', 'post_assistant_reply', 'on_session_end'] as const
+    const built = new Map<string, unknown>()
+    assignObservationalHandlers(
+      handlers,
+      events,
+      (event) => {
+        const fn = marker(event)
+        built.set(event, fn)
+        return fn
+      },
+      events.map((event) => ({ command: 'true', event, timeout_ms: 500 })),
+    )
+    for (const event of events) {
+      expect(handlers[event], `${event} holds a handler built for a different event`).toBe(
+        built.get(event),
+      )
+    }
+  })
+
+  it('test_an_event_with_no_spec_gets_no_handler', () => {
+    const handlers: HookHandlers = {}
+    assignObservationalHandlers(handlers, ['on_session_start'] as const, (e) => marker(e), [])
+    expect(Object.keys(handlers)).toEqual([])
+  })
+})
 
 describe('M75 — an event that cannot fire says so, instead of failing silently', () => {
   /**

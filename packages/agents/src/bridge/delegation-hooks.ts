@@ -29,11 +29,18 @@
  * (`post_tool_call`, session lifecycle) are fire-and-forget by contract, so a broken notifier is
  * isolated and never becomes the reason a turn failed.
  */
+import type { ToolResultTransformContext } from '@theokit/sdk'
+
 import type { HookHandlers } from './hook-handlers.js'
 
 /** Both sides declared this event, or no composition is needed. */
 function bothOf<T>(parent: T | undefined, own: T | undefined): readonly [T, T] | undefined {
-  return parent !== undefined && own !== undefined ? [parent, own] : undefined
+  // `typeof === 'function'`, not `!== undefined`. `.hooks()` accepts a loose `Record<string, unknown>`
+  // (M82 ADR-4), so a JS caller can pass `null` or a string where a handler belongs. Under the looser
+  // test those reached `chainObserver` and threw "parent is not a function" at dispatch time — and
+  // `transform_llm_output` used to guard on truthiness, so composing it through here would have
+  // CHANGED that behaviour silently (review, L2). This matches what `hooksPlugin` already filters on.
+  return typeof parent === 'function' && typeof own === 'function' ? [parent, own] : undefined
 }
 
 /** The code-plugin envelope the SDK dispatches hooks through. */
@@ -130,6 +137,144 @@ function composeObservers(
 }
 
 /**
+ * Join both contributions, parent first.
+ *
+ * `PreUserSendResult` carries only `recalledContext`, and the seam is additive by the SDK's design —
+ * no raw-prompt mutation is exposed to plugins. So composing means both contributions reach the
+ * model in order, never that one silences the other. When only one side returns text, that text is
+ * used unchanged: joining it with an empty string would add a stray newline the model then reads.
+ */
+function chainRecall(
+  parent: NonNullable<HookHandlers['pre_user_send']>,
+  own: NonNullable<HookHandlers['pre_user_send']>,
+): NonNullable<HookHandlers['pre_user_send']> {
+  return async (ctx) => {
+    // Sequential by construction, and only the ORDER of the output is load-bearing here: the two
+    // contributions are independent, so nothing depends on the parent finishing first (review, L3).
+    // Contained per side (H1): a member that throws must not take the parent's contribution with it.
+    const parts: string[] = []
+    for (const [side, handler] of [
+      ['parent', parent],
+      ['member', own],
+    ] as const) {
+      try {
+        const text = (await handler(ctx))?.recalledContext
+        if (text !== undefined && text.length > 0) parts.push(text)
+      } catch (cause) {
+        console.warn(`[delegation] a ${side} pre_user_send threw; its contribution is lost`, cause)
+      }
+    }
+    // `\n\n` matches how the SDK joins recalledContext across plugins, so one prompt does not end up
+    // carrying two separator conventions (review, L1).
+    return parts.length > 0 ? { recalledContext: parts.join('\n\n') } : undefined
+  }
+}
+
+/**
+ * How `inheritHooks` treats every hook a member can declare.
+ *
+ * Total over `keyof HookHandlers`, and that totality IS the guard: adding a key to the interface
+ * without deciding its composition is `TS2741`, not a silent inheritance of the spread's
+ * replace-the-parent default. That default is what this item exists to remove, and leaving the next
+ * key to inherit it would reintroduce the same defect one event later.
+ *
+ * `exempt` is a real answer, kept available on purpose — but it has to be written down by somebody.
+ * The mechanism is B-006's, one commit old, for the same class of defect.
+ */
+const COMPOSITION: Readonly<Record<keyof HookHandlers, 'chained' | 'exempt'>> = {
+  pre_tool_call: 'chained',
+  post_tool_call: 'chained',
+  on_session_start: 'chained',
+  on_session_end: 'chained',
+  post_assistant_reply: 'chained',
+  transform_llm_output: 'chained',
+  transform_tool_result: 'chained',
+  pre_user_send: 'chained',
+}
+
+/** The keys `inheritHooks` composes — read by the test that proves the table matches behaviour. */
+export const CHAINED_HOOKS = Object.entries(COMPOSITION)
+  .filter(([, mode]) => mode === 'chained')
+  .map(([key]) => key as keyof HookHandlers)
+
+/**
+ * The keys deliberately left to the spread — the member's handler wins, on purpose.
+ *
+ * Exported for the same reason as `CHAINED_HOOKS`, and review is why it exists at all: with only the
+ * chained half checked, flipping a genuinely-composed key to `exempt` failed nothing. `exempt` was
+ * the one label that could be applied to any key, correctly or not, with no signal — and a key that
+ * IS replaced by the spread is exactly what someone would label that way.
+ */
+export const EXEMPT_HOOKS = Object.entries(COMPOSITION)
+  .filter(([, mode]) => mode === 'exempt')
+  .map(([key]) => key as keyof HookHandlers)
+
+/**
+ * Fold both tool-result transforms, parent first, PRESERVING the per-call generic.
+ *
+ * `chainTransform` cannot be reused here and the reason is worth stating: `transform_tool_result` is
+ * `<T>(results: T, ctx) => T`, and passing it through a non-generic composer erases `T` to `unknown`.
+ * That is not a lint nicety — it broke `tsc --noEmit` and the package's DTS build, which is how
+ * review found it. `transform_llm_output` never hit it because its signature is not generic.
+ *
+ * A throwing side does not take the other's work with it (review, H1). The module's security property
+ * says a member can only ever ADD; a member that throws and thereby discards the parent's redaction
+ * would silence it, which is the opposite. `chainObserver` already contains its handlers this way —
+ * the posture was one function away.
+ */
+function chainToolResult(
+  parent: NonNullable<HookHandlers['transform_tool_result']>,
+  own: NonNullable<HookHandlers['transform_tool_result']>,
+): NonNullable<HookHandlers['transform_tool_result']> {
+  return async <T>(results: T, ctx: ToolResultTransformContext): Promise<T> => {
+    let current = results
+    try {
+      current = await parent(current, ctx)
+    } catch (cause) {
+      console.warn(`[delegation] a parent transform_tool_result threw; its change is lost`, cause)
+    }
+    try {
+      return await own(current, ctx)
+    } catch (cause) {
+      // The parent's work survives a member that throws. Returning `current` is the whole point.
+      console.warn(
+        `[delegation] a member transform_tool_result threw; the parent's result stands`,
+        cause,
+      )
+      return current
+    }
+  }
+}
+
+/**
+ * Compose the three value-returning hooks, in place.
+ *
+ * Its own function for the reason `composeObservers` is: `inheritHooks` reads as the composition
+ * RULES, and burying six near-identical lines among the veto logic hides both. Extracting it also
+ * kept the function under the complexity budget, which is the lint rule noticing the same thing.
+ *
+ * `transform_tool_result` and `pre_user_send` were absent here until B-007. Both took the spread in
+ * `inheritHooks`, so a member's handler REPLACED its parent's — the opposite of the property that
+ * function documents.
+ *
+ * Reachable through the EXPORTED `inheritHooks` called with two maps. `withInheritedHooks` passes
+ * `undefined` for the member (`agent-orchestrator.ts:175`), so `delegate()` composed nothing here and
+ * was never affected — review corrected an overstated reachability claim in the first version.
+ */
+function composeTransforms(
+  merged: HookHandlers,
+  parent: HookHandlers | undefined,
+  own: HookHandlers | undefined,
+): void {
+  const llm = bothOf(parent?.transform_llm_output, own?.transform_llm_output)
+  if (llm) merged.transform_llm_output = chainTransform(llm[0], llm[1])
+  const toolResult = bothOf(parent?.transform_tool_result, own?.transform_tool_result)
+  if (toolResult) merged.transform_tool_result = chainToolResult(toolResult[0], toolResult[1])
+  const recall = bothOf(parent?.pre_user_send, own?.pre_user_send)
+  if (recall) merged.pre_user_send = chainRecall(recall[0], recall[1])
+}
+
+/**
  * Compose the hooks a delegated member actually runs under.
  *
  * A gate is never SYNTHESIZED: when neither side declared `pre_tool_call`, the member gets none, and
@@ -154,12 +299,7 @@ export function inheritHooks(
 
   composeObservers(merged, parent, own)
 
-  if (parent?.transform_llm_output && own?.transform_llm_output) {
-    merged.transform_llm_output = chainTransform(
-      parent.transform_llm_output,
-      own.transform_llm_output,
-    )
-  }
+  composeTransforms(merged, parent, own)
 
   return merged
 }

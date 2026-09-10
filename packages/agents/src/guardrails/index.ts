@@ -10,6 +10,7 @@ export {
   type GuardrailResult,
   type GuardrailPhase,
   GuardrailViolationError,
+  MalformedGuardrailResultError,
   CostBudgetExceededError,
 } from './types.js'
 export {
