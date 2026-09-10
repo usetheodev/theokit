@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- A delegated member no longer replaces its parent's `transform_tool_result` or `pre_user_send` handler; both chain parent-first, matching the five events that already composed. `transform_tool_result` is wired today, so a parent redacting tool output lost that redaction to any member that also transformed (B-007)
+- `inheritHooks` no longer lets a member's `transform_tool_result` or `pre_user_send` handler replace its parent's; both chain parent-first, matching the six events that already composed. Reachable through the exported `inheritHooks` called with two handler maps — `delegate()` itself passes `undefined` for the member, so that path was never affected (B-007)
 - An observational hook handler is assigned to its own key instead of being chosen by a two-branch comparison. A third observational event would have landed on `post_assistant_reply` silently; no behaviour changes for the events wired today (B-006)
 
 

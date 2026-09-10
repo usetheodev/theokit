@@ -12,7 +12,7 @@
  */
 import { describe, expect, it, vi } from 'vitest'
 
-import { CHAINED_HOOKS, inheritHooks } from '../../src/bridge/delegation-hooks.js'
+import { CHAINED_HOOKS, EXEMPT_HOOKS, inheritHooks } from '../../src/bridge/delegation-hooks.js'
 import type { HookHandlers } from '../../src/bridge/hook-handlers.js'
 
 /** A `pre_tool_call` context is opaque to this module — it only forwards it. */
@@ -173,11 +173,29 @@ describe('inheritHooks', () => {
     }
   })
 
+  it('test_every_exempt_key_really_is_the_raw_spread', () => {
+    // The other half of the table, added after review measured that `exempt` was unfalsifiable:
+    // flipping a genuinely-composed key to `exempt` failed nothing at all. Now mislabelling in
+    // EITHER direction is red — a key called exempt must actually let the member win.
+    for (const key of EXEMPT_HOOKS) {
+      const own = (() => undefined) as never
+      const merged = inheritHooks(
+        { [key]: () => undefined } as HookHandlers,
+        { [key]: own } as HookHandlers,
+      )
+      expect(merged[key], `${key} is marked exempt but something composed it`).toBe(own)
+    }
+  })
+
   it('test_transform_tool_result_chains_parent_then_member', async () => {
     // B-007: wired today, so a parent redacting tool output has that redaction silently dropped by
     // any member that also transforms. The module states the opposite as its security property.
-    const parent: HookHandlers = { transform_tool_result: (r) => `${String(r)}|parent` }
-    const own: HookHandlers = { transform_tool_result: (r) => `${String(r)}|member` }
+    // Generic, because `transform_tool_result` is `<T>(results: T, …) => T`. A non-generic handler
+    // here is the same erasure that broke the DTS build.
+    const parent: HookHandlers = {
+      transform_tool_result: <T>(r: T): T => `${String(r)}|parent` as T,
+    }
+    const own: HookHandlers = { transform_tool_result: <T>(r: T): T => `${String(r)}|member` as T }
 
     const folded = await inheritHooks(parent, own).transform_tool_result?.(
       'base',
@@ -198,7 +216,7 @@ describe('inheritHooks', () => {
     )
 
     expect(result?.recalledContext, "the parent's contribution was dropped").toBe(
-      'from-parent\nfrom-member',
+      'from-parent\n\nfrom-member',
     )
   })
 
