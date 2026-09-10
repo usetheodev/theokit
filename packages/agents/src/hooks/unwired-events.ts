@@ -27,7 +27,14 @@
  * than trusting this comment. A claim about a seam that nobody ran is the asserted mechanism this
  * repository refuses everywhere else.
  */
-import type { HookEvent } from './hook-spec.js'
+import type { HookEvent, WiredEvent } from './hook-spec.js'
+
+/**
+ * The events that reach the warning path: everything the schema declares minus everything the
+ * builder wires. Derived, never listed — a second hand-maintained list is the drift this module
+ * exists to prevent.
+ */
+export type UnwiredEvent = Exclude<HookEvent, WiredEvent>
 
 /** An event the schema accepts and this engine does not wire, and what to reach for instead. */
 export interface UnwiredEventReason {
@@ -43,15 +50,18 @@ export interface UnwiredEventReason {
 }
 
 /**
- * Keyed by `HookEvent`, never by `string`: `Record<string, …>` would let a misspelled
- * `on_sesion_end` compile and sit here looking correct while the real event fell through. This
- * package refuses that class of mistake at compile time everywhere else — `.build()` without
- * `.model()` is a compile error — and a lookup table is no place to start making exceptions.
+ * TOTAL over `UnwiredEvent`, and that totality is the whole mechanism.
  *
- * `Partial` because the wired events legitimately have no entry; `unmappedEvents` is what keeps
- * the two sets honest.
+ * The first version of this module typed it `Partial<Record<HookEvent, …>>` and paid for it twice:
+ * an entry could exist for a wired event, so a runtime function had to detect that, so a test had to
+ * cover the detector — and the test turned out to be a tautology that could not fail. Review proved
+ * it by corrupting the record and watching the suite stay green.
+ *
+ * `Record<UnwiredEvent, …>` deletes all three layers. Wiring an event without removing its reason is
+ * `TS2353`; un-wiring one without adding a reason is `TS2741`. Both directions are compile errors,
+ * caught before anything runs, by the compiler rather than by a guard somebody has to trust.
  */
-export const UNWIRED_EVENT_REASONS: Readonly<Partial<Record<HookEvent, UnwiredEventReason>>> =
+export const UNWIRED_EVENT_REASONS: Readonly<Record<UnwiredEvent, UnwiredEventReason>> =
   Object.freeze({
     transform_llm_output: Object.freeze({
       seam: 'Guardrail.checkOutput',
@@ -68,37 +78,22 @@ export const UNWIRED_EVENT_REASONS: Readonly<Partial<Record<HookEvent, UnwiredEv
   })
 
 /**
- * The events whose wiring and reason disagree — in either direction.
- *
- * Pure, and taking its three inputs as arguments, so a test can drive it with synthetic sets. The
- * alternative was mutating the module-level `WIRED_EVENTS`, which leaks into every other test in
- * the run (`rules/testing.md § 3` — no shared mutable state, no order dependency).
- *
- * Two directions matter and only one is obvious:
- * - declared, unwired, and carrying no reason — a consumer gets the old vague message;
- * - carrying a reason while actually wired — the reason is stale and tells a consumer to go
- *   somewhere they no longer need to go.
- */
-export function unmappedEvents(
-  declared: readonly HookEvent[],
-  wired: ReadonlySet<HookEvent>,
-  reasons: Readonly<Partial<Record<HookEvent, UnwiredEventReason>>>,
-): readonly HookEvent[] {
-  const missingReason = declared.filter((event) => !wired.has(event) && !(event in reasons))
-  const staleReason = declared.filter((event) => wired.has(event) && event in reasons)
-  return [...missingReason, ...staleReason]
-}
-
-/**
  * The tail of the "will NOT fire" warning for one event.
  *
- * Returns the generic tail when the event has no entry. That fallback is the whole point: this runs
- * inside the code path whose job is to warn, and an unmapped event is recoverable
- * (`rules/error-handling.md § 2`). Dereferencing `undefined` here would crash while reporting a
- * non-fatal condition — strictly worse than the vague message being replaced.
+ * Still guards the missing entry, and the reason is worth stating because the type now says it
+ * cannot happen: `buildHookHandlers` reaches this with a `HookEvent`, and narrowing it to
+ * `UnwiredEvent` at the call site would need a runtime check anyway. This runs inside the code path
+ * whose job is to WARN, so degrading to the generic tail beats crashing while reporting a non-fatal
+ * condition (`rules/error-handling.md § 2` — an unknown event is recoverable).
+ *
+ * `reasons` is a parameter so a test can drive the fallback with synthetic data. The first version
+ * read the module global, and the branch went untested for exactly that reason.
  */
-export function unwiredEventAdvice(event: HookEvent): string {
-  const entry = UNWIRED_EVENT_REASONS[event]
+export function unwiredEventAdvice(
+  event: HookEvent,
+  reasons: Readonly<Partial<Record<HookEvent, UnwiredEventReason>>> = UNWIRED_EVENT_REASONS,
+): string {
+  const entry = reasons[event]
   if (entry === undefined) return 'the handler does not exist yet.'
   return entry.seam === null ? `${entry.reason}.` : `use ${entry.seam} instead: ${entry.reason}.`
 }

@@ -5,9 +5,16 @@
  * handler returns `void` and a handler that cannot return a decision cannot refuse an ending. That
  * is the whole justification for the one genuine gap the measurement found.
  *
- * If a future SDK gives the handler a decision type, the justification stops being true and the
- * message becomes quietly wrong. This assertion is what says so, at compile time, instead of leaving
- * a stale sentence in a warning nobody re-reads.
+ * WHAT THIS PINS, precisely — review corrected an overclaim here. The docblock used to say an SDK
+ * change would fail this test. It would not: `@theokit/sdk` 4.52.1 types every hook as
+ * `(ctx: unknown) => unknown | Promise<unknown>` and narrows nothing per-hook, so the SDK already
+ * permits a decision-shaped return and will never "add" one. `HookHandlers['on_session_end']` is
+ * THIS package's own hand-authored narrowing (`src/bridge/hook-handlers.ts`).
+ *
+ * So this guards an editorial choice, not an upstream contract — which is still worth guarding,
+ * because that choice IS the justification for `seam: null`. A human widening the return type here
+ * must also rewrite the reason. Saying which of the two it pins is the difference between a guard
+ * and a claim.
  *
  * Discovery is governed by `packages/agents/vitest.config.ts:33` (`typecheck.enabled: true`,
  * `include: ['tests/**\/*.test-d.ts']`, package-local `tsconfig.test.json`) — NOT the root config.

@@ -195,13 +195,22 @@ const IGNORE_WARNING = (): void => undefined
  * schema accepts or claim handlers that do not exist. Adding a handler below means adding its event
  * here, and the warning stops firing for it on its own.
  */
-const WIRED_EVENTS = new Set<HookEvent>([
+const WIRED_EVENT_LIST = [
   'pre_tool_call',
   'post_tool_call',
   'transform_tool_result',
   'on_session_start',
   'post_assistant_reply',
-])
+] as const
+
+/**
+ * The wired events, as a TYPE. `unwired-events.ts` derives `Exclude<HookEvent, WiredEvent>` from it,
+ * which makes the reason record total: wiring an event without deleting its reason, or un-wiring one
+ * without adding a reason, becomes a compile error instead of something a runtime guard must find.
+ */
+export type WiredEvent = (typeof WIRED_EVENT_LIST)[number]
+
+const WIRED_EVENTS = new Set<HookEvent>(WIRED_EVENT_LIST)
 
 /**
  * Compile specs into the `HookHandlers` the seam already accepts.
