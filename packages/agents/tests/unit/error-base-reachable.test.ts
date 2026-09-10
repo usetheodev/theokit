@@ -28,15 +28,35 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DIST_ENTRY = join(PKG_ROOT, 'dist', 'index.js')
 const DIST_BUILT = existsSync(DIST_ENTRY)
 
-/** The layer's published root barrel, loaded the way a consumer loads it. */
-async function layer(): Promise<Record<string, unknown>> {
-  return (await import(DIST_ENTRY)) as Record<string, unknown>
+/**
+ * The layer's published root barrel, loaded ONCE in `beforeAll` rather than per test.
+ *
+ * B-009: the import used to sit inside each `it()`, which put a multi-megabyte bundle read inside
+ * vitest's 5-second per-test budget. Measured 2026-09-10: four tests failed with `Test timed out in
+ * 5000ms` at load average 32.9 and the same four passed idle, minutes apart. A timeout is
+ * indistinguishable from a regression until somebody measures the load, and it cost two
+ * investigations before anyone did.
+ *
+ * The fix is not a bigger budget — that only moves the failure to higher load, and CI runners are
+ * shared. It is doing the I/O once, in a hook with its own generous allowance, so the assertions
+ * that follow touch nothing but memory.
+ */
+let barrel: Record<string, unknown> | undefined
+
+beforeAll(async () => {
+  if (DIST_BUILT) barrel = (await import(DIST_ENTRY)) as Record<string, unknown>
+}, 30_000)
+
+/** The already-loaded barrel. Throws rather than re-importing, so a slow read cannot come back. */
+function layer(): Record<string, unknown> {
+  if (barrel === undefined) throw new Error('dist barrel was not loaded — see beforeAll')
+  return barrel
 }
 
 describe('the framework error base class is reachable from @theokit/agents', () => {
@@ -47,7 +67,7 @@ describe('the framework error base class is reachable from @theokit/agents', () 
       console.warn('[error-base-reachable] SKIPPED — packages/agents/dist is unbuilt')
       return
     }
-    const m = await layer()
+    const m = layer()
     expect(
       typeof m.TheokitAgentError,
       'TheokitAgentError must be reachable from the layer root barrel — a consumer that depends ' +
@@ -57,13 +77,13 @@ describe('the framework error base class is reachable from @theokit/agents', () 
 
   it('test_is_transient_error_is_reachable_from_the_layer', async () => {
     if (!DIST_BUILT) return
-    const m = await layer()
+    const m = layer()
     expect(typeof m.isTransientError).toBe('function')
   })
 
   it('test_sdk_thrown_error_is_instanceof_the_symbol_imported_from_the_layer', async () => {
     if (!DIST_BUILT) return
-    const m = await layer()
+    const m = layer()
     const Base = m.TheokitAgentError as new (msg: string) => Error
 
     // Identity, not mere presence. A re-export forwards the SAME class object; a re-declaration

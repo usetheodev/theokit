@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 
 import { TheokitAgentError } from '@theokit/sdk/errors'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 /**
  * M80 — the framework eats its own error contract.
@@ -41,20 +41,36 @@ function sourceFiles(dir: string): string[] {
   return found
 }
 
+/**
+ * Every source file, READ ONCE.
+ *
+ * B-009: the walk ran at collection and the read ran inside each `it()`, so scanning 400-odd files
+ * sat inside vitest's 5-second per-test budget. Measured 2026-09-10: this file timed out at load
+ * average 32.9 and passed idle minutes later — a failure indistinguishable from a regression until
+ * somebody measured the load, which cost two investigations before anyone did.
+ *
+ * Reading once in a hook with its own allowance is the fix. Raising the budget is not: it moves the
+ * same failure to higher load, and CI runners are shared.
+ */
+const sources = new Map<string, string>()
+
+beforeAll(() => {
+  for (const file of sourceFiles(AGENTS_SRC)) sources.set(file, readFileSync(file, 'utf8'))
+}, 30_000)
+
 describe('no error class in packages/agents/src extends plain Error', () => {
-  const files = sourceFiles(AGENTS_SRC)
+  const files = () => [...sources.keys()]
 
   it('test_there_are_sources_to_scan', () => {
     // Anti-vacuity: a walk that finds nothing makes every assertion below pass trivially.
-    expect(files.length).toBeGreaterThan(50)
+    expect(files().length).toBeGreaterThan(50)
   })
 
   it('test_no_exported_error_class_extends_Error_directly', () => {
     // The invariant. `extends Error` puts the class outside `isTransientError`'s reach, and the only
     // thing left to the consumer is matching on message text.
     const offenders: string[] = []
-    for (const file of files) {
-      const source = readFileSync(file, 'utf8')
+    for (const [file, source] of sources) {
       for (const [index, line] of source.split('\n').entries()) {
         if (/^export class \w*Error extends Error\b/.test(line)) {
           offenders.push(`${relative(AGENTS_SRC, file)}:${String(index + 1)}`)
