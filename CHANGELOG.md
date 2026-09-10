@@ -6,13 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability already lives, instead of saying the handler "does not exist yet". Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput` and `createToolHooksPlugin({ processInput })` — so the old message sent consumers to wait for work that will not come. The third, `on_session_end`, is named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an ending
+
 ### Fixed
 
 - An observational hook handler is assigned to its own key instead of being chosen by a two-branch comparison. A third observational event would have landed on `post_assistant_reply` silently; no behaviour changes for the events wired today (B-006)
 
-### Changed
-
-- The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability already lives, instead of saying the handler "does not exist yet". Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput` and `createToolHooksPlugin({ processInput })` — so the old message sent consumers to wait for work that will not come. The third, `on_session_end`, is named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an ending
 
 ## [@theokit/agents 13.0.0-next.11] - 2026-09-08
 
