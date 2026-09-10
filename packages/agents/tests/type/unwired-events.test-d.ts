@@ -16,7 +16,7 @@
  * must also rewrite the reason. Saying which of the two it pins is the difference between a guard
  * and a claim.
  *
- * Discovery is governed by `packages/agents/vitest.config.ts:33` (`typecheck.enabled: true`,
+ * Discovery is governed by `packages/agents/vitest.config.ts:31-39` (`typecheck.enabled: true` at `:32`,
  * `include: ['tests/**\/*.test-d.ts']`, package-local `tsconfig.test.json`) — NOT the root config.
  * The distinction is load-bearing: `usetheokit/theokit#357` measured six type tests in this very
  * package compiled by `tsc` as ordinary source, asserting nothing, because `expectTypeOf` is inert

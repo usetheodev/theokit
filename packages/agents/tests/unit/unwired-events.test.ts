@@ -101,6 +101,10 @@ describe('the advice a consumer is told to act on', () => {
   })
 
   it('test_every_reason_entry_is_usable_in_a_terminal', () => {
+    expect(
+      REASON_ENTRIES.length,
+      'the reason record is empty — this test asserted nothing',
+    ).toBeGreaterThan(0)
     for (const [event, entry] of REASON_ENTRIES) {
       expect(
         entry.reason.trim(),
@@ -146,6 +150,10 @@ describe('the advice a consumer is told to act on', () => {
  * self-referential.
  *
  * Keying the proof by the exact seam string breaks the circle: a fabricated name has no entry here.
+ *
+ * What this does NOT establish, measured by review: that the registered symbol is the one the named
+ * behaviour test exercises. Repointing `'Guardrail.checkOutput'` at an unrelated export still passed.
+ * It catches an invented seam, not a mismatched one — and the failure message says exactly that.
  */
 const SEAM_PROOFS: Readonly<Record<string, () => unknown>> = {
   'Guardrail.checkOutput': () => runOutputGuards,
@@ -160,8 +168,8 @@ describe('the reasons are true — each covering seam is exercised, not asserted
       const proof = SEAM_PROOFS[entry.seam!]
       expect(
         proof,
-        `${event} recommends "${entry.seam}" and no proof is registered for it — either the seam is ` +
-          'fabricated, or it is real and untested. Both are defects.',
+        `${event} recommends "${entry.seam}" and no proof is registered for it. Register one against ` +
+          'that exact string, so an invented seam cannot reach an operator as advice.',
       ).toBeDefined()
       expect(
         proof?.(),

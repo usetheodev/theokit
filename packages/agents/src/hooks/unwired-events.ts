@@ -57,9 +57,14 @@ export interface UnwiredEventReason {
  * cover the detector — and the test turned out to be a tautology that could not fail. Review proved
  * it by corrupting the record and watching the suite stay green.
  *
- * `Record<UnwiredEvent, …>` deletes all three layers. Wiring an event without removing its reason is
- * `TS2353`; un-wiring one without adding a reason is `TS2741`. Both directions are compile errors,
- * caught before anything runs, by the compiler rather than by a guard somebody has to trust.
+ * `Record<UnwiredEvent, …>` deletes all three layers. Un-wiring an event without adding a reason is
+ * `TS2741`; wiring one without removing its reason is `TS2353`.
+ *
+ * The `satisfies` is what makes the second half true, and it was added after review measured that it
+ * was not. `Object.freeze()` strips a literal's freshness, so excess-property checking never runs on
+ * it — the annotation alone caught only one of the two directions while this docblock claimed both.
+ * A guarantee the compiler does not give is worse than none: someone deletes the test on its
+ * strength.
  */
 export const UNWIRED_EVENT_REASONS: Readonly<Record<UnwiredEvent, UnwiredEventReason>> =
   Object.freeze({
@@ -75,7 +80,7 @@ export const UNWIRED_EVENT_REASONS: Readonly<Record<UnwiredEvent, UnwiredEventRe
       seam: null,
       reason: 'no seam delivers this: the handler returns void and cannot refuse an ending',
     }),
-  })
+  } satisfies Record<UnwiredEvent, UnwiredEventReason>)
 
 /**
  * The tail of the "will NOT fire" warning for one event.
