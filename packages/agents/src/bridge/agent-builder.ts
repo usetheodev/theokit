@@ -24,6 +24,7 @@ import type { HumanInTheLoopOptions } from '../types.js'
 import type { McpServersMap } from '../types.js'
 import type { ReasoningEffort } from '../types.js'
 
+import type { CodePlugin } from './code-plugins.js'
 import { defineAgent, type AgentDefinition, type DefineAgentConfig } from './define-agent.js'
 import type { HookHandlers } from './hook-handlers.js'
 import type { HookApprovalGate } from './sdk-adapter-create-options.js'
@@ -294,8 +295,13 @@ export interface AgentBuilder<
    * For lifecycle interception prefer {@link AgentBuilder.hooks} — a hook needs a plugin only as its
    * transport, and `plugins()` makes the caller assemble that transport by hand. Reach for this when
    * you genuinely have a plugin (a provider, a memory adapter, a tool-registering extension).
+   *
+   * NOT the Claude Code filesystem-bundle form (B-055). `[{ type: 'local', path: './p' }]` used to
+   * typecheck here against `readonly unknown[]` and do nothing — the typecheck that should have
+   * caught it was what let it through. A bundle is declared by living in a `plugins/` directory
+   * under `.theokit/` or `.claude/`, where its `skills/` and `agents/` are discovered.
    */
-  plugins(list: readonly unknown[]): AgentBuilder<TInput, TModel, TContext, TTools>
+  plugins(list: readonly CodePlugin[]): AgentBuilder<TInput, TModel, TContext, TTools>
   /**
    * Declare MCP (Model Context Protocol) servers available to this agent — the builder-chain
    * equivalent of the `@MCP` class decorator. Each key is a server name; the value is its config
@@ -361,7 +367,7 @@ function makeBuilder(config: DefineAgentConfig): AgentBuilder {
     memory: (settings: MemorySettings) => makeBuilder({ ...config, memory: settings }),
     hooks: (map: HookHandlers | Readonly<Record<string, unknown>>) =>
       makeBuilder({ ...config, hooks: map }),
-    plugins: (list: readonly unknown[]) => makeBuilder({ ...config, plugins: list }),
+    plugins: (list: readonly CodePlugin[]) => makeBuilder({ ...config, plugins: list }),
     mcp: (servers: McpServersMap) => makeBuilder({ ...config, mcpServers: servers }),
     use: (preset: (b: unknown) => unknown) => preset(runtime),
     build: () => defineAgent(config),

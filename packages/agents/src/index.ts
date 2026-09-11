@@ -239,6 +239,18 @@ export type { RunEvent } from '@theokit/sdk'
 // occupied name.
 export type { AgentDefinition as SubagentDefinition } from '@theokit/sdk/subagents-loader'
 
+// B-034 — the per-run sub-agent door, made nameable.
+//
+// `RuntimeOverrides` is what `createSdkAgentStream` / `toAgentFactory` accept, and its `agents`
+// field was the only path that ever spawned a child. It was declared and exported by zero barrels,
+// so a consumer could pass the value and could not NAME the type — no helper, no wrapper, no
+// typed variable holding one. The parity survey filed that as its own half of this defect:
+// "a consumer cannot build a helper around a type they cannot import."
+//
+// TYPE-ONLY, like `SubagentDefinition` on the line above: no runtime value crosses, so this costs
+// nothing at run time and nothing in the barrel's byte budget.
+export type { RuntimeOverrides } from './bridge/sdk-adapter.js'
+
 // NAME COLLISION RESOLVED in M91 — and the FIRST attempt was wrong.
 //
 // `@theokit/sdk/errors` and `./bridge/index.js` both exported `BudgetExceededError`, and they were
@@ -384,3 +396,35 @@ export type { WireChunk, WireDataPart } from '@theokit/presenter/wire'
 // Measured after the fact, which is the part worth recording — M75 merged with the ceiling already
 // blown because I read the test COUNT and not the bundle gate. The same lesson B-M74-01 had just
 // taught, one milestone earlier, about `@theokit/http`.
+
+/**
+ * B-061 — the types an exported signature NAMES, so a consumer can write them.
+ *
+ * Each of these appeared in a public signature of this barrel and crossed nothing: a caller could
+ * read the shape in the emitted `.d.ts` and could only name it by importing `@theokit/sdk` directly,
+ * which this layer's doctrine forbids and which has already made a consumer hand-write parallel
+ * copies twice.
+ *
+ * The SIXTH instance of the shape `bridge/index.ts` enumerates by issue number (#663, #668, #675,
+ * #686, B-004), and the last one added by hand: `tests/unit/every-public-type-crosses-the-barrel.test.ts`
+ * now DERIVES the requirement from the built barrels instead of listing it, so a seventh is a red
+ * build rather than a consumer's bug report.
+ *
+ * TYPE-ONLY: no runtime value crosses, so this costs nothing at run time and nothing in the barrel's
+ * byte budget.
+ */
+export type {
+  BudgetTracker,
+  // B-060 — the store the SDK resumes from, nameable alongside the capability that takes it.
+  // Forwarding a capability whose type cannot be named does not close the gap; the item says so.
+  SessionStore,
+  InlineSkill,
+  Plugin,
+  PluginsSettings,
+  ProviderRoutingSettings,
+} from '@theokit/sdk'
+// A subpath type, like the two below it — named from where it lives rather than guessed at the root.
+export type { RetryOptions } from '@theokit/sdk/retry'
+export type { DiscoverSubagentsOptions } from '@theokit/sdk/subagents-loader'
+export type { ContextWindowOptions } from './bridge/compile-context-window.js'
+export type { SkillsOptions } from './bridge/compile-skills.js'

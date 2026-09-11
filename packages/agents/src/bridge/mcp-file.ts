@@ -47,6 +47,7 @@ import { join } from 'node:path'
 
 import { TheokitAgentError } from '@theokit/sdk/errors'
 
+import { currentOperatorPolicy, mcpServerAdmitted } from '../config/operator-policy.js'
 import type { McpServerConfig, McpServersMap } from '../types.js'
 
 /**
@@ -62,6 +63,60 @@ import type { McpServerConfig, McpServersMap } from '../types.js'
  */
 interface LoadMcpJsonOptions {
   onWarn?: (warning: string) => void
+  /**
+   * The environment `${VAR}` references resolve against. Injected rather than read from
+   * `process.env` so a test can prove the expansion without mutating the process it runs in —
+   * the convention `diagnostic-sink.ts` and `transcript-root-hint.ts` already follow.
+   */
+  env?: Record<string, string | undefined>
+}
+
+/** `${VAR}` — the whole value, not a fragment. A partial match would make `"a${B}c"` ambiguous. */
+const ENV_REFERENCE_REGEX = /^\$\{([A-Za-z_]\w*)\}$/
+
+/**
+ * Resolve `${VAR}` against the host environment.
+ *
+ * `.mcp.json` is committed, so a named reference is the specification's only way to keep a
+ * credential out of it. Unexpanded, the placeholder reached the server as eleven literal characters
+ * and authentication failed at the remote end, pointing nowhere near the config line.
+ *
+ * This does NOT loosen the posture `buildEntry` takes when it refuses `envPolicy`. That refusal is
+ * about a committed file handing a server the WHOLE environment; this resolves ONE variable the host
+ * already chose to set. Refusing expansion protects nothing — it pushes the author to paste the
+ * literal secret into the file, which is the outcome the posture exists to prevent.
+ *
+ * An unset reference is REPORTED and left as written. Substituting empty would start the server with
+ * a blank credential and fail somewhere further away; dropping the key would look like the author
+ * never wrote it.
+ */
+function expandEnvReferences(
+  record: Record<string, string>,
+  env: Record<string, string | undefined>,
+  field: string,
+  server: string,
+  warn: (warning: string) => void,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [key, value] of Object.entries(record)) {
+    const match = ENV_REFERENCE_REGEX.exec(value)
+    if (match === null) {
+      out[key] = value
+      continue
+    }
+    const name = match[1]
+    const resolved = env[name]
+    if (resolved === undefined) {
+      warn(
+        `${MCP_FILENAME}: server "${server}" references \${${name}} in "${field}.${key}", ` +
+          `and that variable is not set — the reference is left as written`,
+      )
+      out[key] = value
+      continue
+    }
+    out[key] = resolved
+  }
+  return out
 }
 
 /** The effective channel: the caller's, or `stderr`. Never the empty one. */
@@ -120,11 +175,16 @@ export function loadMcpJson(cwd: string, opts: LoadMcpJsonOptions = {}): McpServ
   } catch (err) {
     throw new McpFileError(`${path} is not valid JSON: ${describeIt(err)}`)
   }
-  return parseMcpJson(parsed, path, warningChannel(opts))
+  return parseMcpJson(parsed, path, warningChannel(opts), opts.env ?? process.env)
 }
 
 /** Validate a parsed `.mcp.json` document into an {@link McpServersMap}. Internal to the loader. */
-function parseMcpJson(raw: unknown, source: string, onWarn: (a: string) => void): McpServersMap {
+function parseMcpJson(
+  raw: unknown,
+  source: string,
+  onWarn: (a: string) => void,
+  env: Record<string, string | undefined>,
+): McpServersMap {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new McpFileError(`${source}: root must be a JSON object with an "mcpServers" key.`)
   }
@@ -134,7 +194,21 @@ function parseMcpJson(raw: unknown, source: string, onWarn: (a: string) => void)
     throw new McpFileError(`${source}: "mcpServers" must be an object keyed by server name.`)
   }
   const out: McpServersMap = {}
+  // B-043 — the operator's allow/deny, resolved once for the whole file. The loader shipped and the
+  // gate did not, which is worse than having neither: a consumer who wanted the convenience of a
+  // `.mcp.json` inherited the exposure without being offered the control.
+  //
+  // The default stays "every declared server", by CHOICE rather than by absence — the file is the
+  // project's own declaration, and refusing it outright would break every existing consumer to
+  // protect against something they wrote themselves. What changed is that an operator can narrow it.
+  const policy = currentOperatorPolicy(onWarn)
   for (const [name, entryRaw] of Object.entries(serversRaw as Record<string, unknown>)) {
+    if (!mcpServerAdmitted(name, policy)) {
+      // Named, like every other refusal here: a server that silently does not start is
+      // indistinguishable from one that started and has no tools.
+      onWarn(`${source}: server "${name}" not started — an operator policy does not admit it`)
+      continue
+    }
     // THE FAILURE RADIUS IS THE ENTRY. An entry that does not validate is omitted and NAMED; its
     // neighbours still come through.
     const reason = validateEntry(name, entryRaw)
@@ -144,7 +218,7 @@ function parseMcpJson(raw: unknown, source: string, onWarn: (a: string) => void)
       onWarn(`${source}: server "${name}" ignored — ${reason}`)
       continue
     }
-    out[name] = buildEntry(entryRaw as Record<string, unknown>)
+    out[name] = buildEntry(entryRaw as Record<string, unknown>, name, env, onWarn)
   }
   return out
 }
@@ -192,6 +266,20 @@ function validateStdio(entry: Record<string, unknown>): string | undefined {
  * forwards**, never normalizes — deciding the default for `type` here would be a second oracle over
  * the same fact.
  */
+/**
+ * The transport name this runtime speaks, for a name an author may legitimately write.
+ *
+ * The MCP specification renamed the HTTP transport to "Streamable HTTP", so a `.mcp.json` written
+ * against the current spec says `streamable-http` — and it was refused, with a message about a field
+ * the author had written correctly. `undefined` for anything that is not a transport this runtime
+ * has, which keeps an invented value an error rather than turning the check into a pass-through.
+ */
+function normaliseTransport(value: unknown): 'http' | 'sse' | undefined {
+  if (value === 'http' || value === 'streamable-http') return 'http'
+  if (value === 'sse') return 'sse'
+  return undefined
+}
+
 function validateRemote(entry: Record<string, unknown>): string | undefined {
   if (typeof entry.url !== 'string' || entry.url.length === 0) {
     return 'field "url" must be a non-empty string.'
@@ -201,8 +289,8 @@ function validateRemote(entry: Record<string, unknown>): string | undefined {
   } catch {
     return 'field "url" is not a valid URL.'
   }
-  if (entry.type !== undefined && entry.type !== 'http' && entry.type !== 'sse') {
-    return 'field "type" must be "http" or "sse".'
+  if (entry.type !== undefined && normaliseTransport(entry.type) === undefined) {
+    return 'field "type" must be "http", "streamable-http" or "sse".'
   }
   if (entry.headers !== undefined && !isStringRecord(entry.headers)) {
     // The message speaks of the SHAPE. Never of the content — this is the field that carries `Authorization`.
@@ -246,18 +334,37 @@ function validateRemote(entry: Record<string, unknown>): string | undefined {
  * Whoever wants full inheritance declares it in the code that builds the agent, where a human
  * reviews it.
  */
-function buildEntry(entry: Record<string, unknown>): McpServerConfig {
+function buildEntry(
+  entry: Record<string, unknown>,
+  name: string,
+  env: Record<string, string | undefined>,
+  warn: (warning: string) => void,
+): McpServerConfig {
   if (entry.url !== undefined) {
     const remote: Record<string, unknown> = { url: entry.url }
-    if (entry.type !== undefined) remote.type = entry.type
-    if (entry.headers !== undefined) remote.headers = entry.headers
+    // NORMALISED, not forwarded. `streamable-http` is the MCP spec's current name for the transport
+    // this runtime calls `http`; handing the synonym downstream would ask every consumer of the
+    // parsed config to learn it too, and the SDK's own `McpServerConfig` does not carry it. One
+    // vocabulary inside, both names accepted at the boundary.
+    if (entry.type !== undefined) remote.type = normaliseTransport(entry.type)
+    if (entry.headers !== undefined) {
+      remote.headers = expandEnvReferences(
+        entry.headers as Record<string, string>,
+        env,
+        'headers',
+        name,
+        warn,
+      )
+    }
     if (entry.auth !== undefined) remote.auth = entry.auth
     if (entry.requestTimeoutMs !== undefined) remote.requestTimeoutMs = entry.requestTimeoutMs
     return remote as McpServerConfig
   }
   const stdio: Record<string, unknown> = { command: entry.command }
   if (entry.args !== undefined) stdio.args = entry.args
-  if (entry.env !== undefined) stdio.env = entry.env
+  if (entry.env !== undefined) {
+    stdio.env = expandEnvReferences(entry.env as Record<string, string>, env, 'env', name, warn)
+  }
   if (entry.cwd !== undefined) stdio.cwd = entry.cwd
   return stdio as McpServerConfig
 }
@@ -278,4 +385,18 @@ function isStringRecord(v: unknown): v is Record<string, string> {
     !Array.isArray(v) &&
     Object.values(v).every((x) => typeof x === 'string')
   )
+}
+
+/**
+ * Parse an already-read document, for tests.
+ *
+ * `loadMcpJson` reads from disk; the parsing rules are what a test needs, and routing every case
+ * through a temp directory tests the filesystem rather than the grammar.
+ */
+export function parseMcpJsonForTests(
+  raw: unknown,
+  source: string,
+  onWarn: (message: string) => void,
+): McpServersMap {
+  return parseMcpJson(raw, source, onWarn, {})
 }

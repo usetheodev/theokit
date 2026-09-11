@@ -60,6 +60,14 @@ function matches(record: UsageRecord | ToolUsageRecord, query: UsageQuery): bool
   // An omitted `userId` matches everything: a single-user surface has no id to filter by, and
   // requiring one is what forced terminal products to invent a constant.
   if (query.userId !== undefined && record.userId !== query.userId) return false
+  // A tool record has no model, and `getUsage` already drops it before summing (`kind !== 'tool'`),
+  // so testing for it HERE cannot change any answer. The first version did test for it and a
+  // mutation proved the branch dead: inverting the condition left every assertion green. A conjunct
+  // that cannot change an answer reads as a second condition somebody needed, which is how a dead
+  // branch survives review — the same note `guardrails/stream.ts` carries about its own.
+  if (query.model !== undefined && record.kind !== 'tool' && record.model !== query.model) {
+    return false
+  }
   if (query.period === undefined) return true
   return record.timestamp >= query.period.from && record.timestamp <= query.period.to
 }

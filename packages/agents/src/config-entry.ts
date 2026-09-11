@@ -50,6 +50,7 @@ export { TrustStore, TrustStorePermissionsError, type TrustRecord } from './conf
 export { expandInstructionImports, type ExpandImportsInput } from './config/instruction-imports.js'
 
 export {
+  blockAppliesTo,
   loadInstructionTree,
   type InstructionBlock,
   type InstructionTree,

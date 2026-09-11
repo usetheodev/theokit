@@ -20,6 +20,7 @@ import type { McpServersMap } from '../types.js'
 import type { ReasoningEffort } from '../types.js'
 
 import type { CompiledAgentOptions, CompiledTool } from './agent-compiler.js'
+import type { CodePlugin } from './code-plugins.js'
 import type { HookHandlers } from './hook-handlers.js'
 import type { HookApprovalGate } from './sdk-adapter-create-options.js'
 import {
@@ -120,6 +121,15 @@ export interface DefineAgentConfig<TInput extends z.ZodType = z.ZodType> {
    */
   hookApproval?: HookApprovalGate
   /**
+   * B-054 — `MEMORY.md` here is NOT the Claude Code CLI's auto-memory file. This is the durable
+   * subsystem below: a SQLite+FTS5 store under `.theokit/memory/`, with `memory_search`/`memory_get`
+   * tools and no index cap. The CLI's lives under its own home (`CLAUDE_CONFIG_DIR` or `~/.claude`),
+   * is capped at 200 lines / 25 KB on read, and is swept on `cleanupPeriodDays` — none of which is
+   * implemented here. The SDK READS that directory for interop and does not write to it.
+   *
+   * Same filename, different directory, different semantics. Stated at both ends because a checklist
+   * that greps for `MEMORY.md` finds one and concludes the other exists.
+   *
    * M49 — durable memory (the SDK's `.theokit/memory/` subsystem: `Remember:` capture, MEMORY.md
    * store, auto-injected `<memory>` block, `memory_search`/`memory_get` tools). The shape is the
    * SDK's own `MemorySettings` — the canonical runtime contract. Projected into
@@ -130,7 +140,13 @@ export interface DefineAgentConfig<TInput extends z.ZodType = z.ZodType> {
    * Code `Plugin` objects forwarded to `Agent.create({ plugins })` — EXTENSION units (tools,
    * commands, model providers, memory adapters). For lifecycle interception use {@link hooks}.
    */
-  plugins?: readonly unknown[]
+  /**
+   * Code plugins — `{ name, register }`. NOT the Claude Code filesystem-bundle form, which is
+   * declared by living in a `plugins/` directory rather than by being passed here (B-055).
+   *
+   * `readonly unknown[]` is what let the wrong shape through silently.
+   */
+  plugins?: readonly CodePlugin[]
   /**
    * Lifecycle hooks keyed by `HookName` (`pre_tool_call` may veto via `{ block, message }`). Set by
    * the builder's `hooks()`; converted into a code plugin at `build()` and never reaching the SDK
@@ -324,7 +340,7 @@ export function compileAgentDefinition(def: AgentDefinition): CompiledAgentOptio
  * needs a transport. Doing the conversion HERE (not on the builder) means every entry point that
  * reaches `defineAgent` gets it, so `hooks` can never be declared-but-dropped.
  */
-function compileHooksAndPlugins(def: AgentDefinition): { plugins?: readonly unknown[] } {
+function compileHooksAndPlugins(def: AgentDefinition): { plugins?: readonly CodePlugin[] } {
   const map = (def as { hooks?: Readonly<Record<string, unknown>> }).hooks
   const entries = Object.entries(map ?? {}).filter(([, h]) => typeof h === 'function')
   const explicit = def.plugins ?? []

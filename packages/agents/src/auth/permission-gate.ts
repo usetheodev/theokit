@@ -44,6 +44,8 @@
  * First veto wins; `undefined` falls through. No helper ships for this: it is one line, and a
  * `composePreToolCall` would be a second way to do what `??` already does.
  */
+import type { PermissionMode } from '@theokit/sdk'
+
 import { debugLog } from '../debug-log.js'
 
 import type { PermissionQuery, PermissionStore } from './permission-store.js'
@@ -84,8 +86,21 @@ export interface GrantGateContext {
    * The run's resolved permission mode, carried by the real context. Mirrored so the shapes match
    * and so its absence from the gate's logic is a decision rather than an oversight: `bypass` does
    * NOT disable this gate, because a standing grant is the operator's, not the run's.
+   *
+   * B-057 — the SDK's own `PermissionMode`, not a bare `string` and not a union restated here. The
+   * loose type was the half that made this look like an oversight: a mirror that accepts any word
+   * mirrors nothing in particular, and `"readonly"` — what somebody writes when they mean `plan` —
+   * would have sat here looking applied.
+   *
+   * Restating the union was the first attempt and the type test refused it: this shape must fit
+   * `PreToolCallContext` structurally, and a hand-written copy that drifts by one member stops
+   * fitting. Importing the source makes it a mirror BY CONSTRUCTION — it narrows when the SDK
+   * narrows, and cannot disagree.
+   *
+   * This layer's own three-mode surface reaches these through `approvalModeToPermissionMode`, so a
+   * reader of either vocabulary meets the other.
    */
-  readonly permissionMode?: string
+  readonly permissionMode?: PermissionMode
 }
 
 /** This tool is deliberately outside the gate's remit — distinct from "I forgot to map it". */

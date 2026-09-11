@@ -80,6 +80,24 @@ export class GuardrailsCapability extends FieldCapability<'guardrails'> {
  * `'filesystem'` selects the SDK's durable store, so any other storage cannot resume across
  * requests. The warning moves WITH the feature — a declared checkpoint that silently cannot resume
  * is exactly the kind of no-op this project refuses to ship.
+ *
+ * ## This is RUN-STATE checkpointing. It is not file undo, and the name is shared (B-059)
+ *
+ * What this saves is the conversation: enough to RESUME a run. It does not snapshot the files an
+ * agent edited and cannot restore one.
+ *
+ * The distinction is written here because the word is the whole problem. Measured 2026-09-11:
+ * `rewindFiles`, `rewind_files`, `restoreFile` and `backup` return 0 files in this package, 0 in the
+ * SDK's `.d.ts` and 0 in `@theokit/sdk-tools`, while `checkpoint` returns six — all of them this
+ * subject. **Any parity checklist that greps for `checkpoint` is satisfied by the wrong one**, and
+ * reports a capability that does not exist.
+ *
+ * So a consumer building an interactive coding agent implements snapshot and restore themselves.
+ * There is no pre-write seam on the edit tools to hang it on either, which is the part that makes it
+ * a feature rather than a wiring job — and the reason it is stated here instead of half-built.
+ *
+ * Pinned by `tests/unit/run-state-checkpointing-is-not-file-undo.test.ts`, which goes red if a file
+ * surface ever appears — at which point this section should go with it.
  */
 export class CheckpointCapability implements Capability {
   readonly name = 'checkpoint'
@@ -109,6 +127,25 @@ export class HumanInTheLoopCapability extends FieldCapability<'hitl'> {
  * draft (`createDraft` gives it `{}`), so a `setOnce` would conflict against the seed itself — the
  * same trap the pre-seeded `stream` sprang in M52. Merging also lets a preset declare a baseline
  * child set that a call site extends.
+ *
+ * ## How far this reaches
+ *
+ * **What it populates IS projected into `Agent.create`.** `assembleM8CreateOptions` forwards
+ * `compiled.agents` to `Agent.create({ agents })`, so declaring a sub-agent through this capability
+ * spawns one.
+ *
+ * That was not true until B-034. `M8CreateOptions` had no `agents` field, `agent-compiler.ts`
+ * recorded the gap as ADR D3 — "a resolver here is carried, not invoked" — and declaring a sub-agent
+ * through this capability compiled cleanly and spawned nothing, while the class crossed the public
+ * barrel alongside `SubagentDefinition`, `discoverSubagents`, `loadSubagentDefinition` and
+ * `listSubagentNames`. A consumer read the barrel, assembled the authoring chain and met silence:
+ * the "the type crossed, the capability did not" shape `bridge/index.ts` names four times by issue
+ * number. The deferral was a decision; the consumer discovering it at runtime was not.
+ *
+ * The children are SDK `AgentDefinition`s (`SubagentDefinition` on the barrel), the same shape the
+ * per-run door `RuntimeOverrides.agents` always took. A per-run value still WINS over this one —
+ * `sdk-adapter.ts` spreads `...m8, ...extra`, and a per-run override that lost to a compile-time
+ * value would be the opposite of what "override" promises.
  */
 export class SubAgentsCapability implements Capability {
   readonly name = 'sub-agents'
@@ -171,6 +208,26 @@ export class SettingSourcesCapability implements Capability {
 export class HookApprovalCapability extends FieldCapability<'hookApproval'> {
   readonly name = 'hook-approval'
   protected readonly field = 'hookApproval' as const
+}
+/**
+ * B-060 — `sessionStore`, the store the SDK resumes from.
+ *
+ * A `FieldCapability` like its neighbours: one field, set once. There is nothing to merge — two
+ * declared stores is a contradiction about where history lives, not a composition.
+ */
+export class SessionStoreCapability extends FieldCapability<'sessionStore'> {
+  readonly name = 'session-store'
+  protected readonly field = 'sessionStore' as const
+}
+/**
+ * B-056 — `canUseTool`, the seam that sees an `ask` verdict.
+ *
+ * A `FieldCapability`: one gate, set once. Two gates would be two answers to one question, and
+ * composing them would mean inventing a precedence nobody declared.
+ */
+export class CanUseToolCapability extends FieldCapability<'canUseTool'> {
+  readonly name = 'can-use-tool'
+  protected readonly field = 'canUseTool' as const
 }
 export class PluginsCapability extends FieldCapability<'plugins'> {
   readonly name = 'plugins'

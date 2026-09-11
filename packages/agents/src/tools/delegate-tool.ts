@@ -28,7 +28,7 @@ import {
   DelegationError,
   type DelegationResult,
 } from '../bridge/delegation-types.js'
-import { GuardrailViolationError } from '../guardrails/index.js'
+import { GuardrailError, GuardrailViolationError } from '../guardrails/index.js'
 
 /**
  * A roster misconfiguration — always raised at factory time, never at the model's first call.
@@ -120,6 +120,19 @@ function errorCodeOf(error: unknown): string | undefined {
   // turn while this tool's own description, shipped to the model, promises `{ ok: false, … }` on a
   // refusal. A guard refusal IS a refusal, so it crosses as one.
   if (error instanceof GuardrailViolationError) return 'guardrail_violation'
+  // B-020 — every OTHER guardrail error, by construction. `MalformedGuardrailResultError` sits in
+  // the same file as the class above, takes the same wrapping, and was not named here: it fell to
+  // the `undefined` arm, was rethrown as a defect, and on the path where `DelegationError` wrapped
+  // it first it crossed as `delegation_failed` — which IS on the message allowlist, so the guard's
+  // name travelled to the model and a guard DEFECT was reported as a failure of the work.
+  //
+  // A distinct code rather than reusing `guardrail_violation`: a guard that is written wrong did not
+  // refuse anything, and telling the model it was refused would be as wrong in the other direction.
+  // Neither code is on `MESSAGE_MAY_CROSS`, so both withhold.
+  //
+  // The base-class arm is what makes a THIRD class covered by its own declaration. A list of two is
+  // how this defect existed.
+  if (error instanceof GuardrailError) return 'guardrail_error'
   return undefined
 }
 

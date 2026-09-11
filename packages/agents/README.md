@@ -90,6 +90,37 @@ shipped the symbol is the answer — every entry names the version it landed in.
 - Web Standards over Node APIs inside `src/` — `Request`/`Response`, `fetch`, `crypto.randomUUID`.
   Node APIs live in adapters.
 
+## Who decides policy
+
+**An operator who did not write the code can impose policy on it.** That is a decision, recorded
+here because it is the one a team evaluating this framework for deployment needs before anything
+else.
+
+It was not always true. Hooks, MCP servers, permissions and skill execution were each a value the
+*programmer* passed at build time — a constructor argument, decided in code, by whoever wrote the
+agent. That is a defensible design for a framework and an indefensible one for anything an
+organisation deploys: it means the person responsible for what an agent may do on a machine has no
+way to say so.
+
+Policy is read from disk, and the layers have a fixed precedence:
+
+| Layer | Who writes it | Wins against |
+|---|---|---|
+| `managed-settings.json` | the operator / the organisation | everything below |
+| `.claude/settings.json`, `.theokit/settings.json` | the project | the code |
+| `defineAgent({ … })` | the programmer | nothing |
+
+A programmer can still decide everything, and in a single-author project nothing above them exists.
+What changed is that they are no longer the *only* one who can.
+
+Two consequences worth stating, because they are the cost:
+
+- A value declared in code can be **overridden by a file the programmer does not control**. That is
+  the point, and it means a build-time guarantee is not one.
+- An operator restriction is refused loudly rather than silently narrowed. A policy that quietly
+  did less than it said would be worse than none — the failure this repository keeps finding under
+  other names.
+
 ## Licence
 
 See `LICENSE`.

@@ -25,7 +25,7 @@ import {
   DelegationError,
 } from '../bridge/delegation-types.js'
 import { debugLog } from '../debug-log.js'
-import { GuardrailViolationError } from '../guardrails/index.js'
+import { GuardrailError } from '../guardrails/index.js'
 
 import type { LoopFinishReason, LoopOutcome, LoopStrategy } from './loop-strategy.js'
 import type { ReflectionContext, ReflectionStrategy } from './reflection-strategy.js'
@@ -206,7 +206,7 @@ async function* consumeRoundOrThrow(
     if (
       err instanceof DelegationBudgetExceededError ||
       err instanceof DelegationError ||
-      err instanceof GuardrailViolationError
+      err instanceof GuardrailError
     ) {
       throw err
     }

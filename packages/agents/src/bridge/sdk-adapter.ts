@@ -15,7 +15,6 @@ import type { AgentDefinition, BudgetTracker, CustomTool, InlineSkill, Interacti
 import type { RetryOptions } from '@theokit/sdk/retry'
 
 import { debugLog } from '../debug-log.js'
-import { runInputGuards, runOutputGuards, type Guardrail } from '../guardrails/index.js'
 import type { ReasoningEffort } from '../types.js'
 import { createRunUsageMeter, type RunUsageMeter } from '../usage/run-usage.js'
 
@@ -25,6 +24,7 @@ import { applyPosture, type ApprovalPosture } from './approval-posture.js'
 import { type AgentDefinition as TheokitAgentDefinition } from './define-agent.js'
 import { type DefinitionOrThunk, resolveProjection } from './definition-or-thunk.js'
 import { type SdkMessage } from './event-translator.js'
+import { withGuardrails, withStepCeiling } from './handle-wrappers.js'
 import { buildModelSelection, contextWindowOf, modelIdOf } from './model-selection.js'
 import { assembleM8CreateOptions, realUsageDone } from './sdk-adapter-create-options.js'
 import { sdkErrorEvent } from './sdk-error.js'
@@ -775,6 +775,35 @@ export type SdkSendOptions = Record<string, unknown>
 export interface SdkAgentHandle {
   readonly agentId: string
   /**
+   * B-062 — a tool-using run that returns schema-validated output.
+   *
+   * The SDK's `agent.generate(input, { output })` "runs the agent's NORMAL tool loop (the user's
+   * tools run first) and then coerces the final answer into a Zod schema". It existed and this
+   * handle did not declare it, so a consumer of `@theokit/agents` could reach it only by importing
+   * `@theokit/sdk` directly — the one thing this layer's doctrine forbids.
+   *
+   * The survey that filed this concluded the capability was absent, having measured `generateObject`
+   * — which is the TOOLLESS path by design: it builds a transient agent whose only tool is the
+   * synthetic output tool. Both paths exist and answer different questions.
+   *
+   * OPTIONAL, because a caller-injected handle (tests, a custom transport) need not implement it,
+   * and requiring it would break every such double to add a method most of them never call.
+   *
+   * BOTH wrappers below forward it. A wrapper that rebuilds the handle silently removes every method
+   * it does not name, and the consumer meets the loss at runtime as "the handle has no `generate`"
+   * after the types said it had one. Each forward is pinned by its own mutation.
+   *
+   * It is NOT put through the output guards, stated rather than assumed: `generate` resolves to a
+   * validated OBJECT and those guards moderate TEXT, so running them over a serialised object would
+   * moderate a shape no guard was written against. Guarding the structured path needs its own
+   * decision about what a redaction means to a schema, and inventing one would be the gate that
+   * reports without gating this module already refuses to build.
+   */
+  readonly generate?: (
+    message: string,
+    options: { output: unknown; [key: string]: unknown },
+  ) => Promise<unknown>
+  /**
    * M91 — era `(msg: string, opts?: unknown) => unknown`.
    *
    * The `unknown` return cost the consumer a whole module: `agents/lib/goal/runner-facade.ts`, 38
@@ -889,57 +918,3 @@ export function toAgentFactory(
  * blocked — it is simply not blocked mid-token. Closing that needs a streaming seam on the handle,
  * which is a change to the served contract and belongs to its own slice.
  */
-/**
- * theokit#363 — carry the declared step ceiling onto the handle {@link toAgentFactory} serves.
- *
- * The streaming path owns its own `send`, so `applyStepCeiling` reaches it directly. This path hands
- * the agent to someone else (ACP, the delegation surfaces) and never sees their `send` call, so the
- * ceiling has to travel as a DEFAULT on the handle. Without it, the same definition capped on
- * `mountAgent` ran uncapped over ACP — the shape of bypass theokit#139 fixed for guardrails.
- *
- * The caller's own `maxIterations` WINS (spread last): a host asking for a different ceiling on one
- * turn is the per-run override this layer already honors for `model` and `reasoningEffort`.
- */
-function withStepCeiling(
-  handle: SdkAgentHandle,
-  maxIterations: number | undefined,
-): SdkAgentHandle {
-  // Nothing declared ⇒ the original handle, untouched — no wrapper, no key, the SDK default stands.
-  if (maxIterations === undefined) return handle
-  return {
-    get agentId() {
-      return handle.agentId
-    },
-    dispose: () => handle.dispose(),
-    send: (msg: string, sendOpts?: SdkSendOptions) =>
-      handle.send(msg, { maxIterations, ...sendOpts }),
-  }
-}
-
-function withGuardrails(
-  handle: SdkAgentHandle,
-  guardrails: readonly Guardrail[] | undefined,
-): SdkAgentHandle {
-  // No guards ⇒ the original handle, untouched. Wrapping unconditionally would put an await on the
-  // hot path of every served agent to enforce an empty list.
-  if (guardrails === undefined || guardrails.length === 0) return handle
-  return {
-    get agentId() {
-      return handle.agentId
-    },
-    dispose: () => handle.dispose(),
-    send: async (msg: string, sendOpts?: SdkSendOptions): Promise<SdkTurnHandle> => {
-      // BEFORE the SDK sees it: a guard that blocks must stop the prompt from reaching the model,
-      // not merely annotate it afterwards.
-      const guarded = await runInputGuards(msg, guardrails)
-      const turn = await handle.send(guarded, sendOpts)
-      return {
-        wait: async () => {
-          const out = await turn.wait()
-          if (out.result === undefined) return out
-          return { ...out, result: await runOutputGuards(out.result, guardrails) }
-        },
-      }
-    },
-  }
-}

@@ -10,6 +10,7 @@ import { createRequire } from 'node:module'
 
 import type { ContextSettings, SkillsSettings, SystemPromptResolver } from '@theokit/sdk'
 import type { MemorySettings } from '@theokit/sdk'
+import { PermissionEngine, PermissionPlugin } from '@theokit/sdk'
 import { TheokitAgentError } from '@theokit/sdk/errors'
 
 import type { McpServersMap } from '../types.js'
@@ -17,6 +18,7 @@ import type { McpServersMap } from '../types.js'
 import type { CompiledAgentOptions } from './agent-compiler.js'
 import type { StreamEvent } from './agent-sse-handler.js'
 import type { AgentStopReason, DoneEvent } from './agent-stream-events.js'
+import { assertCodePlugins } from './code-plugins.js'
 import { compileProjectContext } from './compile-project-context.js'
 import type { ResolvedCompatSource } from './setting-sources-gate.js'
 
@@ -33,12 +35,35 @@ interface M8CreateOptions {
     baseDir?: string
     /** #686 — the pre-spawn approval gate, forwarded to `Agent.create({ local: { hooks } })`. */
     hooks?: HookApprovalGate
+    /**
+     * B-060 — an external session store, forwarded to `Agent.create({ local: { sessionStore } })`.
+     *
+     * Typed loosely here for the same reason its siblings are: this module must not import the SDK's
+     * value side. The shape is enforced one layer up, where `CompiledAgentOptions.sessionStore` IS
+     * the SDK's `SessionStore`.
+     */
+    sessionStore?: unknown
   }
+  /** Code plugins forwarded to `Agent.create({ plugins })`. Narrowed by `assertCodePlugins`. */
   plugins?: readonly unknown[]
   /** #89 — `@MCP` servers forwarded to `Agent.create({ mcpServers })` (the SDK owns execution). */
   mcpServers?: McpServersMap
   /** M49 — durable-memory settings forwarded to `Agent.create({ memory })` (SDK MemorySettings). */
   memory?: MemorySettings
+  /**
+   * B-034 — compiled sub-agents forwarded to `Agent.create({ agents })`.
+   *
+   * This field's ABSENCE was the defect. `SubAgentsCapability` wrote `draft.agents`,
+   * `CompiledAgentOptions.agents` held it, and there was nowhere for it to go — so declaring a
+   * sub-agent through the authoring chain compiled cleanly and spawned nothing, while the
+   * capability and its types crossed the public barrel. ADR D3 deferred the projection; the
+   * deferral is over and `agent-compiler.ts` records why.
+   *
+   * Typed as `Record<string, unknown>` for the same reason the sibling fields are loose here: this
+   * module must not import the SDK's `AgentDefinition` value-side. The shape is enforced one layer
+   * up, where `CompiledAgentOptions.agents` IS `Record<string, SubagentDefinition>`.
+   */
+  agents?: Record<string, unknown>
 }
 
 /**
@@ -288,6 +313,51 @@ function warnIfSdkCannotReadCompatSources(): void {
 }
 
 /**
+ * Both plugin surfaces: the consumer's own code plugins, and the permission plugin a declared
+ * `canUseTool` gate becomes.
+ *
+ * Extracted because adding the gate put `assembleM8CreateOptions` one point over this repository's
+ * complexity limit. The seam is not arbitrary — both write the same `options.plugins` array, and
+ * keeping them apart is exactly how the second would come to REPLACE the first.
+ */
+function applyPlugins(
+  compiled: CompiledAgentOptions,
+  options: M8CreateOptions,
+  applied: string[],
+): void {
+  if (compiled.plugins) {
+    // B-055 — refuse a path-shaped entry here, at the single point every authoring path converges
+    // on. Placing the check on the builder method would miss `defineAgent({ plugins })` and the
+    // capability, which is how the shape reached the runtime unexamined in the first place.
+    assertCodePlugins(compiled.plugins)
+    options.plugins = compiled.plugins
+    applied.push('plugins')
+  }
+  // B-056 — the declared gate, as the permission plugin the SDK reads it through.
+  //
+  // APPENDED, never replacing: a consumer that already registers lifecycle plugins must not have
+  // them silently dropped by declaring a gate. And only when one was declared — installing an empty
+  // permission plugin would gate every `ask` verdict on a callback that does not exist, which the
+  // SDK resolves by blocking. That is strictly worse than the absence it would replace.
+  if (compiled.canUseTool !== undefined) {
+    options.plugins = [
+      ...(options.plugins ?? []),
+      // An engine with NO rules and the SDK's fail-closed default: every call resolves to `ask`,
+      // so every call reaches the gate. That IS "one callback sees every tool call the earlier
+      // steps did not resolve" — there are no earlier steps to resolve one.
+      //
+      // A consumer who also wants rules composes them through the SDK directly; declaring both here
+      // would mean inventing a precedence between a rule set and a gate that nobody stated.
+      PermissionPlugin.create(new PermissionEngine([]), { canUseTool: compiled.canUseTool }),
+    ]
+    applied.push('canUseTool')
+  }
+  // B-034 — the projection ADR D3 deferred. Only when something was declared: writing an empty
+  // `agents: {}` for every agent would hand `Agent.create` a claim ("this agent has children")
+  // that no author made.
+}
+
+/**
  * Project the two config-root fields onto `options.local`.
  *
  * ## M68 — `settingSources` is a projection, not a decision
@@ -321,6 +391,12 @@ function applyLocalSources(
   if (compiled.settingSources !== undefined && compiled.settingSources.length > 0) {
     options.local = { ...options.local, settingSources: [...compiled.settingSources] }
     applied.push('settingSources')
+  }
+  // B-060 — the external session store. Only when declared: an empty `local` block would hand
+  // `Agent.create` a claim about setting sources and a cwd that no author made.
+  if (compiled.sessionStore !== undefined) {
+    options.local = { ...options.local, sessionStore: compiled.sessionStore }
+    applied.push('sessionStore')
   }
   if (compiled.compatSources !== undefined && compiled.compatSources.length > 0) {
     // Narrow FIRST, then gate on what would actually be sent.
@@ -388,9 +464,21 @@ export function assembleM8CreateOptions(
   // merged downstream (`sdk-adapter.ts` overrides.cwd → app root via `mount-agent.ts`); never dropped.
   // Code `Plugin` objects (e.g. `createToolHooksPlugin`) — registered directly by the runtime
   // (`extractCodePlugins`); this is the fluent builder's only route to the SDK lifecycle-hook seam.
-  if (compiled.plugins) {
-    options.plugins = compiled.plugins
-    applied.push('plugins')
+  applyPlugins(compiled, options, applied)
+  // The `!== undefined` guard is REQUIRED, and `no-unnecessary-condition` is wrong about it.
+  //
+  // The rule reasons from the TYPE, where `agents` is non-optional, and concludes the check cannot
+  // fire. It reasons correctly about the wrong thing: callers construct `CompiledAgentOptions`
+  // objects WITHOUT the field — `tests/sdk-adapter-plugins.test.ts` and two integration suites do —
+  // so at runtime it is `undefined` and `Object.keys` throws. Measured: removing the guard turned
+  // five green tests into `TypeError: Cannot convert undefined or null to object`.
+  //
+  // This repository has already paid once for following this exact rule into a behaviour change, on
+  // a security gate. A type-based lint cannot see a value that does not obey its type.
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (compiled.agents !== undefined && Object.keys(compiled.agents).length > 0) {
+    options.agents = compiled.agents
+    applied.push('agents')
   }
   applyLocalSources(compiled, options, applied)
   applyHookApproval(compiled, options, applied, deps.sdkVersion)

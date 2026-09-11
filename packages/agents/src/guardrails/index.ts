@@ -9,6 +9,8 @@ export {
   type GuardrailAction,
   type GuardrailResult,
   type GuardrailPhase,
+  GuardrailError,
+  UnreadableTextPayloadError,
   GuardrailViolationError,
   MalformedGuardrailResultError,
   CostBudgetExceededError,
@@ -26,4 +28,4 @@ export {
   type OutputModerationOptions,
 } from './detectors.js'
 export { runInputGuards, runOutputGuards } from './pipeline.js'
-export { moderateOutputStream } from './stream.js'
+export { moderateOutputStream, textPayloadExtractor } from './stream.js'
