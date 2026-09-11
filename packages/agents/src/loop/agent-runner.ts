@@ -24,7 +24,7 @@ import type { CompiledAgentOptions, CompiledTool } from '../bridge/agent-compile
 import type { StreamEvent } from '../bridge/agent-sse-handler.js'
 import type { DelegationResult } from '../bridge/delegation-types.js'
 import { createSdkAgentStream } from '../bridge/sdk-adapter.js'
-import { moderateOutputStream, runInputGuards } from '../guardrails/index.js'
+import { moderateOutputStream, runInputGuards, textPayloadExtractor } from '../guardrails/index.js'
 import type { MainLoopMeta, ReasoningEffort } from '../types.js'
 
 import {
@@ -290,13 +290,16 @@ export class AgentRunner {
           moderateOutputStream(
             runUnguarded(safe),
             guardrails,
-            (e) =>
-              e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined,
+            // B-021 — the shared extractor, so "this kind, content unreadable" throws instead of
+            // sharing a return value with "not this kind". The hand-written form here returned
+            // `undefined` for a non-string, which reads as "carries no text": the payload was never
+            // shown to a guard and was yielded verbatim.
+            textPayloadExtractor<StreamEvent>('text_delta', (e) => e.content),
             (content) => ({ type: 'text_delta', content }),
             (content, result) => ({ ...result, response: content }),
           ),
           guardrails,
-          (e) => (e.type === 'thinking' && typeof e.content === 'string' ? e.content : undefined),
+          textPayloadExtractor<StreamEvent>('thinking', (e) => e.content),
           (content) => ({ type: 'thinking', content }),
           // The reasoning pass does NOT touch the aggregate — the visible pass already did.
           (_content, result) => result,

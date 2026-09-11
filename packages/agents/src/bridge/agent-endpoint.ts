@@ -16,6 +16,9 @@ import { TheokitAgentError } from '@theokit/sdk/errors'
  * runtime (G2 / sdk-runtime.md); this module only wires its output onto the wire.
  */
 
+import { moderateOutputStream, runInputGuards, textPayloadExtractor } from '../guardrails/index.js'
+import type { Guardrail } from '../guardrails/index.js'
+
 import { type CompiledAgentOptions } from './agent-compiler.js'
 import type { StreamEvent } from './agent-sse-handler.js'
 import type { AgentStreamEvent } from './agent-stream-events.js'
@@ -303,6 +306,79 @@ export function streamAgentUIMessages(
   apiKey: string,
   input: StreamAgentOptions,
 ): AsyncGenerator<UIMessageChunk> {
+  // theokit#725 — the declared guardrails, on the surface a deployed agent is actually reached
+  // through. This function is the ONLY path `mount-agent` (HTTP), `run-terminal-agent` and
+  // `build-agent-streamer` take, and it called `createSdkAgentStream` directly on both its
+  // branches. Guardrails were applied in exactly two other places — `AgentRunner.stream()` and
+  // `withGuardrails`, the latter reached only from `toAgentFactory` — so a
+  // `defineAgent({ guardrails: [...] })` served to a browser ran no input guard, applied no
+  // `redact`, and a `block` never threw.
+  //
+  // Same shape as three defects already closed in this release, one layer up: a safety property
+  // that holds on the path somebody looked at.
+  //
+  // No double-consult: none of this function's callers moderate. `AgentRunner` composes its own two
+  // passes and does not route through here.
+  const guardrails = compiled.guardrails
+  if (guardrails !== undefined && guardrails.length > 0) {
+    return guardedStream(compiled, apiKey, input, guardrails)
+  }
+  return unguardedStream(compiled, apiKey, input)
+}
+
+/**
+ * The guarded wrapper: input guards before the model sees the prompt, output guards over the stream.
+ *
+ * A generator so `runInputGuards` can be awaited BEFORE anything is created — a guard that blocks
+ * must stop the prompt from reaching the model, not annotate it afterwards, and
+ * `streamAgentUIMessages` is synchronous.
+ *
+ * TWO passes over the two text-EVENT kinds, copied from `AgentRunner.stream()` rather than
+ * reinvented, including the reason they are two. NOT one wider `extractText`: two kinds under one
+ * extractor COLLAPSE into a single event, so the model's private reasoning would be promoted into a
+ * visible one and the moderation would create the disclosure it exists to close. The VISIBLE pass is
+ * inner; the reasoning pass must not touch a channel the visible one owns.
+ *
+ * `done.result` and `task_progress.text` are NOT covered here, exactly as they are not in
+ * `AgentRunner` — they need a different mechanism (there is one `done` per round, so a pass keyed on
+ * it would collapse every round's into one) and are tracked separately. Naming them is what keeps
+ * this from claiming a coverage it does not have.
+ */
+async function* guardedStream(
+  compiled: CompiledAgentOptions,
+  apiKey: string,
+  input: StreamAgentOptions,
+  guardrails: readonly Guardrail[],
+): AsyncGenerator<UIMessageChunk> {
+  const safe = await runInputGuards(input.message, guardrails)
+  const inner = moderateOutputStream(
+    unguardedStream(compiled, apiKey, { ...input, message: safe }),
+    guardrails,
+    textPayloadExtractor<UIMessageChunk>('text-delta', (e) => (e as { delta?: unknown }).delta),
+    (delta, replaced) => ({ ...replaced, delta }) as UIMessageChunk,
+    (_text, result) => result,
+  )
+  yield* moderateOutputStream(
+    inner,
+    guardrails,
+    textPayloadExtractor<UIMessageChunk>(
+      'reasoning-delta',
+      (e) => (e as { delta?: unknown }).delta,
+    ),
+    (delta, replaced) => ({ ...replaced, delta }) as UIMessageChunk,
+    (_text, result) => result,
+  )
+}
+
+function unguardedStream(
+  compiled: CompiledAgentOptions,
+  apiKey: string,
+  input: StreamAgentOptions,
+  // `void` as the RETURN type, declared rather than defaulted. `AsyncGenerator<T>` leaves it `any`,
+  // which made `moderateOutputStream`'s `R` an `any` that the identity rebuilder returned — an
+  // honest `no-unsafe-return`. Nothing on this path produces a result to moderate, and saying so
+  // once here is what lets the two call sites infer it instead of writing a type argument each.
+): AsyncGenerator<UIMessageChunk, void> {
   const textId = crypto.randomUUID()
   const overrides: RuntimeOverrides = {}
   // theokit-file-based-config (EC-1) — thread the app-root cwd so the adapter merges it into
