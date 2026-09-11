@@ -129,10 +129,27 @@ export type { DeclaredLayer, LayerValues } from '@theokit/sdk'
  */
 export {
   loadOutputStyle,
+  resolveOutputStyle,
   OutputStyleError,
   type LoadOutputStyleInput,
   type OutputStyle,
 } from './config/output-styles.js'
+
+/**
+ * The settings files the declared layers correspond to, actually opened.
+ *
+ * `SETTINGS_LAYERS` published the precedence stack and nothing read a file — measured with controls,
+ * `settings.local.json` appeared once in this package as a COMMENT and `outputStyle` appeared zero
+ * times in either this package or the SDK's built output. Exported beside the layer declaration so a
+ * consumer who finds one finds the other; finding only the stack is what made three documented
+ * features unreachable.
+ */
+export {
+  loadSettings,
+  type LoadSettingsInput,
+  type LoadSettingsResult,
+  type Settings,
+} from './config/settings-file.js'
 
 export { frontmatterValue, splitFrontmatter, type ParsedFrontmatter } from './config/frontmatter.js'
 
