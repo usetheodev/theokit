@@ -43,6 +43,47 @@ export const APPROVAL_MODES = ['suggest', 'auto-edit', 'full-auto'] as const
 export type ApprovalMode = (typeof APPROVAL_MODES)[number]
 
 /**
+ * The runtime's permission posture each local mode means.
+ *
+ * Two vocabularies described the same axis and never met: this layer offers
+ * `suggest | auto-edit | full-auto` — the values a real consumer put in front of users — while the
+ * runtime resolves `default | plan | acceptEdits | bypass`. A reader of either found no way to the
+ * other, and B-057 measured the consequence: `permissionMode` appeared in exactly one file, as a
+ * mirrored field nothing branches on.
+ *
+ * `suggest` maps to `default`, NOT to something that asks unconditionally: `default` means the rules
+ * decide and an unmatched call asks, so mapping it otherwise would discard every allow rule the
+ * operator shipped.
+ *
+ * `full-auto` maps to `bypass`, which allows everything EXCEPT an explicit deny. That exception is
+ * the load-bearing half — mapping the most permissive local mode onto something that also cleared
+ * denies would turn a UI convenience into a policy override.
+ *
+ * **`plan` has no local counterpart, deliberately.** It is an explore-only posture an OPERATOR
+ * imposes, not something this surface offers, and inventing a fourth local name for it would put a
+ * decision that belongs to the operator into the user's mode picker. The absence is the mapping's
+ * one honest hole, and it is named rather than filled.
+ */
+const PERMISSION_MODE_BY_APPROVAL_MODE = {
+  suggest: 'default',
+  'auto-edit': 'acceptEdits',
+  'full-auto': 'bypass',
+} as const satisfies Record<ApprovalMode, string>
+
+/**
+ * Translate a local approval mode into the runtime's permission mode.
+ *
+ * Typed on `ApprovalMode` so a fourth local mode is a COMPILE error here rather than a silent
+ * fallthrough to a default posture — a map missing an entry reads as deliberate, and a posture
+ * nobody chose is the shape this area keeps producing.
+ */
+export function approvalModeToPermissionMode(
+  mode: ApprovalMode,
+): (typeof PERMISSION_MODE_BY_APPROVAL_MODE)[ApprovalMode] {
+  return PERMISSION_MODE_BY_APPROVAL_MODE[mode]
+}
+
+/**
  * Tools whose writes are bounded by their own write root rather than by the kernel.
  *
  * A CATALOG, not a policy. The names are the SDK factories' defaults (`apply-patch.ts:51`,
