@@ -115,6 +115,25 @@ export {
  */
 export type { DeclaredLayer, LayerValues } from '@theokit/sdk'
 
+/**
+ * B-022 — the output style, resolved and read.
+ *
+ * Exported because a style that only this package can load is a style no consumer can apply, and the
+ * item is precisely about a configured style having no effect. The two earlier omissions in this
+ * slice — `settings-layers.ts` and `credential-helper.ts` — both compiled, were tested, and reached
+ * nobody; a test importing a module is not a consumer.
+ *
+ * Composing the text into the prompt stays with `composeInstructions` above: it owns the character
+ * budget and the drop report, and a style pushed past the ceiling must be reported through the same
+ * path as every other source.
+ */
+export {
+  loadOutputStyle,
+  OutputStyleError,
+  type LoadOutputStyleInput,
+  type OutputStyle,
+} from './config/output-styles.js'
+
 export { frontmatterValue, splitFrontmatter, type ParsedFrontmatter } from './config/frontmatter.js'
 
 export {

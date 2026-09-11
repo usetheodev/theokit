@@ -55,13 +55,29 @@ export interface OperatorPolicy {
    * refuses everything.
    */
   allowedMcpServers?: readonly string[]
+  /**
+   * B-069 — a command that prints a credential on stdout, re-run whenever one is needed.
+   *
+   * An operator whose tokens rotate had no seam at all: a long-running agent failed mid-run and the
+   * only answer was a restart with a fresh environment variable. This is declared HERE rather than
+   * on `defineAgent` for the reason B-065 records — the person answerable for what runs on a machine
+   * is frequently not the person who wrote the code, and a command that mints a secret is the most
+   * operator-shaped thing in the system.
+   *
+   * Run by {@link runCredentialHelper}, which bounds it with a timeout and refuses an empty result.
+   */
+  apiKeyHelper?: string
 }
 
 const KNOWN_KEYS = new Set<keyof OperatorPolicy>([
   'disableSkillShellExecution',
   'deniedMcpServers',
   'allowedMcpServers',
+  'apiKeyHelper',
 ])
+
+/** Keys whose value is a single command line. A non-string is refused rather than coerced. */
+const STRING_KEYS = new Set<keyof OperatorPolicy>(['apiKeyHelper'])
 
 /** Which keys are boolean and which are string lists — a value of the wrong shape is refused. */
 const LIST_KEYS = new Set<keyof OperatorPolicy>(['deniedMcpServers', 'allowedMcpServers'])
@@ -165,6 +181,21 @@ function applyPolicyKey(
     if (list === undefined) return
     if (key === 'deniedMcpServers') out.deniedMcpServers = list
     if (key === 'allowedMcpServers') out.allowedMcpServers = list
+    return
+  }
+  if (STRING_KEYS.has(key)) {
+    // Not coerced. `String(['/bin/x'])` is `/bin/x` and `String({})` is `[object Object]`; both
+    // would be RUN, and the second as a command that cannot exist. A declaration of the wrong shape
+    // is an operator's mistake, and the only useful response is to name it.
+    if (typeof value !== 'string' || value.trim().length === 0) {
+      warn(
+        `${path} declares "${key}" as ` +
+          `${typeof value === 'string' ? 'an empty string' : typeof value}, ` +
+          `not a command line — it is NOT being applied.`,
+      )
+      return
+    }
+    if (key === 'apiKeyHelper') out.apiKeyHelper = value.trim()
     return
   }
   if (typeof value !== 'boolean') {
