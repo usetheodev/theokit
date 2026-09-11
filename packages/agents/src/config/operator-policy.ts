@@ -39,6 +39,26 @@ export interface OperatorPolicy {
    */
   disableSkillShellExecution?: boolean
   /**
+   * Refuse every hook declared under a foreign configuration root.
+   *
+   * B-042. `.claude/hooks.json` runs shell commands out of a working directory that usually arrived
+   * with the clone, and until this key existed an operator who inherited an untrusted checkout could
+   * not decline hook execution without editing files in it. `resolveCompatSources` reads this and
+   * drops the `hooks` surface from what it grants.
+   *
+   * ## It fails CLOSED, unlike every other key here
+   *
+   * The others ignore a value of the wrong shape and warn. For this one that is fail-OPEN: an
+   * operator who writes `"true"` as a string would get hooks running while believing they were off.
+   * The asymmetry decides it — fail-open is silent and unsafe, fail-closed is loud and recoverable:
+   * hooks stop, somebody notices, the typo is fixed. For a control whose purpose is refusing,
+   * failing toward the refusal is the only direction where the failure announces itself.
+   *
+   * An ABSENT key is not a malformed one and still means "hooks run": most machines have no operator
+   * tier, and refusing by default would remove hooks nobody asked to remove.
+   */
+  disableAllHooks?: boolean
+  /**
    * Servers from a project `.mcp.json` that may NOT start, by name.
    *
    * Deny wins over {@link OperatorPolicy.allowedMcpServers}. A server named in both is a
@@ -71,6 +91,7 @@ export interface OperatorPolicy {
 
 const KNOWN_KEYS = new Set<keyof OperatorPolicy>([
   'disableSkillShellExecution',
+  'disableAllHooks',
   'deniedMcpServers',
   'allowedMcpServers',
   'apiKeyHelper',
@@ -198,11 +219,43 @@ function applyPolicyKey(
     if (key === 'apiKeyHelper') out.apiKeyHelper = value.trim()
     return
   }
-  if (typeof value !== 'boolean') {
-    warn(`${path} declares "${key}" as ${typeof value}, not a boolean — it is NOT being applied.`)
+  applyBooleanKey(out, key, value, path, warn)
+}
+
+/**
+ * Apply one boolean key, or explain why it was not applied.
+ *
+ * Split out of `applyPolicyKey` because adding `disableAllHooks` — whose malformed-value branch is a
+ * decision rather than a fallthrough — put that function over this repository's cognitive-complexity
+ * limit. The same split, for the same reason, as the one between `readOperatorPolicy` and
+ * `readPolicyDocument` above: "is there a document?" and "what does this key mean?" are two
+ * questions, and so are "what shape is this value?" and "what does this key do when it is wrong?".
+ */
+function applyBooleanKey(
+  out: OperatorPolicy,
+  key: keyof OperatorPolicy,
+  value: unknown,
+  path: string,
+  warn: (message: string) => void,
+): void {
+  if (typeof value === 'boolean') {
+    if (key === 'disableSkillShellExecution') out.disableSkillShellExecution = value
+    if (key === 'disableAllHooks') out.disableAllHooks = value
     return
   }
-  if (key === 'disableSkillShellExecution') out.disableSkillShellExecution = value
+  // `disableAllHooks` is the one key that does NOT fall back to "not applied". See its docblock: for
+  // a refusal control, ignoring a malformed value means the refusal silently does not happen, which
+  // is precisely the failure the key exists to prevent.
+  if (key === 'disableAllHooks') {
+    out.disableAllHooks = true
+    warn(
+      `${path} declares "disableAllHooks" as ${typeof value}, not a boolean. It is being read as ` +
+        `TRUE — hooks are refused — because a security switch that silently fails open is worse ` +
+        `than one that fails visibly. Write \`true\` or \`false\` to say which you meant.`,
+    )
+    return
+  }
+  warn(`${path} declares "${key}" as ${typeof value}, not a boolean — it is NOT being applied.`)
 }
 
 /**
