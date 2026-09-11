@@ -7,6 +7,7 @@ import { type Stats, readFileSync, readdirSync, statSync } from 'node:fs'
 import { extname, join, relative } from 'node:path'
 
 import type { ResolvedCompatSource } from '../bridge/setting-sources-gate.js'
+import { reportUnloadedSurfaces } from '../bridge/unloaded-surfaces.js'
 
 /**
  * The narrowed half of `ResolvedCompatSource`, split out because the union's other half is the
@@ -168,6 +169,29 @@ function declaresCommands(sources: LoadCustomCommandsInput['compatSources']): bo
  * to COUNT what it skipped — must agree on the answer, and because a list is easier to be right
  * about than a branch repeated twice.
  */
+/**
+ * Does the caller declare the foreign dialect AT ALL — bare or narrowed?
+ *
+ * Deliberately broader than `declaresCommands`, and the difference is the point. That predicate asks
+ * whether the COMMANDS directory was granted; this one asks whether the consumer opted into the
+ * dialect, because `workflows` is not a `CompatSurface` and can never appear in a narrowed `import`
+ * list. Reusing the narrower predicate would report the unloaded surface only to consumers who
+ * happened to ask for commands, which is the arbitrary half of a silence rather than its removal.
+ */
+function declaresClaudeCode(sources: LoadCustomCommandsInput['compatSources']): boolean {
+  return (
+    sources?.some(
+      (source) =>
+        // The narrowed form IS a declaration of this dialect by construction — its `kind` is the one
+        // literal, which is why `declaresCommands` does not re-check it either and why the
+        // `NarrowedCompatSource` docblock says a second dialect must revisit both. Comparing it here
+        // would be a runtime check the type already makes, and `no-unnecessary-condition` is right
+        // about that: the type is not lying, there is exactly one dialect.
+        typeof source !== 'string' || source === CLAUDE_CODE_SOURCE,
+    ) === true
+  )
+}
+
 function projectCommandDirs(input: LoadCustomCommandsInput): string[] {
   if (input.projectDir === undefined) return []
   const dirs: string[] = []
@@ -218,6 +242,17 @@ function mergeProjectCommands(
 export function loadCustomCommands(input: LoadCustomCommandsInput): CustomCommandsResult {
   const warn = input.onWarn ?? IGNORE_WARNING
   const loaded = new Map<string, CustomCommand>()
+
+  // B-027 — the surfaces of this dialect that are present and deliberately NOT loaded. Reported
+  // here because this is where a consumer opts into `.claude/`, and the docblock on
+  // COMPAT_COMMANDS_DIR above already says why it matters: a partial dialect is worse than none,
+  // since whoever watched the other surfaces work has no reason to suspect the missing one.
+  //
+  // Before the trust branch on purpose: "we did not run your workflows" holds either way, and the
+  // consumer auditing an untrusted repository is the one most entitled to know what is in it.
+  if (input.projectDir !== undefined && declaresClaudeCode(input.compatSources)) {
+    reportUnloadedSurfaces({ cwd: input.projectDir, onWarn: warn })
+  }
 
   // User first, project second: the later write wins the map, which is the precedence.
   if (input.homeDir !== undefined) {
