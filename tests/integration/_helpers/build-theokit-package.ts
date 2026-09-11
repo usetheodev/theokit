@@ -60,8 +60,18 @@ import {
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { tmpdir, userInfo } from 'node:os'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = resolve(__dirname, '../../..')
+/**
+ * Derived from `import.meta.url`, not from `__dirname`.
+ *
+ * vitest injects `__dirname` into the modules it transforms, so this file worked inside the runner
+ * and threw `ReferenceError: __dirname is not defined in ES module scope` the moment anything else
+ * imported it — which is what `scripts/ensure-theo-dist.ts` does, and the reason that script exists.
+ * A helper that only runs under one loader is a helper the build gate cannot reuse.
+ */
+const HERE = dirname(fileURLToPath(import.meta.url))
+const ROOT = resolve(HERE, '../../..')
 const DIST = resolve(ROOT, 'packages/theo/dist')
 const INDEX_DTS = resolve(DIST, 'index.d.ts')
 /**

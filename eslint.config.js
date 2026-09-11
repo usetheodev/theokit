@@ -383,9 +383,14 @@ export default tseslint.config(
   {
     files: [
       '**/*.config.{ts,mts,cts,js,mjs,cjs}',
-      // Only `packages/*/scripts/**`, and only because of `generate-reexports.mts`. The root
-      // `scripts/**` entry was dropped along with the directory itself.
+      // `packages/*/scripts/**` for `generate-reexports.mts`, and the ROOT `scripts/**` because
+      // that directory came back and this comment did not notice: it said the entry "was dropped
+      // along with the directory itself" while `scripts/` holds 21 files, `.mjs` and `.ts` alike.
+      // Restored 2026-09-11, when adding `scripts/ensure-theo-dist.ts` made the pre-commit hook
+      // refuse a file the project service could not parse — a stale claim caught by the gate it
+      // had quietly stopped covering.
       'packages/*/scripts/**/*.{ts,mts,js,mjs}',
+      'scripts/**/*.{ts,mts,js,mjs}',
       '**/tsup.config.ts',
     ],
     rules: {

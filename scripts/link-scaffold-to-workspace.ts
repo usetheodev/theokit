@@ -1,7 +1,12 @@
-/* eslint-disable security/detect-non-literal-fs-filename --
-   Every path here is built from this repository's own root plus a directory the developer typed
-   into `pnpm try:scaffold`. There is no untrusted input in this script: it is a local harness that
-   runs from a package.json script, never from a request. */
+/*
+   `security/detect-non-literal-fs-filename` used to be disabled here, with the reasoning that every
+   path is built from this repository's own root plus a directory the developer typed into
+   `pnpm try:scaffold` — no untrusted input, a local harness run from a package.json script.
+
+   The reasoning still holds; the directive does not. `scripts/**` is now in eslint.config.js, which
+   turns that rule off for this whole directory, so the file-level disable became provably unused —
+   and had never been checked at all, because the directory sat outside the lint config until
+   2026-09-11. */
 /**
  * Point a scaffolded app at THIS working tree instead of at npm.
  *
