@@ -102,6 +102,19 @@ export {
   type SettingsLayer,
 } from './config/settings-layers.js'
 
+/**
+ * The two SDK types `settingsLayerChain` speaks, re-exported so a consumer can NAME what it returns.
+ *
+ * `settingsLayerChain` hands back `LayerValues[]` and `SETTINGS_LAYERS` is a `DeclaredLayer[]`. Both
+ * types live in `@theokit/sdk`, and a consumer holding the result could not write its type down
+ * without adding a second dependency on a package they may not have imported — so the door opened
+ * onto a value nobody could store in a typed variable.
+ *
+ * `every-public-type-crosses-the-barrel.test.ts` caught it, which is the fifth time this package has
+ * paid for the same shape: a type crosses an exported signature and the name behind it does not.
+ */
+export type { DeclaredLayer, LayerValues } from '@theokit/sdk'
+
 export { frontmatterValue, splitFrontmatter, type ParsedFrontmatter } from './config/frontmatter.js'
 
 export {
