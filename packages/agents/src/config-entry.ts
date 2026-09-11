@@ -144,6 +144,22 @@ export {
  * consumer who finds one finds the other; finding only the stack is what made three documented
  * features unreachable.
  */
+/**
+ * A settings `permissions` block, as rules the SDK's `PermissionEngine` evaluates.
+ *
+ * Exported beside `loadSettings` because the two are one mechanism: the file says what is denied and
+ * the engine enforces it, and until this existed nothing joined them. `unsupported` travels with the
+ * rules on purpose — an entry that could not be rendered faithfully is REPORTED and excluded, never
+ * turned into a matcher that almost fires, because a `deny` the operator believes is in force and is
+ * not is worse than no rule at all.
+ */
+export {
+  permissionRulesFromSettings,
+  type PermissionTranslation,
+  type PermissionsBlock,
+  type UnsupportedPermissionEntry,
+} from './config/settings-permissions.js'
+
 export {
   loadSettings,
   type LoadSettingsInput,

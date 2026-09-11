@@ -45,6 +45,21 @@ const SETTINGS_SCHEMA = z.looseObject({
   outputStyle: z.string().optional(),
   /** Environment variables for the session. */
   env: z.record(z.string(), z.string()).optional(),
+  /**
+   * Tool permissions, as `settings-permissions.ts` translates them into `PermissionRule[]`.
+   *
+   * Typed here rather than left to the passthrough because the passthrough yields `unknown`, and a
+   * consumer would have to cast to reach it — a cast is where a wrong shape stops being checked. The
+   * SAFETY of this key depends on the translator seeing what the operator actually wrote.
+   */
+  permissions: z
+    .object({
+      allow: z.array(z.string()).optional(),
+      deny: z.array(z.string()).optional(),
+      ask: z.array(z.string()).optional(),
+    })
+    .loose()
+    .optional(),
 })
 
 export type Settings = z.infer<typeof SETTINGS_SCHEMA>
