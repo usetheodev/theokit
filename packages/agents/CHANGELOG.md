@@ -1,5 +1,297 @@
 # @theokit/agents
 
+## 13.0.0-next.13
+
+### Minor Changes
+
+- 6b07960: New `grantGate(store, classify)` in `@theokit/agents/auth` — the supported way to put a
+  `PermissionStore` in force.
+
+  The store shipped with a careful grant key, a "deny by default, always" docblock and no reader.
+  Measured: `isGranted` had zero callers outside its own unit test, and `PermissionStore` appeared in
+  zero files across six sibling repositories. An operator reading `.theokit/tool-permissions.json` to
+  learn what an agent may run was reading a control that was not in force — a grant and its revocation
+  produced identical behaviour.
+
+  `grantGate` adapts the store to `pre_tool_call`, which is documented as the only hook with veto
+  power and runs before the tool by construction, so a refusal is a refusal before the side effect. No
+  new gate and no framework wiring: nothing is enforced unless a consumer attaches the handler, and an
+  agent that does not is unaffected.
+
+  `classify` returns `{ governed: true, query }` **or** `{ governed: false }` — a tagged union whose
+  BOTH arms carry the discriminant. A bare `undefined` would say "this tool needs no permission" and
+  "I forgot this tool" in the same word, and on a security gate the second must not silently pass.
+
+  The discriminant is on both arms because the first shape — discriminated by whether a `governed` KEY
+  was present — **failed open**: a consumer writing a policy record `{ governed: true, scope }` and
+  spreading it into the query got the tool waved through, and so did `governed: undefined`. TypeScript
+  does not stop that; excess properties pass freely through a variable or a spread. Fail-closed is now
+  measured across `true` / `undefined` / `false` / `null`, and only `false` passes.
+
+  Named `grantGate`, not `permissionGate`, because `@theokit/sdk` already exports `PermissionGate`,
+  `PermissionGateContext`, `PermissionGateDecision`, `PermissionEngine` and `PermissionPlugin`. The
+  rename also says something true: this gates on a standing grant the operator made, and the SDK's
+  permission engine is a separate system — neither satisfies the other.
+
+  A classifier that throws DENIES, naming the throw, rather than ending the turn. A corrupt store
+  denies with a message that says so — "the permission store could not be read, so no grant applies" —
+  distinct from "no standing grant matches", so an operator can tell the two apart.
+
+  The read error's own text is deliberately NOT in that message: the veto travels to the model, and
+  `lastReadError.message` carries the absolute store path and its file mode. It stays on
+  `store.lastReadError` for the operator, which is where the actionable remedy (`chmod 600 …`) lives.
+  The scope IS still interpolated, so this narrows the exposure rather than eliminating it.
+
+  **Composing with a `pre_tool_call` you already have**: the field is singular, so assigning the gate
+  over an existing handler loses one of the two silently. Compose explicitly —
+  `async (ctx) => (await gate(ctx)) ?? (await mine(ctx))`; first veto wins.
+
+  `PermissionStore`'s docblock now states that the class enforces nothing on its own, and records the
+  precedence among the surfaces IN THIS PACKAGE that can refuse a tool — saying plainly that the list
+  is not exhaustive, because `@theokit/sdk` has its own permission system that neither knows about
+  these nor is known by them.
+
+- 5211721: `moderateOutputStream` now delivers the redacted text to the client instead of computing it and
+  replaying the original events.
+
+  It called `runOutputGuards` and discarded the return value, so a guard that redacted correctly had
+  its work thrown away: measured against the built artifact, a guard returning `[REDACTED]` delivered
+  `sk-abc123`. Only `block` reached the client honestly.
+
+  **Signature change**: `moderateOutputStream` takes a fourth argument,
+  `rebuildText: (text: string, replaced: E) => E`, which builds one event carrying the
+  moderated text, given the text-carrying event it replaces. It is required rather than optional —
+  optional would let the function compute a redaction it cannot apply, which is the defect being
+  removed. Only the caller knows how to construct its own events.
+
+  **`extractText` MUST match exactly one event kind.** When it matches several, they COLLAPSE INTO
+  ONE — measured: `[thinking('CoT: the key is sk-abc'), message(' Here you go.')]` yields a single
+  `message` reading `"CoT: the key is [R] Here you go."`, with no `thinking` event surviving. A
+  consumer who wants reasoning moderated runs a SECOND pass over that kind rather than widening one
+  extractor.
+
+  `replaced` does not prevent that collapse, and an earlier draft of this entry said it did. What it
+  buys is narrower: the surviving event keeps the KIND and metadata of the text-carrying event it
+  replaces, instead of being rebuilt from the text alone. `replaced` is ALWAYS the event being replaced.
+  It was typed `E | undefined` for a case that cannot happen — a stream where no event carried text
+  returns from the absence check before the guards run, so `rebuildText` is not reached at all. It is
+  also never a non-text event, because a caller spreading one would emit a duplicate of it.
+
+  **Second signature change**: a fifth argument, `rebuildResult: (text, result) => R`, applies the
+  moderated text to the generator's RETURN value. A stream has two channels and the first release of
+  this fix moderated one: the events were redacted while `step.value` — the aggregate `run()` returns
+  — still carried the original text. Measured: the guard computed `"the key is [R]"` and
+  `run().response` was `"the key is sk-abc123"`, so **`run()`, the primary non-streaming API, kept
+  delivering the secret**. That was this fix's own defect one channel over. Required for the same
+  reason `rebuildText` is; passed rather than re-derived, because re-running the guards on the
+  aggregate would apply a non-idempotent guard twice.
+
+  When the text is unchanged, the buffered events are replayed verbatim as before. When it changed,
+  the **last** text-carrying event is REPLACED by a newly built event carrying the whole moderated
+  string, and the earlier text events are dropped. Events carrying no text are never dropped. Note
+  "replaced", not "modified": any non-text payload the surviving event carried is lost, as is that of
+  the dropped ones — a consumer whose text events carry per-event metadata should moderate one kind
+  only, or rebuild from `replaced`. An event whose extracted text is the EMPTY STRING is still
+  text-carrying and can be the one replaced.
+
+  **Known consequence:** when text events straddle a non-text event, their relative order does not
+  survive a redaction. Given `text('tok ') , tool_call , text('sk-abc')` the client now receives
+  `tool_call , text('tok [R]')` — text that preceded the tool call follows it. Landing on the last
+  text-carrying event keeps a trailing terminator in place and keeps any completion claim after the
+  work that produced it; what it cannot keep is the interleaving, because the redaction is about the
+  whole string and the boundaries are gone by the time it exists. A test pins this so it is found
+  here rather than in a transcript that stopped making sense.
+
+  A guard that rewrites **unconditionally** — a disclaimer appender, a trim, an NFC normaliser —
+  takes this path on every stream that DOES carry text. The cost is not proportional to how much the
+  guard changed. It does NOT add a text event to a round that produced none — this entry claimed so,
+  and the absence check refuses it: a tool-only round yields its tool call and nothing else.
+
+- 98b2565: `resolveSettingSources` now returns `readonly GatedSettingSource[]`, and
+  `CompiledAgentOptions.settingSources` takes that type — so a setting root no `TrustPosture`
+  authorised no longer fits the field.
+
+  `define-agent.ts` claimed that field "can only ever hold roots that some posture authorized".
+  Measured against the emitted `.d.ts`: `setOnce(draft, 'settingSources', ['mdm','team','user','plugins'], 'cap')`
+  typechecked **cast-free**. Writing a `Capability` is the documented way to extend the builder, and a
+  capability writes the draft directly — so the gate was reachable around, for `project`, the root it
+  exists to protect.
+
+  A brand rather than a runtime check, because the obvious runtime check does not work: reading
+  `draft.provenance` to refuse a capability's write would also refuse the LEGITIMATE builder path,
+  which writes through `setOnce` too. What differs is where the value came from, and that is what a
+  brand carries.
+
+  **It refuses the accident, not the determined caller** — `as never` defeats it, like every brand.
+  Saying so is the point: the comment it replaces claimed an invariant nothing enforced.
+
+  **New: `settingSources.plugins`**, taking the same `ProjectSettingsGrant` as `project`.
+  `PluginsManager.refresh` loads executable bundles from the same cwd-controlled tree, usually
+  arriving with the clone, so it gets the same gate and not a weaker one. This is the root the SDK
+  genuinely reads and the facade withheld.
+
+  `team` and `mdm` stay absent, and that is the item's original premise dying under measurement: the
+  SDK never reads them — `includesSetting` is called with exactly `"project"` and `"plugins"` — so
+  forwarding them would be a capability in the type and nothing at runtime.
+
+  **Migration**: a consumer constructing `CompiledAgentOptions` by hand must build roots through
+  `resolveSettingSources` instead of a string array. That is the supported construction and always was.
+
+  **Also: a narrowed `claudeCode.import` is now REFUSED on an SDK that cannot read it.**
+
+  That field's docblock said the narrowed form was "refused at resolve time" below `@theokit/sdk`
+  5.4.0. Nothing read a version for it — the only checks in this layer are the hook gate (a different
+  option) and a `compatSources` warning that returns silently for any major ≥ 5. So on
+  5.0.0 ≤ SDK < 5.4.0, inside this package's declared `^4.52.1 || ^5.0.0`, a narrowed `import` was
+  forwarded, dropped by the runtime in silence, and the foreign root was **not read at all** — a
+  consumer asking for "the skills but not the hooks" got nothing, which is further from what they
+  asked for than the un-narrowed form. `compatSources` landed in 5.0.0 and the narrowing in 5.4.0;
+  treating the two versions as one was the defect.
+
+  `CompatImportUnsupportedError` now refuses, naming both versions and what would otherwise happen.
+  It refuses rather than warns because a silent nothing is discovered by wondering why a skill is
+  missing. An unreadable version is refused too: "cannot tell" and "is supported" must not collapse.
+
+  **And `commands` is subtracted before the compat sources reach the SDK.** The two vocabularies
+  diverge by one name on purpose — `.claude/commands/*.md` is read by this package and never by the
+  SDK — and `setting-sources-gate.ts` prescribed the subtraction as advice to consumers while the
+  projection that needed it did not do it. Measured: `import: ['commands']` forwarded a list
+  containing zero names the SDK defines, which is its own empty-list case — the exact ambiguity
+  `resolveCompatSources` refuses one layer up. A source whose surfaces all belong to this layer
+  is now dropped from the SDK's list rather than sent empty.
+
+  `CompatImportUnsupportedError` is exported from `@theokit/agents/bridge`, so a consumer can catch the
+  refusal by class rather than by matching its message.
+
+- 2bc5d84: `delegate()` now applies the guardrails its spec declares. It accepted them and never consulted them.
+
+  Measured against the built artifact with a guard declaring both halves: the input reached the model
+  with its injection intact and the caller received `sk-abc123`. `bridge/agent-orchestrator.ts`
+  contained **zero** occurrences of `guardrail` — control on the same sweep: `loop/agent-runner.ts`
+  has 9 — and called `runReflectiveLoop` bare. The operator had declared guardrails and the run was
+  green.
+
+  This is the same defect class as the streamed-redaction fix in this release, on a sibling public
+  API, and it is model-reachable: `tools/delegate-tool.ts` wraps `delegate()`, so an agent can invoke
+  a sub-agent whose declared guards do nothing.
+
+  `checkInput` runs after `onDelegationStart` and `checkOutput` after `onDelegationComplete` — each
+  moderating what actually crosses the boundary rather than a string a hook may then rewrite. A
+  blocking input guard throws before the model is called at all, so a refused delegation costs
+  nothing.
+
+  `response` only. `toolCalls[].output` is tool output rather than model text, and `agent-runner.ts`
+  excludes it from `extractText` on the same reasoning; the docblock says so, because leaving it alone
+  should be a decision somebody reads rather than an omission somebody discovers.
+
+  A spec declaring no guardrails behaves byte-identically.
+
+  **A guardrail block now crosses the delegate tool as a refusal, not a crash.** `errorCodeOf` mapped
+  only the three delegation errors, so `GuardrailViolationError` — reachable from `delegate()` for the
+  first time because of this change — hit the "not a delegation outcome, a defect" arm and was
+  rethrown, ending the parent's turn. The tool's own description, shipped to the model, promises
+  `{ ok: false, error, message }` on a refusal.
+
+  It crosses as `guardrail_violation` with a FIXED message: `the delegated task was refused by a
+policy guard`. The message travels only for codes on an explicit ALLOWLIST — a budget or a timeout
+  is a fact about the work, and the number in it is what the model acts on. A code nobody lists
+  withholds, so forgetting is safe in the direction that matters. A guardrail message is not — it reads
+  `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and its exact trigger, and a
+  model given that learns which words to avoid rather than that it should stop. The operator keeps the
+  full typed error, which carries `guardName`, `phase` and `reason`.
+
+- 019f828: Output guards now moderate `thinking` events, not only `text_delta`.
+
+  `AgentRunner` handed `moderateOutputStream` an extractor matching `text_delta` and nothing else,
+  while `thinking` is a public `AgentStreamEvent` that reaches the client like any other. Measured: a
+  guard declared over the agent's output delivered `thinking "the key is sk-abc123"` verbatim.
+
+  **This closes one channel and does not close all of them.** `DoneEvent.result` carries the model's
+  whole answer and is still unmoderated — measured on the same turn, `text_delta` came out
+  `"here: [R]"` while `done.result` came out `"here: sk-abc123"`. `task_progress.text` is a fourth and
+  reaches the web wire. A third pass does not extend to them: there is one `done` per round, so a pass
+  keyed on it would collapse every round's into one, and they need a different mechanism. Tracked
+  separately; stated here because a security note that overstates its coverage is worse than one that
+  does not exist.
+
+  The third channel of a shape fixed twice already in this release — a streamed redaction that was
+  computed and discarded, and `delegate()` consulting no guards at all.
+
+  **Two passes, not one wider extractor.** Widening `extractText` to match both kinds is the obvious
+  move and the wrong one: two kinds under one extractor COLLAPSE into a single event, so the reasoning
+  would be promoted into a visible one — the moderation creating the disclosure it exists to close.
+  Composing two passes is what `moderateOutputStream`'s own docblock prescribes, and each pass seeing
+  one kind is what keeps them apart.
+
+  The visible pass owns the aggregate: `DelegationResult.response` accumulates from `text_delta`
+  upstream, so the reasoning pass passes the result through rather than replacing it.
+
+  A blocking guard on either channel still throws before any event is emitted. An agent with no output
+  guard is byte-identical.
+
+- 0731584: `resolveCompatSources` now returns `readonly GatedCompatSource[]`, and
+  `CompiledAgentOptions.compatSources` takes that type — so a compat source no `TrustPosture`
+  authorised no longer fits the field.
+
+  **BREAKING for hand-built compiled options**, exactly as its sibling was. Build compat sources
+  through `resolveCompatSources`.
+
+  The twin of the `settingSources` brand, and it exists because that fix closed one of the two fields
+  one `SettingSourcesSelection` feeds and left the other bare. Measured, with the `settingSources`
+  route as the control: the control errored, and `setOnce(draft, 'compatSources', ['claude-code'],
+'cap')` compiled cast-free — while `agent-compiler.ts` told the reader that field "can only hold a
+  source some posture granted".
+
+  It carries more authority than its twin, not less. `applyLocalSources` forwards it to
+  `Agent.create({ local: { compatSources } })`, which reads `<cwd>/.claude/` — `hooks.json` included,
+  and that executes shell.
+
+  **Signature narrowing**: `moderateOutputStream`'s `rebuildText` is now
+  `(text: string, replaced: E) => E`. It was typed `E | undefined` for a case that cannot happen — a
+  stream where no event carried text returns from the absence check before the guards run, so
+  `rebuildText` is never reached. The branch handling that case was dead code, and three shipping
+  artifacts described it as live.
+
+  **Fixed**: `isPort` discriminated on the presence of `run`, so an object carrying both `compiled`
+  and a `run` — reachable through a spread, which is how targets are built in practice — took the port
+  branch and skipped `delegate()` entirely: no declared guardrails, no inherited parent veto, no
+  budget clamp. A tie now goes to the spec, because the spec branch is the guarded one.
+
+### Patch Changes
+
+- bb0f451: A guardrail refusal thrown inside a round is no longer renamed into a delegation failure.
+
+  `runReflectiveLoop` wrapped any error that was not already a delegation error into
+  `DelegationError`, whose message reads `Delegation to agent "X" failed: ${cause.message}`. That code
+  is on the delegate tool's message allowlist — a delegation failure's text is a fact about the work —
+  so the wrapper carried the guard's own words to the model: `Guardrail "pii-detector" blocked output:
+ssn found`, naming the guard and its exact trigger.
+
+  Measured through `createDelegateTool` with a consumer-supplied `streamFactory` that throws
+  mid-round. `streamFactory` is a public option, so this was reachable rather than theoretical.
+
+  `GuardrailViolationError` now passes through as itself, alongside the two delegation errors that
+  already did, so the tool classifies it `guardrail_violation` and withholds the message.
+
+  Fixed by classification rather than by suppressing text downstream: a guard refusal is not a
+  delegation failure, and a layer that renames an error cannot be expected to maintain a list of what
+  the new name must hide.
+
+- ac29eff: A permission-gate veto now emits a debug line.
+
+  `grantGate` refused and emitted nothing — no log, no counter, no debug line. An operator could
+  observe the refusal only through the tool result the model received, and the two causes the veto
+  message distinguishes ("no standing grant matches" versus "the permission store could not be read,
+  so no grant applies") are indistinguishable from there.
+
+  That is pillar 3 of the wiring triad missing on a refusal seam. `bridge/approval-posture.ts`, the
+  sibling gate, already logged through this exact seam.
+
+  The QUERY is logged — tool, scope, and which of the two causes fired — and the grant is not: a query
+  names what an operator needs to diagnose, while the store's contents are the thing being protected.
+  A classifier that threw logs as its own event rather than as an ordinary veto, so a consumer-code
+  defect is not read as a denied tool.
+
 ## 13.0.0-next.12
 
 ### Minor Changes
