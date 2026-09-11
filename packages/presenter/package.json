@@ -1,6 +1,6 @@
 {
   "name": "@theokit/presenter",
-  "version": "0.9.0-next.0",
+  "version": "0.9.0",
   "description": "TheoKit's presentation layer — the canonical AgentOutputEvent + Presenter Strategy that turns @theokit/sdk agent output into any surface (web UIMessageStream, terminal ANSI, JSON API) from ONE normalized event.",
   "repository": {
     "type": "git",

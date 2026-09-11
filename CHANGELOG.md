@@ -6,7 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [@theokit/agents 13.0.0, create-theokit 2.0.0, @theokit/http 2.1.0, @theokit/presenter 0.9.0, @theokit/tauri 1.0.0, theokit 0.65.0] - 2026-09-11
+
 ### Added
+
+- **A configured output style is applied.** `loadOutputStyle` from `@theokit/agents/config` reads
+  `.claude/output-styles/*.md` from the project and the home directory, project winning. Measured
+  before: 0 files mentioned output styles anywhere, against a control of 26 for `skills` — so an
+  author could write a style, select it, and never learn whether it was wrong or simply unread. A
+  named style with no file now throws a typed error listing where it looked; a style nobody
+  requested still returns `undefined`. `keep-coding-instructions` is carried, because a style
+  replaces the built-in task instructions by default and losing them silently is the worse failure
+  (B-022)
+
+- **An operator can declare a credential helper.** `apiKeyHelper` in the operator policy names a
+  command that prints a credential, and `resolveOperatorApiKey` from `@theokit/agents/auth` runs it.
+  Measured before: all four helpers the reference format names returned zero occurrences here, so an
+  agent on a rotating token failed mid-run with no seam to refresh it. A helper that hangs is killed
+  at 10 s with a typed error; one that prints nothing fails rather than returning an empty key; and
+  its output never reaches the error text, because a failure is read from logs and screenshots. The
+  raw command runner is not exported — offering it would hand a caller the choice of what executes,
+  which is the decision the operator tier exists to take away (B-069)
 
 - **The settings precedence stack is named.** `SettingsLayer`, `SETTINGS_LAYERS`,
   `layerPrecedence` and `settingsLayerChain` declare which layers exist and in what order — managed
@@ -47,6 +67,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `blockAppliesTo(block, filePath)` is exported from `@theokit/agents/config`, so a `paths:` scope can finally be applied. `InstructionBlock.scopes` shipped with no glob matcher anywhere in the package, so a consumer who wanted to honour a scope had to invent the semantics — and the field's own docblock names what happens when that goes wrong: a rule written for one subtree applied EVERYWHERE, silently. Delegating the DECISION to the product is unchanged; what was missing was the means. `scopesUnreadable` answers `false` whatever the path, which is the fail-closed half the flag was invented for. Supports `**`, `*` and `?` — the three the SDK's own rule activation implements — and refuses to guess at brace expansion or character classes (B-036)
 
 ### Fixed
+
+- **An `.mcp.json` field this runtime does not carry is reported, not dropped.** `buildEntry` built
+  each server from a fixed key set and let the rest fall off in silence; `alwaysLoad` is declared by
+  the format, allowlisted away here, and nothing said so — the shape B-032 closed for hooks. The
+  report is general, because naming one field fixes the instance and leaves the class. `alwaysLoad`
+  carries its reason: it distinguishes eager loading from TOOL SEARCH, which does not exist here.
+  Two absences are now stated in the module — tool search, and the user-level `.mcp.json`, whose
+  second location is a precedence decision rather than a second read (B-071)
+
+- **Every plugin KIND is accepted, not just `general`.** `CodePlugin` required `register`, so
+  `AgentBuilder.plugins()` admitted `kind: "general"` and refused `model-provider` (`profile`) and
+  `memory` (`createProvider`) — while the builder's own docblock already promised all three. Found by
+  a consumer, not by a gate: TheoCode's build stopped on `@theokit/agents@13.0.0` with "Property
+  'register' is missing", and 1 799 tests, tsc, eslint, knip and CodeQL had all passed over it. The
+  filesystem-bundle form is still refused, and so is an object with a name and none of the three
+  capability keys (B-055 follow-up)
 
 - A hook's `matcher: "*"` fires, as the format defines it. `new RegExp("*")` throws "nothing to repeat" and the catch reads a throw as no-match, so the spelling an author is most likely to write for "always" was the one spelling that meant "never". Measured end to end with a vetoing hook against tool `Bash`: `"*"` let the call through while `""`, `"Bash"` and an omitted matcher all vetoed it. The comma-separated exact-list form (`"Edit, Write"`) also matched nothing — as a pattern it required the space to be part of a tool name — and is now recognised as the list it is. Both shapes are handled BEFORE the regex engine, since neither is valid regex. An uncompilable matcher still does not match, deliberately: a broken matcher must not take down the turn (B-031)
 

@@ -93,7 +93,19 @@ export interface DelegateOptions {
   // `createSdkAgentStream`'s `RuntimeOverrides` / the loop's `RunReflectiveLoopConfig`.
   /** Per-run model override (`?? SubAgent @Agent model`). */
   model?: string
-  /** Per-run working directory → `Agent.create({ local: { cwd } })`. */
+  /**
+   * Per-run working directory → `Agent.create({ local: { cwd } })`.
+   *
+   * B-073 — if you point this at a git worktree you created, the sub-agent runs in a checkout with
+   * none of the repository's gitignored files: no `.env`, no local config, no credentials. This
+   * layer does not copy them, and it has no `.worktreeinclude` — the reference's one-file answer to
+   * the same problem — because it never creates a worktree in the first place (measured with
+   * controls: zero `git worktree` calls, zero `isolation` options; held falsifiable by
+   * `tests/unit/this-layer-creates-no-worktree.test.ts`, which goes red the day that changes).
+   *
+   * Stated here rather than left to be discovered, because the failure does not look like a missing
+   * file — it looks like a broken agent.
+   */
   cwd?: string
   /** Per-run plugins (e.g. a read-only permission gate for an explore sub-agent). */
   plugins?: PluginsSettings
