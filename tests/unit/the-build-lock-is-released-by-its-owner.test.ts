@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, openSync, closeSync, unlinkSync, utimesSync } fr
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
 import {
@@ -20,8 +20,15 @@ import {
  * first `acquire` here returned `null`. A test that shares global state with the thing it tests is
  * order-dependent, which `rules/testing.md § 3` forbids — and it failed in exactly the suite this
  * item exists to make green.
+ *
+ * It also lives beside the production lock rather than in the OS temp dir, for the reason that
+ * moved that one: CodeQL reported `js/insecure-temporary-file` (high) on both. A per-pid name in a
+ * shared temp directory is still a predictable path in a directory other accounts can pre-create.
  */
-const LOCK = resolve(tmpdir(), `theokit-lock-discipline-test-${String(process.pid)}.lock`)
+const LOCK = resolve(
+  fileURLToPath(new URL('../../node_modules/.cache/theokit-build-locks', import.meta.url)),
+  `lock-discipline-test-${String(process.pid)}.lock`,
+)
 
 /**
  * B-016 — the build lock was released by whoever finished, not by whoever took it.

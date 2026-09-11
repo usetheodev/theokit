@@ -60,7 +60,6 @@ import {
   writeSync,
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { tmpdir, userInfo } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -80,14 +79,20 @@ const INDEX_DTS = resolve(DIST, 'index.d.ts')
  * rendezvous concurrent vitest workers use to agree on who builds `dist`. `mkdtemp` would hand each
  * worker a lock of its own, and a lock nobody else can see is not a lock.
  *
- * Predictable inside a world-writable `/tmp` is precisely what CodeQL reports as
- * `js/insecure-temporary-file`, and the report is fair: another account on the same machine could
- * pre-create the directory as a symlink and take the run's writes with it, or plant the lock file
- * and stall every worker. So the name is scoped to this uid and the directory is created `0o700` —
- * predictability is kept where it is load-bearing, and the exposure it costs is paid for. (Windows
- * reports `uid` as -1, where `tmpdir()` is already per-user.)
+ * **It lives inside the repository, not in the OS temp dir.** It used to sit under `tmpdir()`,
+ * scoped to the uid and created `0o700`, with a docblock arguing that the predictability was paid
+ * for. CodeQL reported `js/insecure-temporary-file` (high) on it, and the argument did not survive
+ * the report: `mkdirSync(…, { recursive: true, mode: 0o700 })` does NOT change the mode of a
+ * directory that already exists, and does not fail either. Whoever creates that path before the
+ * first run of the day owns it, mode and all — and the mode WAS the mitigation.
+ *
+ * `node_modules/.cache/` has no such window: inside the checkout, created by the package manager
+ * under the user's own permissions, and not a rendezvous shared with other accounts. The
+ * predictability the lock needs is kept and the shared-directory exposure is not traded for it — it
+ * is simply absent. A shared-temp path hardened with three careful clauses is still a shared-temp
+ * path; moving it deletes the class instead of guarding each instance.
  */
-const LOCK_DIR = resolve(tmpdir(), `theokit-test-locks-${String(userInfo().uid)}`)
+const LOCK_DIR = resolve(ROOT, 'node_modules/.cache/theokit-build-locks')
 const LOCK_FILE = resolve(LOCK_DIR, 'packages-theo-build.lock')
 /** The window a build stays trusted when no marker from this run vouches for it. Exported so a
  * test asserts against the SAME number the decision uses — a duplicated literal is how a test ends

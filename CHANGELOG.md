@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The test build lock moved from the OS temp directory into `node_modules/.cache/`. CodeQL reported `js/insecure-temporary-file` (high) on it and on the test beside it, and the mitigation that was in place did not hold: `mkdirSync(…, { recursive: true, mode: 0o700 })` does not change the mode of a directory that already exists, so whoever creates the predictable path first owns it — and the mode was the mitigation. Internal to the test harness; no published behaviour changes (B-016)
+
 - **BREAKING for hand-built compiled options:** `resolveCompatSources` returns a branded `GatedCompatSource[]` and `CompiledAgentOptions.compatSources` takes it, so a raw compat source no longer typechecks. The twin of the `settingSources` brand, left bare when that one shipped: measured with the `settingSources` route as control, the control errored and `setOnce(draft, 'compatSources', ['claude-code'], 'cap')` compiled cast-free, while the field's docblock said it "can only hold a source some posture granted". It reaches further than its twin — `Agent.create({ local: { compatSources } })` reads `<cwd>/.claude/`, `hooks.json` included, and that executes shell (B-004)
 
 - `moderateOutputStream`'s `rebuildText` narrows to `(text, replaced: E) => E`. The `undefined` case could not happen: a stream where no event carried text returns from the absence check before the guards run. The branch that handled it was dead code documented as reachable (B-012)
