@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A permission-gate veto is observable. `grantGate` refused and emitted no log, no counter and no debug line, so an operator could see the refusal only through the tool result the model received — and the two causes its message distinguishes ("no standing grant matches" versus "the permission store could not be read") are indistinguishable from there. The sibling refusal gate already logged through this seam. The query is logged (tool, scope, cause) and the grant is not (B-003)
+
 - A delegation target carrying both `compiled` and a callable `run` is treated as a spec, not a port. `isPort` discriminated on the PRESENCE of `run` and argued from the declared type that "the two cannot be confused" — the same reasoning that failed open on a permission gate one file over. The port branch calls `run` directly; the spec branch is where the declared guardrails run, the parent's veto is inherited and the budget is clamped, so an ambiguous target now takes the guarded path (B-015)
 
 - Output guards moderate `thinking` events too. `AgentRunner` extracted only `text_delta`, so a secret in the model's reasoning reached the client verbatim while the operator's declared guard reported nothing. Two passes rather than one wider extractor — two kinds under one extractor collapse into a single event, which would promote the reasoning into visible output. **`DoneEvent.result` and `task_progress.text` remain unmoderated** and need a different mechanism, since there is one `done` per round and a pass keyed on it would collapse them (B-014)
