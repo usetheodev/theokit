@@ -394,4 +394,42 @@ describe('createDelegateTool — reachability (wiring)', () => {
     expect(a.message, 'a listed code passes its own message').toContain('disk full')
     expect(b.message, 'an unlisted code does not').not.toContain('ssn found')
   })
+
+  it('test_a_guard_that_throws_mid_round_is_not_renamed_into_a_delegation_failure', async () => {
+    // The leak the allowlist could not close, because the defect was upstream of it.
+    //
+    // `run-reflective-loop` wrapped any non-delegation round error into `DelegationError`, whose
+    // message is `Delegation to agent "X" failed: ${cause.message}`. `delegation_failed` IS on the
+    // message allowlist — a delegation failure's text is a fact about the work — so the wrapper
+    // carried the guard's own words through: `Guardrail "pii-detector" blocked output: ssn found`.
+    //
+    // Measured with a consumer-supplied `streamFactory` that throws mid-round, which is a public
+    // option. Fixed by CLASSIFICATION rather than by suppressing text downstream: a guard refusal is
+    // not a delegation failure, and a layer that renames it cannot be expected to keep a list of
+    // what the new name must hide.
+    const spec = {
+      name: 'worker',
+      compiled: { model: 'm', tools: [], agents: {}, stream: true },
+    } as never
+    // Throwing before any yield IS the case under test: a guard that refuses mid-round.
+    // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
+    async function* refusesMidRound(): AsyncGenerator<never, void> {
+      throw new GuardrailViolationError('pii-detector', 'output', 'ssn found')
+    }
+    const throwsMidRound = () => refusesMidRound()
+
+    const tool = createDelegateTool({
+      roster: [{ name: 'worker', target: spec }],
+      defaults: { apiKey: 'k', streamFactory: throwsMidRound } as never,
+    })
+
+    const payload = JSON.parse((await tool.handler({ agent: 'worker', task: 't' })) as string) as {
+      error: string
+      message: string
+    }
+
+    expect(payload.error, 'a guard refusal is not a delegation failure').toBe('guardrail_violation')
+    expect(payload.message).not.toContain('pii-detector')
+    expect(payload.message).not.toContain('ssn found')
+  })
 })
