@@ -1,5 +1,202 @@
 # create-theo
 
+## 2.0.0
+
+### Major Changes
+
+- 50d0d1a: **Agents move inside the backend, and the scaffold's folders name their domains.**
+
+  A generated project put `app/`, `server/` and `agents/` side by side at the root, which said that
+  agents are a third thing next to the frontend and the backend. They are not: an agent reads secrets,
+  calls tools, holds the model key and runs where the server runs. Every rule that applies to
+  `server/` already applied to `agents/`, and the flat layout is what kept anyone from noticing.
+
+  A new project is now generated as:
+
+  ```
+  src/
+  ├── app/            # interface — the only half that ships to a browser
+  ├── server/         # backend — everything that never leaves the machine
+  │   ├── agents/     # agent composition: prompts, tools, skills
+  │   └── routes/     # file-based HTTP
+  └── shared/         # the contracts both sides import
+  ```
+
+  `theo.config.ts` declares all three paths (`.appDir('src/app')`, `.serverDir('src/server')`,
+  `.agentsDir('src/server/agents')`), so the layout is a value the project owns rather than a
+  convention the framework assumes.
+
+  **Existing projects are unaffected and need no migration.** The framework's defaults are unchanged —
+  a project that declares nothing still resolves `app/`, `server/` and `agents/` at the root. This is
+  major for `create-theokit` because a _newly generated_ project has a different shape, not because
+  anything stopped working; the CLI already read every path from the config (`build`, `dev` and
+  `routes` pass `config.appDir` to the structure validator), which is what let the scaffold move
+  without a framework release.
+
+  Two things the move made visible, both of which argue it was overdue: the three cross-imports in the
+  bot preset got _shorter_ (`../../server/delivery.js` → `../../delivery.js`), and the `tsconfig`
+  include lost an entry, because `src/server/**` now covers the agents that needed their own line.
+
+  Two options the move exposed as broken, both now fixed:
+
+  - **`--import-alias` pointed at directories that no longer exist.** A custom alias expanded to
+    `./server/*` and `./app/*`, so a project generated with `--import-alias '~/*'` carried a tsconfig
+    whose aliases resolve to nothing. The mapping moved to `alias-paths.ts` where it is tested against
+    the directories the template actually ships, rather than living as three untested literals inside
+    a function that writes to disk.
+  - **`--src-dir` is gone, and its prompt with it.** The generated project is always under `src/`, so
+    the question changed nothing whichever way it was answered — and answering _yes_ actively broke
+    the project: it moved `theo.config.ts` into `src/`, where the CLI does not look for it, and
+    overwrote `include` with `src/**` alone, dropping the two ambient `.d.ts` globs the template needs.
+
+  And two the generated app itself exposed, both of which made a fresh project fail its own
+  `format:check` on files the user never typed:
+
+  - **`README.md.tmpl` was never formatted.** The check that exists reads the template's `**/*.md`,
+    and `.tmpl` does not match — but it becomes `README.md` in the user's project, where it _is_
+    checked. Its tables had been unaligned since before this refactor.
+  - **The `--tailwind` stylesheet import used double quotes** against a template whose `.prettierrc`
+    sets `singleQuote: true`, plus a stray blank line.
+
+  Both are now covered by tests over the OUTPUT rather than the template: one scaffolds a project and
+  runs Prettier against it with the config that project ships, the other hands the injected CSS line
+  straight to Prettier — it is written after `scaffold()` returns, so the first test cannot see it.
+
+### Minor Changes
+
+- 91b1e04: **A generated app now demonstrates all five TheoKit concepts — agents, tools, skills, hooks, rules
+  and personalities — with each one wired rather than merely present.**
+
+  The scaffold shipped agents, tools, prompts and skills, and nothing at all for the other three. An
+  app that shows half the framework teaches half the framework, and the missing half is the half a
+  user is least likely to discover on their own: it lives in files the framework reads at runtime,
+  which nothing in a project points at.
+
+  ## The split the layout now makes visible
+
+  ```
+  src/server/agents/     CODE — compiled, changes on deploy
+  ├── chat.ts  tools/  prompts/  skills/
+  └── hooks/             ← new
+
+  .theokit/              DATA — read at runtime, no rebuild
+  ├── THEO.md            ← new: facts true on every turn
+  ├── rules/             ← new: instructions scoped to file globs
+  └── personalities/     ← new: swappable system prompts
+  ```
+
+  Tone and domain facts move at a different speed than code. Shipping a deploy to reword a system
+  prompt is a bad trade, and the two directories are what make the difference obvious.
+
+  ## What each one is
+  - **`hooks/tool-audit.ts`** — one structured log line per tool call, with its duration, attached in
+    `chat.ts` via `.hooks()`. It deliberately does **not** veto: `pre_tool_call` is the only hook with
+    veto power, and any policy a template invented would be one the app never chose. The docblock
+    shows the veto shape for when you have a rule of your own, and `send_notification` stays gated the
+    right way — by a human approval.
+  - **`.theokit/rules/*.md`** — path-scoped instructions, activated by `globs` in the frontmatter
+    (`description` / `paths` / `globs` / `alwaysApply` / `enabled`). A file with no frontmatter is
+    treated as `alwaysApply: true`, which the README calls out because a typo'd key silently turns a
+    scoped rule into an always-on one.
+  - **`.theokit/personalities/*.md`** — frontmatter describes the preset, the body IS the system
+    prompt. Switched at runtime with `agent.usePersonality('teacher', { save: true })`. `none`,
+    `default` and `neutral` are reserved names that clear it — so the test asserts no shipped
+    personality uses one, since such a file could never be selected.
+  - **`.theokit/THEO.md`** — prepended every turn. Highest priority in the file layer (60), which is
+    why it holds facts rather than preferences: a preference that always wins cannot be overridden by
+    a personality.
+
+  The ARCHITECTURE doc now carries the SDK's full context-source table with priorities, so a reader
+  can see where their file sits among `AGENTS.md`, `CLAUDE.md` and `.cursor/rules`.
+
+  Verified on a generated app: `typecheck`, `lint`, `format:check` and `test` all exit 0, and
+  `theokit build` completes with the hook attached.
+
+  ## The root context file, and the option that never worked
+
+  `THEO.md` **cannot** live at the project root: the SDK registers it as `.theokit/THEO.md` with
+  `cwd-only` scope, so a copy at the root is read by nothing. The file that IS read from there is
+  `AGENTS.md` — `git-root-walk`, the same scope as `CLAUDE.md`, discovered from any subdirectory.
+
+  The scaffold now ships one, and the two files say what separates them:
+
+  |          | `AGENTS.md` (root)              | `.theokit/THEO.md`               |
+  | -------- | ------------------------------- | -------------------------------- |
+  | Audience | agents that **write** this code | the agent your **users** talk to |
+  | Content  | commands, layout, conventions   | product facts, domain vocabulary |
+  | Priority | 10 — anything overrides it      | 60 — strongest file-layer source |
+
+  That ordering is why `THEO.md` warns against putting preferences in it: a tone instruction there
+  wins against every personality, which silently makes `usePersonality` do nothing.
+
+  **The `agentsMd` option was inert in three separate ways**, and shipping the file is what exposed
+  all three: `--agents-md` was documented in `--help` and never parsed; the prompt asked a question
+  whose answer changed nothing; and the code only ever _deleted_ an `AGENTS.md` the template did not
+  have. The flag is now `--no-agents-md` (the direction that can change anything, since the default
+  is true), it is parsed, and it is applied after the prompts so a typed flag beats an earlier answer.
+  Verified through the real CLI: present by default, absent with the flag, `THEO.md` untouched either
+  way.
+
+### Patch Changes
+
+- c093fbd: **A generated app now installs the `@theokit/agents` line that is actually published.**
+
+  The template pinned `"@theokit/agents": "^10.1.0"` while npm's `latest` was `12.1.0`. A caret does
+  not cross a major, so every app scaffolded from it installed **10.1.0** — two majors behind, and
+  missing what those majors carried:
+
+  - **11.0.0** — the server's raw error text no longer reaches the browser by default. A generated app
+    was still returning a tool handler's stderr verbatim to the client.
+  - **12.0.0** — `@theokit/agents/pty` moved to its own package, so the native build step is no longer
+    pulled in.
+
+  Pin bumped to `^12.1.0`, verified end to end on a generated app: it installs `12.1.0`, and
+  `typecheck`, `lint`, `format:check`, `test` and `theokit build` all pass.
+
+  ## Why the guard that exists did not catch it
+
+  `scripts/sync-template-pins.mjs` was written for exactly this failure (#424 — the template pinned
+  `^0.48.3` while the repo was at `0.49.0`). In prerelease mode it abstains from rewriting, correctly:
+  syncing then would pin a scaffolded app to the `next` channel, and #618 showed it also deadlocks the
+  release.
+
+  But the abstention rested on a premise it never checked — _"the pin it has points at the last stable
+  line"_. That holds only while no workspace package publishes a stable release during another's
+  prerelease, and `@theokit/agents` published 11.x and 12.x during `theokit`'s.
+
+  Prerelease mode now **verifies** that premise instead of asserting it: each template pin is checked
+  against the version npm serves on `latest`, and a pin that excludes it fails `--check`. A range the
+  comparison cannot read, or a registry that does not answer, is reported as _unverified_ rather than
+  as wrong — failing a release on a network blip would be its own defect.
+
+  `caretAdmits` is exported and unit-tested (13 cases), including the `0.x` line where a caret pins the
+  minor — which is the shape #424 itself had.
+
+- 7ba0e1f: **`THEO.md` explains why it lives under `.theokit/` and not at the project root** (#642).
+
+  The question the issue asked — one context file or two, now that the SDK can read a root
+  `THEO.md` — is answered in the file itself, tied to the version that decides it:
+
+  - On the SDK this template pins (`^4.52.1`), `.theokit/THEO.md` is the **only** path a `THEO.md` is
+    read from. A copy at the root is read by nothing, silently.
+  - `@theokit/sdk@5` adds a root spec at priority 55 (`theokit-sdk#531`), so both work there and
+    `.theokit/` still wins a conflict. 5.x is on the `next` channel only, so moving the file would
+    break it for anyone on the default install.
+
+  **The pair stays, and the reason is audience rather than the SDK.** `AGENTS.md` addresses agents
+  that _write_ the code and is read by Cursor, Copilot and Claude Code as well; `THEO.md` addresses
+  the agent that talks to _users_. That distinction predates the SDK limitation and outlives it, so
+  the two files are a design rather than a leftover workaround — which is exactly what #642 was filed
+  to prevent them from quietly becoming.
+
+  Also recorded, for whoever moves the file once 5.x is stable: the root spec sets
+  `followImports: true` and `.theokit/THEO.md` does not, so `@file` references resolve in one and not
+  the other.
+
+  `theo-md-location.test.ts` ties the prose to the manifest — it reads the SDK range out of
+  `package.json.tmpl` and asserts the explanation cites it. Moving the pin past 4.x fails the test,
+  so the note has to be revisited instead of outliving its own premise.
+
 ## 2.0.0-next.1
 
 ### Patch Changes

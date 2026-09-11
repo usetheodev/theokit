@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [@theokit/agents 13.0.0, create-theokit 2.0.0, @theokit/http 2.1.0, @theokit/presenter 0.9.0, @theokit/tauri 1.0.0, theokit 0.65.0] - 2026-09-11
+
 ### Added
 
 - **A configured output style is applied.** `loadOutputStyle` from `@theokit/agents/config` reads

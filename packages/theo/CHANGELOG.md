@@ -1,5 +1,378 @@
 # theo
 
+## 0.65.0
+
+### Minor Changes
+
+- 4709eec: **`escapeHtml` is exported, and says which context it is safe in** (#611).
+
+  The framework had the function, kept it private inside the OpenAPI docs renderer, and an adopter
+  building an HTML e-mail body wrote it again — same four characters, same order, same omission of
+  `'`. Neither escaped the apostrophe, and neither had to: both call sites interpolate into text
+  content, where four characters are enough. They were right by luck rather than by having been told,
+  and the caveat is the part that does not survive being re-derived.
+
+  `theokit/server/security` now exports two functions with two names, so the decision is visible where
+  the interpolation happens:
+
+  ```ts
+  import { escapeHtml, escapeHtmlAttribute } from 'theokit/server/security'
+
+  ;`<title>${escapeHtml(title)}</title>` // text content
+  `<a href='${escapeHtmlAttribute(url)}'>` // quoted attribute — escapes ' and ` too
+  ```
+
+  Both run as a single character-class pass, which also removes the ordering hazard the chained
+  `.replace()` idiom carries: run the ampersand last and `<` has already become `&lt;`, which the
+  ampersand pass then turns into `&amp;lt;`. The docs renderer consumes them instead of carrying its
+  own copy.
+
+  Same shape as #574 (`@Public()`, `Authenticated()`): the framework owns the primitive, so it owns
+  the caveat with it.
+
+- 8333525: **A `@Controller` route runs the plugin lifecycle** (#607).
+
+  `dispatchControllerRequest` had no parameter for a plugin runner, so neither of its two callers
+  could pass one. A controller route therefore ran no hook at all under `theokit start` — not
+  `onRequest`, not `preHandler`, not `onResponse`, not `onError` — and under `theokit dev` only the
+  `onRequest` the middleware happened to fire before matching, which reached controllers by accident
+  rather than by design.
+
+  Measured against a real adopter: its identity plugin had never run, so `ctx.subject` was never
+  populated, while the boot log reported the plugin registered. Nobody noticed because the app's
+  guards read the session from the `Request` directly. An app using `.policy(({ subject }) => …)` on
+  a controller route would have been refusing every caller instead. The same app then added rate
+  limiting to three routes that bill a third party per call, wrote it as a `preHandler`, and it
+  enforced nothing while reading exactly like protection.
+
+  **`onRequest` fires once per request in `theokit dev`, not twice** (#609).
+
+  The dev middleware called `runOnRequest` before matching a route, and `executeRoute` called it
+  again for the route it matched. Nothing deduped them, so every matched file route fired `onRequest`
+  twice in dev and once under `theokit start`. Anything a hook counted, billed, audited or traced was
+  doubled on the surface nobody instruments and correct on the one that ships.
+
+  The pre-match call still exists, and still does the job it was added for — letting a plugin serve a
+  path no route owns, such as `@theokit/plugin-openapi` on `/api/docs`. It has moved to the end of
+  that arm, so it runs only when neither a file route nor a controller owns the request.
+
+  Both defects had one cause: the dev middleware had a second, uncoordinated entry into the
+  lifecycle, and the controller path had none. Fixing either alone makes the other worse, which is
+  why they ship together.
+
+  **What this changes for an existing app.** A `preHandler` that short-circuits now applies to
+  controller routes, where it previously did not. If a hook was written expecting to govern only file
+  routes, it now governs both — which is the contract as documented, and may refuse traffic the app
+  was serving. A hook whose side effect was tuned around the doubled dev count will now see half as
+  many in dev, matching what production always reported.
+
+  Hooks still cannot reach a controller handler's arguments: a controller method receives its inputs
+  through parameter decorators, so a decoration written onto the plugin `ctx` has no seam to arrive
+  through. Only file routes read `ctx`. That limit is unchanged by this fix and is not what either
+  issue reported.
+
+- 9b5da86: **A controller route can name a rate limit, and a guard can refuse with 429** (#612).
+
+  `theokit/server/rate-limit` exported a complete limiter and nothing a `@Controller` route could use,
+  so every app wrote the adapter — the third instance of a pattern whose first two shipped as
+  `@Public()` and `Authenticated()` (#574). The hand-written adapter could not be correct, for two
+  reasons that were not the author's fault:
+
+  - **A guard could not answer 429.** `canActivate` returns a boolean, so a refused caller received
+    `403 Forbidden resource` and the `X-RateLimit-*` the limiter had just computed were discarded —
+    a guard owns no response to attach them to. "You are not allowed" and "you are allowed, later"
+    read identically, and a well-behaved client had nothing to back off on.
+  - **The intuitive alternative was silently inert.** A `preHandler` plugin enforced nothing on
+    controller routes (#607, fixed in the same line of work) while reading exactly like protection.
+
+  **`theokit/server/rate-limit` now exports `RateLimited`:**
+
+  ```ts
+  @Post('stt')
+  @UseGuards(Authenticated(sessions), RateLimited({ max: 20, windowMs: 60_000 }))
+  transcribe() { ... }
+  ```
+
+  A refused caller gets `429` with `Retry-After`, `X-RateLimit-Limit` and `X-RateLimit-Remaining`.
+  `scope: 'shared'` pools several routes into one budget, which is what an app capping endpoints that
+  bill a third party per call actually wants. The constructor **throws** on a configuration that
+  cannot tell callers apart — `keyBy: 'ip'` with no `trustProxy` and no `identify` — because a Web
+  `Request` has no socket address, and accepting it would put every visitor in one bucket: a limiter
+  that refuses the whole internet after N requests while reading as protection until it does. It does
+  not attach `X-RateLimit-*` to allowed responses, and says so in its docblock rather than shipping a
+  header that appears under one dispatcher and vanishes under another.
+
+  **`@theokit/http`:**
+
+  - `HttpException` accepts and carries `headers`, and every dispatcher renders them through one
+    `httpExceptionToResponse` instead of four hand-built `new Response(...)` calls. `429` without
+    `Retry-After`, `401` without `WWW-Authenticate` and `405` without `Allow` are all half an answer.
+  - The guard pipeline is one `runGuards` shared by `TheoApp`, `createDecoratorHandler` and the
+    TheoKit plugin, instead of four copies — the arrangement #576 already paid for once. A guard
+    throwing an `HttpException` now reaches the client with its status and headers on all three, agent
+    routes included, where the exception previously escaped the dispatcher entirely.
+  - The published types say these exceptions are `Error`s again. `tsup` had been erasing the
+    inheritance into an anonymous structural type, so an app writing `throw new UnauthorizedException()`
+    tripped `@typescript-eslint/only-throw-error` against the framework's own exceptions — and the
+    lint was right about what the `.d.ts` claimed.
+
+- d2b5413: **A session secret that looks like a placeholder no longer boots in production** (#610).
+
+  `assertProductionSecret` reached both session constructors already (#429's half of the fix) and
+  still admitted every placeholder an adopter actually writes. Its whole vocabulary was
+  `/CHANGE_ME|demo[-_]|placeholder/i`, so the 32-character floor was the only condition that ever
+  fired — and a placeholder long enough to clear that floor is exactly what a developer produces when
+  the error message asks for 32 characters. Measured against `theokit@0.64.0` with
+  `NODE_ENV=production`, all five of these started a server:
+
+  ```
+  ACCEPTED  "dev-only-session-secret-32-chars-min-xxxx"   ← a real app's fallback
+  ACCEPTED  "changemexxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"    ← the pattern wants CHANGE_ME, not changeme
+  ACCEPTED  "devxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ACCEPTED  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"    ← forty identical characters
+  ACCEPTED  "test-secret00000000000000000000000000000"
+  ```
+
+  An app that falls back to a literal when its env var is unset then signs production cookies with a
+  value published in its own source. Reading the repository is the whole attack: forge the cookie,
+  and the server accepts any identity. The adopter that surfaced this had two such fallbacks, the
+  second written because the first one was a pattern.
+
+  The rules now live in `theokit/server/auth`'s new `inspectSecret`, exported so the same question can
+  be asked of a webhook secret or a signing key: a vocabulary of words that appear in strings people
+  type and not in generated output, a floor on distinct characters that refuses `aaaa…`, and a
+  repeated-block check. The distinct-character floor is 8 rather than 12 on purpose — a real
+  `openssl rand -hex 32` carries about 14 with a tail below 12, and a guard that refuses correct input
+  is a guard somebody disables.
+
+  **Two behaviour changes to know about:**
+
+  - A production boot with a weak secret now throws where it previously proceeded. That is the point
+    of the change, and the message names which rule fired.
+  - The error no longer echoes the first 16 characters of the secret. An error message reaches stdout,
+    the crash reporter, and everything that aggregates them; the index and the reason identify which
+    secret is wrong without publishing half of it.
+
+- cfe7f4c: **`@theokit/sdk@5.x` is now supported, alongside 4.x**
+  ([#654](https://github.com/usetheokit/theokit/issues/654)).
+
+  The declared range becomes `^4.52.1 || ^5.0.0` (`^4.49.0 || ^5.0.0` for `@theokit/presenter`), and
+  the full suite passes on both halves: 7533 tests against `4.52.1` and 7533 against `5.0.1`.
+
+  This unblocks plugins whose open-ended `@theokit/sdk` peer resolves to 5.x. Until now `theokit` was
+  the package that **refused** that resolution — the ERESOLVE named the plugin, but the bound that
+  could not be satisfied was this one.
+
+  **What had to change, and why it was not a version bump.** SDK 5.x writes a transcript to
+  `${sessionUuidFor(sessionId)}.jsonl` where 4.x wrote `${safeSessionId(sessionId)}.jsonl` — a
+  SHA-256 over a namespace, so the filename stopped being the session id and the mapping does not
+  invert. `listSessions` derived ids from filenames, so listing, protection, GC and deletion all
+  returned UUIDs where callers passed ids. One defect, twenty-nine failing tests.
+
+  The id is now read from the transcript **record**, which the SDK writes on both majors and which is
+  authoritative where the name was only a convention. The filename stem remains the fallback, so a
+  truncated transcript still appears in a listing rather than dropping out of GC's sight.
+
+  `LiveTranscriptError` — 5.x's new name for `LiveSessionError` — deliberately does not cross the
+  `@theokit/agents` layer: it does not exist on the 4.x half, and 5.x keeps the old name working and
+  deprecated, so the name that crosses is the one both majors have.
+
+### Patch Changes
+
+- 59d6dcc: A transcript nobody can read is listed without an id, and keeps its protection
+
+  `listSessions` fell back to the filename stem whenever the first record could not be read. Under
+  `@theokit/sdk` 5.x that stem is a one-way hash of the id, so the fallback did not return a degraded
+  id — it returned an identifier belonging to no session. Session GC keyed protection on it, so a
+  session someone had DECLARED protected lost its protection and was planned for deletion, while the
+  registry removal was called with the hash and left the real entry behind.
+
+  Protection now runs in the direction that has a function. `transcriptPath(root, cwd, id)` is total on
+  both majors and its inverse is not, so protection is keyed by transcript PATH and caller-supplied ids
+  are mapped forward onto paths. Whether a transcript can be read stops mattering to whether it is
+  protected.
+
+  Breaking, inside the unreleased 13.0.0 line:
+
+  - `SessionSummary.id` is `string | undefined`, alongside a new `idSource: 'transcript' | 'unavailable'`.
+    It is never derived from the filename.
+  - **`protectedTranscripts` is RENAMED to `protectedTranscriptPaths`, and the rename is the fix.** Its
+    keys changed from session ids to transcript paths while the signature stayed `Map<string, string>`,
+    so a consumer that mapped the keys forward through `transcriptPath` — correct when they were ids —
+    kept compiling and started double-mapping, leaving its protection array matching nothing. Measured
+    on a real consumer against this build: `deleteSession` collected a session holding a LIVE writer
+    lease. The old name is gone rather than aliased; a silent break that loses data is worse than a
+    loud one, and an alias would have preserved the silence. `transcriptOf(id, cwd, root)` maps forward
+    for callers that hold an id.
+  - `GCCandidate.id`, `GCKept.id` and `GCError.id` admit `undefined` for the same reason.
+  - `RunTranscriptGCResult` gains `orphaned` — transcripts collected whose session id could not be
+    read, by path. A separate list rather than a second meaning inside `removed`, which answers "which
+    sessions did I collect"; `theo sessions gc` reports both, and never prints a filename where an id
+    belongs.
+
+  Closes usetheokit/theokit#668.
+
+- 777258c: **`@theokit/studio` is no longer declared as an optional peer dependency.**
+
+  Nothing changes at runtime. `/_studio` still mounts when Studio is installed, still no-ops when it
+  is not, and still warns when an installed copy does not export `theokitStudio()`.
+
+  What changes is that this package no longer pins a compatible range for a package it does not
+  install. The declaration bought one thing — `npm install` refusing an incompatible pair up front —
+  and charged the release train for it:
+
+  > `@theokit/agents@13.0.0-next.0` could not publish. npm resolved this optional peer to the
+  > published `@theokit/studio@0.3.0`, whose own peer read `@theokit/agents ">=11.0.0 <13"`, and the
+  > install failed `ERESOLVE`.
+
+  The 13 was not even a break. Changesets promotes a peer-dependent to major when a peer takes a minor
+  bump, and that changelog carries Minor and Patch sections only. So a dev-only route, in a package
+  this repository never installs, held four packages' release hostage to a second repository's release
+  cycle.
+
+  The runtime already covers what the declaration promised (`integrate-studio.ts`):
+
+  - **absent** → no `/_studio`, silently, which is the normal case for an app that never asked for it
+  - **installed but skewed** → `console.warn` naming the package and telling the reader to check the
+    installed version
+
+  That is the same information the peer range carried, delivered at the moment it matters, to the
+  person who actually installed Studio.
+
+  **Genuinely lost:** `npm install` no longer refuses an incompatible pair before anything runs.
+  Anyone pinning both should read that warning as the contract. The docblock in
+  `integrate-studio.ts` records this so the declaration is not re-added without the trade being
+  re-made.
+
+- c59abf6: The dev-server integration tests wait until the server accepts
+
+  Two release pull requests failed on `TypeError: fetch failed` in one day. `startDevServer` resolving
+  assigns the address; it does not make the listener accept, and the tests read `.address().port` the
+  instant the promise settled and connected. `port: 0` sharpens it — the address cannot be pre-checked.
+
+  "Resolved is not ready" is the same sentence this package wrote about a different promise when
+  `Agent.delete` resolved having removed nothing.
+
+  `waitForServer` polls until one connection succeeds, and on exhaustion FAILS naming the port and the
+  elapsed time, so a genuine boot failure stays distinguishable from a slow one. Not a fixed sleep: a
+  sleep turns a race into a slower race and hides it on fast machines.
+
+  Closes usetheokit/theokit#699.
+
+- ecda4ae: The agent-module parameter names what it accepts, so a wrong shape fails at compile time
+
+  `streamAgentTurnInProcess` and `compileAgentModule` took `mod: unknown`, so the contract lived only
+  in the runtime guard. A consumer whose producer became `async` handed a `Promise` straight through
+  and shipped two releases in which no turn could run — with typecheck, 1213 tests, lint and twelve CI
+  checks green. The runtime was never wrong: it refused the Promise and threw a typed error. What
+  failed was the moment.
+
+  Both now take `AgentModule`, exported alongside them and re-exported from `theokit/server/agent`.
+  The type mirrors the runtime guard rather than the fuller `CompiledAgentOptions` — an array under
+  `tools`, an object under `agents` — so it refuses nothing that compiled before.
+
+  `@theokit/tauri/sidecar`'s `runTurnToJsonl` is narrowed too: a desktop sidecar imports its agent
+  module statically, which is exactly where a type catches the mistake.
+
+  Entry points that receive a module from a path discovered at runtime keep taking `unknown`, and now
+  say so by calling the new `compileLoadedAgentModule`. Their `unknown` has a reason; before this, the
+  boundary that had one was indistinguishable from the one that did not.
+
+  Closes usetheokit/theokit#663.
+
+- 5e3e770: **The release guard no longer reports a published package as unpublished**
+  ([#652](https://github.com/usetheokit/theokit/issues/652)).
+
+  npm registers a version minutes after `publish` returns — measured 5m04s for
+  `@theokit/sdk-cache@1.0.2` on 2026-09-04. `verify-release-published.mjs` read the registry with a
+  30s budget, so on any release with several packages it exhausted the budget and printed
+  `✗ <pkg>@<version> was NOT published` for packages that had published fine.
+
+  Raising the budget is the wrong knob: one large enough to be correct makes the gate mostly sleep,
+  and a six-minute gate is one people cancel.
+
+  **The two failures are distinguishable on the write path, not the read path.** `#366` — the
+  credential gone — is `E404 … PUT`, reported by the publish itself, immediately. Registration lag is
+  a successful PUT whose GET has not caught up. So `pnpm release` now records what `changeset publish`
+  said, and the guard reads it: a package the publish errored on fails the release naming that cause;
+  a package the publish wrote and the registry has not shown yet is reported as pending, not as a
+  failure; a package the publish never attempted is still the `#366` empty green and still fails.
+
+  Absence of a log never becomes success — it is reported as unconfirmed.
+
+- a2d5cd3: **The root release record now names every version that was cut, including releases nobody wrote
+  prose for** ([#656](https://github.com/usetheokit/theokit/issues/656)).
+
+  `record-root-changelog.mjs` returned early whenever `## [Unreleased]` was empty, so a second
+  `changeset version` run — one whose prose the previous cut had already drained — bumped packages
+  and left the root record silent about them. `check-changelog-current.mjs` then failed, hours later,
+  attached to whichever unrelated pull request happened to run CI next.
+
+  The two scripts disagreed about what silence means: one treated an empty `[Unreleased]` as nothing
+  to do, the other treats an unnamed release as a defect. The heading settles it — the gate matches
+  on the heading naming the version and never on the body.
+
+  **The rule that prose is moved and never invented is unchanged.** A heading is a fact about what
+  was cut and when; a change description is a claim about what changed, and stays the human's to
+  write. A release with no entry gets its heading plus a pointer to the per-package changelogs, not a
+  generated `### Added`.
+
+- Updated dependencies [1202e86]
+- Updated dependencies [c59abf6]
+- Updated dependencies [bb0f451]
+- Updated dependencies [9725bf1]
+- Updated dependencies [dcb461f]
+- Updated dependencies [ca44ee7]
+- Updated dependencies [dcb461f]
+- Updated dependencies [6b07960]
+- Updated dependencies [a7e35bb]
+- Updated dependencies [dcb461f]
+- Updated dependencies [9725bf1]
+- Updated dependencies [dcb461f]
+- Updated dependencies [5211721]
+- Updated dependencies [dcb461f]
+- Updated dependencies [dcb461f]
+- Updated dependencies [ac29eff]
+- Updated dependencies [1202e86]
+- Updated dependencies [1202e86]
+- Updated dependencies [1202e86]
+- Updated dependencies [1202e86]
+- Updated dependencies [1202e86]
+- Updated dependencies [1202e86]
+- Updated dependencies [98b2565]
+- Updated dependencies [9725bf1]
+- Updated dependencies [59d6dcc]
+- Updated dependencies [feb5781]
+- Updated dependencies [e7a4d65]
+- Updated dependencies [fe8a0c6]
+- Updated dependencies [2bc5d84]
+- Updated dependencies [2bc27d3]
+- Updated dependencies [dcb461f]
+- Updated dependencies [eaac7b0]
+- Updated dependencies [1202e86]
+- Updated dependencies [ec899f4]
+- Updated dependencies [dcb461f]
+- Updated dependencies [019f828]
+- Updated dependencies [9b5da86]
+- Updated dependencies [dcb461f]
+- Updated dependencies [e4f2e78]
+- Updated dependencies [6ca2f50]
+- Updated dependencies [a7f4d3d]
+- Updated dependencies [1202e86]
+- Updated dependencies [dcb461f]
+- Updated dependencies [0ed0d96]
+- Updated dependencies [dcb461f]
+- Updated dependencies [a2b0a59]
+- Updated dependencies [462bb62]
+- Updated dependencies [ecda4ae]
+- Updated dependencies [9915c19]
+- Updated dependencies [5451233]
+- Updated dependencies [cfe7f4c]
+- Updated dependencies [0731584]
+  - @theokit/agents@13.0.0
+  - @theokit/http@2.1.0
+  - @theokit/presenter@0.9.0
+
 ## 0.65.0-next.5
 
 ### Patch Changes
