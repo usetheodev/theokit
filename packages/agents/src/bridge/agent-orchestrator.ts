@@ -17,6 +17,8 @@ import type {
 } from '@theokit/sdk'
 import type { RetryOptions } from '@theokit/sdk/retry'
 
+import { runInputGuards, runOutputGuards } from '../guardrails/index.js'
+import type { Guardrail } from '../guardrails/index.js'
 import {
   ladderReflectionStrategy,
   noopReflectionStrategy,
@@ -216,11 +218,23 @@ export async function delegate(
   const apiKey = requireApiKey(opts, spec.name)
 
   // M12 — onDelegationStart: let the supervisor rewrite the input before the sub-agent runs.
-  const effectiveMessage = opts.onDelegationStart
+  const rewritten = opts.onDelegationStart
     ? await opts.onDelegationStart({ subAgent: spec.name, input: message })
     : message
 
   const { compiled } = spec
+
+  // B-015 — the guards the SPEC declares, which this function accepted and never consulted.
+  //
+  // Measured against the built artifact: a spec carrying a guard with both halves saw neither. The
+  // input reached the model with its injection intact and the caller received the secret, while the
+  // operator had declared guardrails and the run was green. That is B-012's defect class on a
+  // sibling public API, and it is model-reachable — `tools/delegate-tool.ts` wraps this function.
+  //
+  // AFTER `onDelegationStart`, deliberately: that hook exists to rewrite the input, so a guard
+  // placed before it would moderate a string that never goes out.
+  const guardrails = compiled.guardrails ?? []
+  const effectiveMessage = await runInputGuards(rewritten, guardrails)
 
   // 2. Merge parent tools + clamp budget (D4) + INHERIT the parent's authority.
   //
@@ -274,8 +288,35 @@ export async function delegate(
   })
 
   // M12 — onDelegationComplete: let the supervisor transform the result before it returns.
-  if (opts.onDelegationComplete) {
-    return await opts.onDelegationComplete({ subAgent: spec.name, result })
-  }
-  return result
+  const transformed = opts.onDelegationComplete
+    ? await opts.onDelegationComplete({ subAgent: spec.name, result })
+    : result
+
+  return await moderateDelegationResult(transformed, guardrails)
+}
+
+/**
+ * Moderate what the CALLER of `delegate` receives.
+ *
+ * Extracted rather than inlined because inlining it took `delegate` to a cyclomatic complexity of 16
+ * against a ceiling of 15 — and a guard that makes a gate fire is a guard somebody deletes.
+ *
+ * Runs AFTER `onDelegationComplete`, mirroring the input side running after `onDelegationStart`: the
+ * caller receives what that hook produced, so a guard placed before it would moderate a string the
+ * supervisor may then rewrite.
+ *
+ * ONE channel, and that is a fact rather than a convenience. `delegate` drains the loop and returns
+ * a value, exposing no event stream, so the two-channel split that cost B-012 four review rounds
+ * cannot repeat here. Saying so is the point — relying on it silently is how that one was missed.
+ *
+ * `response` only. `toolCalls[].output` is tool output rather than model text, and
+ * `loop/agent-runner.ts` excludes it from `extractText` on the same reasoning; leaving it alone here
+ * is that decision applied consistently, not an omission.
+ */
+async function moderateDelegationResult(
+  result: DelegationResult,
+  guardrails: readonly Guardrail[],
+): Promise<DelegationResult> {
+  if (guardrails.length === 0) return result
+  return { ...result, response: await runOutputGuards(result.response, guardrails) }
 }

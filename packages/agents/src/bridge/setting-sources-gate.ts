@@ -213,10 +213,16 @@ declare const GATED: unique symbol
  * second one is a TypeScript-wide hole rather than a design choice here: `Object.assign<T, U>`
  * returns `T & U` and checks nothing about `T`'s existing fields.
  *
- * Nine other routes ARE refused, each verified against the emitted declarations: `setOnce` with a
+ * TEN other routes are refused, and they are refused by a TEST rather than by this sentence:
+ * `tests/type/setting-sources-brand-escapes.test-d.ts` guards each one with a `@ts-expect-error`,
+ * so weakening the brand reports which route reopened instead of passing quietly. `setOnce` with a
  * raw array, `setOnce` through a generic wrapper, a direct `draft.settingSources =`, a spread of a
  * compiled object, an object literal with `as`, `.concat`, `.map`, spread-widening, `satisfies`,
  * and `.push`.
+ *
+ * The count said "nine" while the list held ten — the same off-by-one this branch has now made
+ * three times in a docblock. Counting them in a file that fails when the count is wrong is the
+ * point of moving the claim into a test.
  *
  * So this refuses the accident — a capability author reaching for the field because it is there —
  * with one named exception, and not a caller who has decided to bypass the gate. Naming the

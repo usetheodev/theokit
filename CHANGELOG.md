@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `delegate()` applies the guardrails its spec declares. It accepted a `compiled` object carrying them and consulted neither half — measured: the input reached the model with its injection intact and the caller received the secret, while the run was green. Reachable as a tool (`tools/delegate-tool.ts` wraps it), so an agent could delegate to a sub-agent whose declared guards did nothing (B-015)
+
 - A narrowed `settingSources.claudeCode.import` is refused when the installed `@theokit/sdk` cannot read it. The field's docblock said it was "refused at resolve time" below 5.4.0 and nothing read a version: on 5.0.0 ≤ SDK < 5.4.0 the narrowed shape was forwarded, dropped in silence, and the foreign root was not read at all — less than the caller asked for, not more. `compatSources` landed in 5.0.0 and the narrowing in 5.4.0 (B-004)
 - `commands` is subtracted from the compat sources handed to the SDK. It is this package's surface, not the SDK's, so `import: ['commands']` forwarded a list containing zero names the SDK defines — reproducing the empty-list ambiguity `resolveCompatSources` refuses one layer up. A source whose surfaces all belong to this layer is dropped rather than sent empty (B-004)
 
