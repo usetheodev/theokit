@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Output guards moderate `thinking` events too. `AgentRunner` extracted only `text_delta`, so a secret in the model's reasoning reached the client verbatim while the operator's declared guard reported nothing. Two passes rather than one wider extractor — two kinds under one extractor collapse into a single event, which would promote the reasoning into visible output (B-014)
+
 - A guardrail refusal thrown inside a round is no longer wrapped into `DelegationError`, whose message interpolates its cause — which carried the guard's name and trigger to the model through the delegate tool's `delegation_failed` allowlist entry. Reachable with a consumer-supplied `streamFactory` (B-015)
 - The test build lock is released by the process that took it. A non-owner ran the same `finally` and unlinked the holder's lock, and a wait that timed out fell through to building beside it — two tsup runs cleaning one `dist/`, which is the intermittent `ENOENT: unlink dist/chunk-*.js.map` on root suite runs. A lock held past the build timeout is now recovered as stale; a live one refuses with the holder's pid (B-016) The build itself moved OUT of the test runner — `pnpm test` now builds `packages/theo` before invoking vitest, so it owns the machine instead of racing the suite it is building for. A warm dist still costs a stat, not a build (B-016, B-017)
 

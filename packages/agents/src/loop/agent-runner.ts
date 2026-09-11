@@ -252,19 +252,36 @@ export class AgentRunner {
         const safe = await runInputGuards(message, guardrails)
         // Output guards moderate the accumulated text before it reaches the client (M9).
         // `moderateOutputStream` is a transparent pass-through when no output guard is present.
+        // TWO passes, one per client-visible text kind — B-014.
+        //
+        // `thinking` is a public `AgentStreamEvent` and reaches the client like any other, and this
+        // moderated only `text_delta`: measured, a guard declared over the agent's output delivered
+        // `thinking "the key is sk-abc123"` verbatim. The third channel of a shape this cycle fixed
+        // twice already — a redaction computed and discarded, and `delegate()` consulting no guards.
+        //
+        // NOT one wider `extractText`, which is the obvious move and the wrong one: two kinds under
+        // one extractor COLLAPSE into a single event, so the reasoning would be promoted into a
+        // visible one. The moderation would create the disclosure it exists to close. Composing two
+        // passes is what `moderateOutputStream`'s own docblock prescribes, and each pass seeing one
+        // kind is what keeps them apart.
+        //
+        // The VISIBLE pass is inner and owns the aggregate: `response` accumulates from `text_delta`
+        // upstream, so moderating it in the reasoning pass too would apply a non-idempotent guard
+        // twice.
         return yield* moderateOutputStream(
-          runUnguarded(safe),
+          moderateOutputStream(
+            runUnguarded(safe),
+            guardrails,
+            (e) =>
+              e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined,
+            (content) => ({ type: 'text_delta', content }),
+            (content, result) => ({ ...result, response: content }),
+          ),
           guardrails,
-          (e) => (e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined),
-          // B-012: how to re-emit moderated text. Required, so a redaction cannot be computed here
-          // and silently dropped on the way to the client. The second parameter is the event being
-          // replaced — unused here because `extractText` above matches exactly ONE kind, which is
-          // the contract that keeps a collapse from crossing kinds.
-          (content) => ({ type: 'text_delta', content }),
-          // The aggregate channel. `run()` drains this generator and returns exactly this value,
-          // and `response` is accumulated upstream from the same `text_delta` events `extractText`
-          // reads — so the moderated string replaces it directly.
-          (content, result) => ({ ...result, response: content }),
+          (e) => (e.type === 'thinking' && typeof e.content === 'string' ? e.content : undefined),
+          (content) => ({ type: 'thinking', content }),
+          // The reasoning pass does NOT touch the aggregate — the visible pass already did.
+          (_content, result) => result,
         )
       })()
     }
