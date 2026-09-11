@@ -12,17 +12,24 @@
   },
   "changesets": [
     "a-foreign-root-can-be-imported-in-part",
+    "a-guard-refusal-is-not-a-delegation-failure",
     "a-narrowed-root-can-name-commands",
+    "a-permission-store-that-can-be-enforced",
     "a-redact-with-no-text-is-reported",
+    "a-streamed-redaction-reaches-the-client",
+    "a-veto-nobody-can-see",
     "agents-move-inside-the-server",
+    "an-ungated-setting-root-does-not-typecheck",
     "an-unreadable-transcript-is-never-identified",
     "both-authoring-doors-reach-the-gate",
     "commands-reach-a-declared-foreign-root",
     "compat-sources-reach-the-sdk",
+    "delegate-applies-the-guardrails-it-was-given",
     "delegation-composes-two-more-hooks",
     "escape-html-is-exported-with-its-caveat",
     "name-the-seam-that-covers-an-unwired-event",
     "observational-handlers-land-on-their-own-key",
+    "output-guards-reach-the-reasoning",
     "plugin-hooks-reach-every-route-kind",
     "rate-limited-guard-and-refusals-that-carry-headers",
     "session-secret-guard-refuses-what-people-type",
@@ -40,6 +47,7 @@
     "the-root-record-names-every-cut-version",
     "the-sdk-has-four-commands-is-ours",
     "the-sdk-range-admits-v5",
+    "the-sibling-field-was-left-ungated",
     "theo-md-location-decided"
   ]
 }
