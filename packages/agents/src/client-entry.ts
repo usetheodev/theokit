@@ -75,3 +75,14 @@ export { extractLastUserText } from './client/last-user-text.js'
 
 // `useAgent` does NOT live here — see `client-react-entry.ts`. This entry is React-free by contract.
 export type { UseAgentStatus } from './client/agent-client.js'
+
+/**
+ * B-061 — the type this barrel's own signatures NAME.
+ *
+ * It appeared in an exported signature and crossed nothing: a consumer could read the shape in the
+ * emitted `.d.ts` and could only name it by importing the upstream package directly. The sixth
+ * instance of the shape `bridge/index.ts` enumerates by issue number, and the first caught by a
+ * guard that DERIVES the requirement from the built barrels rather than listing it
+ * (`tests/unit/every-public-type-crosses-the-barrel.test.ts`).
+ */
+export type { WireTransport } from '@theokit/presenter/wire'

@@ -93,14 +93,22 @@ describe('expandCommandTemplate — shell segments', () => {
     expect(out).toBe('before SHELL_OUT after')
   })
 
-  it('test_a_failed_shell_segment_substitutes_its_output_and_warns_never_silence', async () => {
-    // EC-13. Substituting silence turns a broken command into a prompt that reads as though it had
-    // succeeded — a failure the model has no way to detect.
+  it('test_a_failed_shell_segment_aborts_the_invocation', async () => {
+    // EC-13, REVISED. This test used to assert the opposite — that the failure text was substituted
+    // and a warning emitted — on the reasoning that substituting SILENCE turns a broken command into
+    // a prompt that reads as though it had succeeded. That reasoning is correct and it weighed the
+    // wrong two options.
+    //
+    // Substituting the ERROR is worse than silence, not better. `fatal: not a git repository` reads
+    // as prose, so a template asking the model to review a diff handed it an error message and the
+    // model reviewed that. Silence at least leaves a gap. The third option — stop, which is what the
+    // spec says ("A failed command aborts the entire skill invocation… Claude never sees the skill
+    // content for that invocation") — is the only one where the caller learns anything.
+    //
+    // Full coverage of the new semantics, including the `@file` line this deliberately does not
+    // cross, is in `an-injected-command-that-fails-stops-the-invocation.test.ts`.
     const d = deps({ shell: vi.fn(async () => ({ text: 'command not found', ok: false })) })
-    const out = await expandCommandTemplate('x !`nope` y', '', d)
-    expect(out).toBe('x command not found y')
-    expect(d.warn).toHaveBeenCalledTimes(1)
-    expect(d.warn.mock.calls[0]?.[0]).toContain('nope')
+    await expect(expandCommandTemplate('x !`nope` y', '', d)).rejects.toThrow(/nope/)
   })
 
   it('test_shell_output_is_not_rescanned_for_placeholders_or_references', async () => {

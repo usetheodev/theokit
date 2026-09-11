@@ -49,3 +49,14 @@ export { askUserVia } from './ask-user-via.js'
  * The remaining gap is real but small — the app writes one line — and it is named here rather than
  * quietly counted as delivered.
  */
+
+/**
+ * B-061 — the type this barrel's own signatures NAME.
+ *
+ * It appeared in an exported signature and crossed nothing: a consumer could read the shape in the
+ * emitted `.d.ts` and could only name it by importing the upstream package directly. The sixth
+ * instance of the shape `bridge/index.ts` enumerates by issue number, and the first caught by a
+ * guard that DERIVES the requirement from the built barrels rather than listing it
+ * (`tests/unit/every-public-type-crosses-the-barrel.test.ts`).
+ */
+export type { TheokitAgentError } from '@theokit/sdk/errors'

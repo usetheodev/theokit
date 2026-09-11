@@ -10,7 +10,7 @@
  * NEVER calls an LLM. It imports only `zod` (types) + the compiler shape — no `theokit`
  * core, preserving the agents → (nothing) dependency direction (G1).
  */
-import type { CustomTool, InlineSkill, MemorySettings } from '@theokit/sdk'
+import type { CustomTool, InlineSkill, MemorySettings, TelemetrySettings } from '@theokit/sdk'
 import type { z } from 'zod'
 
 import type { Guardrail } from '../guardrails/index.js'
@@ -20,6 +20,7 @@ import type { McpServersMap } from '../types.js'
 import type { ReasoningEffort } from '../types.js'
 
 import type { CompiledAgentOptions, CompiledTool } from './agent-compiler.js'
+import type { CodePlugin } from './code-plugins.js'
 import type { HookHandlers } from './hook-handlers.js'
 import type { HookApprovalGate } from './sdk-adapter-create-options.js'
 import {
@@ -120,6 +121,15 @@ export interface DefineAgentConfig<TInput extends z.ZodType = z.ZodType> {
    */
   hookApproval?: HookApprovalGate
   /**
+   * B-054 — `MEMORY.md` here is NOT the Claude Code CLI's auto-memory file. This is the durable
+   * subsystem below: a SQLite+FTS5 store under `.theokit/memory/`, with `memory_search`/`memory_get`
+   * tools and no index cap. The CLI's lives under its own home (`CLAUDE_CONFIG_DIR` or `~/.claude`),
+   * is capped at 200 lines / 25 KB on read, and is swept on `cleanupPeriodDays` — none of which is
+   * implemented here. The SDK READS that directory for interop and does not write to it.
+   *
+   * Same filename, different directory, different semantics. Stated at both ends because a checklist
+   * that greps for `MEMORY.md` finds one and concludes the other exists.
+   *
    * M49 — durable memory (the SDK's `.theokit/memory/` subsystem: `Remember:` capture, MEMORY.md
    * store, auto-injected `<memory>` block, `memory_search`/`memory_get` tools). The shape is the
    * SDK's own `MemorySettings` — the canonical runtime contract. Projected into
@@ -127,10 +137,24 @@ export interface DefineAgentConfig<TInput extends z.ZodType = z.ZodType> {
    */
   memory?: MemorySettings
   /**
+   * B-072 — OpenTelemetry for this agent. Forwarded verbatim to `Agent.create({ telemetry })`,
+   * where the SDK emits spans for `agent.send`, `llm.call`, `tool.call` and `memory.search`.
+   *
+   * `{ enabled: true }` is the minimal opt-in. `@opentelemetry/api` is an OPTIONAL peer of the SDK:
+   * without it the whole thing is a silent no-op, which is the usual reason a run reports no spans.
+   */
+  telemetry?: TelemetrySettings
+  /**
    * Code `Plugin` objects forwarded to `Agent.create({ plugins })` — EXTENSION units (tools,
    * commands, model providers, memory adapters). For lifecycle interception use {@link hooks}.
    */
-  plugins?: readonly unknown[]
+  /**
+   * Code plugins — `{ name, register }`. NOT the Claude Code filesystem-bundle form, which is
+   * declared by living in a `plugins/` directory rather than by being passed here (B-055).
+   *
+   * `readonly unknown[]` is what let the wrong shape through silently.
+   */
+  plugins?: readonly CodePlugin[]
   /**
    * Lifecycle hooks keyed by `HookName` (`pre_tool_call` may veto via `{ block, message }`). Set by
    * the builder's `hooks()`; converted into a code plugin at `build()` and never reaching the SDK
@@ -302,6 +326,10 @@ export function compileAgentDefinition(def: AgentDefinition): CompiledAgentOptio
     ...(def.hookApproval !== undefined ? { hookApproval: def.hookApproval } : {}),
     // M49 — memory flows to the projection layer; `assembleM8CreateOptions` forwards it to Agent.create.
     ...(def.memory !== undefined ? { memory: def.memory } : {}),
+    // B-072 — same shape, same reason: the projection layer forwards it to Agent.create. Spread
+    // conditionally so an agent that never asked about telemetry does not hand the SDK an explicit
+    // `undefined`, which reads as a decision rather than as its absence.
+    ...(def.telemetry !== undefined ? { telemetry: def.telemetry } : {}),
     // Hooks are converted here — the layer EVERY path converges on — rather than on the builder, so
     // `defineAgent({ hooks })` cannot type-check and silently no-op. A lifecycle hook that is
     // declared but never registered is a security gate that does not gate.
@@ -324,7 +352,7 @@ export function compileAgentDefinition(def: AgentDefinition): CompiledAgentOptio
  * needs a transport. Doing the conversion HERE (not on the builder) means every entry point that
  * reaches `defineAgent` gets it, so `hooks` can never be declared-but-dropped.
  */
-function compileHooksAndPlugins(def: AgentDefinition): { plugins?: readonly unknown[] } {
+function compileHooksAndPlugins(def: AgentDefinition): { plugins?: readonly CodePlugin[] } {
   const map = (def as { hooks?: Readonly<Record<string, unknown>> }).hooks
   const entries = Object.entries(map ?? {}).filter(([, h]) => typeof h === 'function')
   const explicit = def.plugins ?? []

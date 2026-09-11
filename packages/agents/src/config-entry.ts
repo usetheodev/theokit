@@ -50,6 +50,7 @@ export { TrustStore, TrustStorePermissionsError, type TrustRecord } from './conf
 export { expandInstructionImports, type ExpandImportsInput } from './config/instruction-imports.js'
 
 export {
+  blockAppliesTo,
   loadInstructionTree,
   type InstructionBlock,
   type InstructionTree,
@@ -81,6 +82,38 @@ export {
   type ShellResult,
   type TemplateDeps,
 } from './config/command-template.js'
+
+/**
+ * B-067 — the settings precedence stack, named.
+ *
+ * Exported because the defect it fixes is DISAGREEMENT BETWEEN CONSUMERS, and a vocabulary nobody
+ * can import cannot be agreed on. The SDK's `foldLayers` takes any string with any number; these are
+ * the names and the order this ecosystem folds by, so two products reach the same answer instead of
+ * two internally-consistent different ones.
+ *
+ * A test importing it is not a consumer — the same rule the dead-code auditor applies to a declared
+ * public surface. The door is the export.
+ */
+export {
+  LAYERS_ARE_POSITIONED,
+  SETTINGS_LAYERS,
+  layerPrecedence,
+  settingsLayerChain,
+  type SettingsLayer,
+} from './config/settings-layers.js'
+
+/**
+ * The two SDK types `settingsLayerChain` speaks, re-exported so a consumer can NAME what it returns.
+ *
+ * `settingsLayerChain` hands back `LayerValues[]` and `SETTINGS_LAYERS` is a `DeclaredLayer[]`. Both
+ * types live in `@theokit/sdk`, and a consumer holding the result could not write its type down
+ * without adding a second dependency on a package they may not have imported — so the door opened
+ * onto a value nobody could store in a typed variable.
+ *
+ * `every-public-type-crosses-the-barrel.test.ts` caught it, which is the fifth time this package has
+ * paid for the same shape: a type crosses an exported signature and the name behind it does not.
+ */
+export type { DeclaredLayer, LayerValues } from '@theokit/sdk'
 
 export { frontmatterValue, splitFrontmatter, type ParsedFrontmatter } from './config/frontmatter.js'
 

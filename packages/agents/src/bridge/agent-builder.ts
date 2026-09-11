@@ -15,7 +15,7 @@
  *
  * PURE metadata (sdk-runtime.md / G2): the builder describes an agent, it NEVER calls an LLM.
  */
-import type { CustomTool, MemorySettings, ModelSelection } from '@theokit/sdk'
+import type { CustomTool, MemorySettings, ModelSelection, TelemetrySettings } from '@theokit/sdk'
 import type { z } from 'zod'
 
 import type { Guardrail } from '../guardrails/index.js'
@@ -24,6 +24,7 @@ import type { HumanInTheLoopOptions } from '../types.js'
 import type { McpServersMap } from '../types.js'
 import type { ReasoningEffort } from '../types.js'
 
+import type { CodePlugin } from './code-plugins.js'
 import { defineAgent, type AgentDefinition, type DefineAgentConfig } from './define-agent.js'
 import type { HookHandlers } from './hook-handlers.js'
 import type { HookApprovalGate } from './sdk-adapter-create-options.js'
@@ -267,6 +268,17 @@ export interface AgentBuilder<
    */
   memory(settings: MemorySettings): AgentBuilder<TInput, TModel, TContext, TTools>
   /**
+   * B-072 — emit OpenTelemetry spans for this agent's runs (`agent.send`, `llm.call`, `tool.call`,
+   * `memory.search`). Takes the SDK's `TelemetrySettings` verbatim; `{ enabled: true }` is the
+   * minimal opt-in, and content (prompts, responses, tool args) is omitted unless
+   * `includeContent: true` is set.
+   *
+   * Distinct from a diagnostics sink, which answers "what did this run LOG". A trace answers "where
+   * did this run SPEND its time, and which call was the slow one" — two questions, and the sink
+   * could never answer the second.
+   */
+  telemetry(settings: TelemetrySettings): AgentBuilder<TInput, TModel, TContext, TTools>
+  /**
    * Attach LIFECYCLE HOOKS in code, keyed by `HookName` — the builder-chain seam for intercepting
    * the agent loop. `pre_tool_call` may VETO a tool by returning `{ block: true, message }` before
    * it runs; the other events are observational.
@@ -294,8 +306,13 @@ export interface AgentBuilder<
    * For lifecycle interception prefer {@link AgentBuilder.hooks} — a hook needs a plugin only as its
    * transport, and `plugins()` makes the caller assemble that transport by hand. Reach for this when
    * you genuinely have a plugin (a provider, a memory adapter, a tool-registering extension).
+   *
+   * NOT the Claude Code filesystem-bundle form (B-055). `[{ type: 'local', path: './p' }]` used to
+   * typecheck here against `readonly unknown[]` and do nothing — the typecheck that should have
+   * caught it was what let it through. A bundle is declared by living in a `plugins/` directory
+   * under `.theokit/` or `.claude/`, where its `skills/` and `agents/` are discovered.
    */
-  plugins(list: readonly unknown[]): AgentBuilder<TInput, TModel, TContext, TTools>
+  plugins(list: readonly CodePlugin[]): AgentBuilder<TInput, TModel, TContext, TTools>
   /**
    * Declare MCP (Model Context Protocol) servers available to this agent — the builder-chain
    * equivalent of the `@MCP` class decorator. Each key is a server name; the value is its config
@@ -359,9 +376,10 @@ function makeBuilder(config: DefineAgentConfig): AgentBuilder {
       makeBuilder({ ...config, settingSources: selection }),
     hookApproval: (gate: HookApprovalGate) => makeBuilder({ ...config, hookApproval: gate }),
     memory: (settings: MemorySettings) => makeBuilder({ ...config, memory: settings }),
+    telemetry: (settings: TelemetrySettings) => makeBuilder({ ...config, telemetry: settings }),
     hooks: (map: HookHandlers | Readonly<Record<string, unknown>>) =>
       makeBuilder({ ...config, hooks: map }),
-    plugins: (list: readonly unknown[]) => makeBuilder({ ...config, plugins: list }),
+    plugins: (list: readonly CodePlugin[]) => makeBuilder({ ...config, plugins: list }),
     mcp: (servers: McpServersMap) => makeBuilder({ ...config, mcpServers: servers }),
     use: (preset: (b: unknown) => unknown) => preset(runtime),
     build: () => defineAgent(config),

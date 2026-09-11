@@ -54,7 +54,28 @@ export type GuardrailPhase = 'input' | 'output'
  * `''` is NOT this case. An empty replacement is a guard choosing to erase everything, which is the
  * strongest redaction available, and treating it as absent would invert the defect.
  */
-export class MalformedGuardrailResultError extends TheokitAgentError {
+/**
+ * The base every guardrail error shares, so the seams that must treat them alike can do so BY
+ * CONSTRUCTION rather than by remembering a list.
+ *
+ * The list is how B-020 happened. `run-reflective-loop.ts` let `GuardrailViolationError` pass
+ * through unwrapped, and its sibling in this same file was not added — so a malformed result was
+ * wrapped in a `DelegationError`, whose message interpolates its cause and whose code is on the
+ * delegate tool's message allowlist. The guard's name crossed to the model, and a guard DEFECT was
+ * reported as a delegation failure.
+ *
+ * A base is not airtight on its own: a new class can still extend `TheokitAgentError` directly.
+ * `tests/unit/a-guardrail-defect-does-not-name-its-guard.test.ts` walks this module's barrel and
+ * fails on any exported error class that skipped it. The two together are the construction; either
+ * alone is a convention.
+ *
+ * Abstract because there is nothing to throw at this level — every guardrail failure is one of the
+ * specific kinds below, and a bare `GuardrailError` would say only that something guard-shaped
+ * happened.
+ */
+export abstract class GuardrailError extends TheokitAgentError {}
+
+export class MalformedGuardrailResultError extends GuardrailError {
   override readonly name = 'MalformedGuardrailResultError'
   constructor(
     public readonly guardName: string,
@@ -81,7 +102,7 @@ export class MalformedGuardrailResultError extends TheokitAgentError {
  * is what one actually wrote. `code` is stable across a rename of the class; `isRetryable` is
  * DECLARED rather than defaulted, because a default would be a retry policy nobody chose.
  */
-export class GuardrailViolationError extends TheokitAgentError {
+export class GuardrailViolationError extends GuardrailError {
   override readonly name = 'GuardrailViolationError'
   constructor(
     public readonly guardName: string,
@@ -97,6 +118,37 @@ export class GuardrailViolationError extends TheokitAgentError {
   }
 }
 
+/**
+ * A text-carrying event arrived with a `content` that is not text.
+ *
+ * Distinct from the two above on purpose: they say a guard REFUSED something or was WRITTEN WRONG.
+ * This says the STREAM is malformed — the event announces itself as text and carries something a
+ * guard cannot read.
+ *
+ * Until B-021 this was silent. Both extractors tested `typeof e.content === 'string'` and returned
+ * `undefined` otherwise, which `moderateOutputStream` reads as "this event carries no text" — so the
+ * payload was never accumulated, never shown to a guard, and yielded VERBATIM. The failure direction
+ * is DELIVER: a guard declared to stop that payload never saw it, and the run reported green.
+ *
+ * Refused rather than coerced. Coercing would moderate `"[object Object]"` — a guard consulted about
+ * a string the model never produced, returning a verdict about nothing, while the real payload rides
+ * along underneath. That is the redaction-computed-and-discarded shape with an extra step.
+ */
+export class UnreadableTextPayloadError extends GuardrailError {
+  override readonly name = 'UnreadableTextPayloadError'
+  constructor(
+    public readonly eventType: string,
+    public readonly received: unknown,
+  ) {
+    super(
+      `A "${eventType}" event carried a non-string content (${typeof received}), which no guard ` +
+        `can read. It was previously delivered unexamined. Fix the producer, or stop declaring the ` +
+        `event as text-carrying.`,
+      { code: 'GUARDRAIL_UNREADABLE_PAYLOAD', isRetryable: false },
+    )
+  }
+}
+
 /** Thrown when {@link costGuard}'s cumulative token budget is exceeded. */
 /**
  * M80 — extends {@link TheokitAgentError}, not plain `Error`.
@@ -107,7 +159,7 @@ export class GuardrailViolationError extends TheokitAgentError {
  * rename of the class; `isRetryable` is DECLARED rather than defaulted, because a default would be a
  * retry policy nobody chose.
  */
-export class CostBudgetExceededError extends TheokitAgentError {
+export class CostBudgetExceededError extends GuardrailError {
   override readonly name = 'CostBudgetExceededError'
   constructor(
     public readonly usedTokens: number,

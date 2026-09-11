@@ -9,6 +9,7 @@
  * with none, this is a transparent pass-through (streaming preserved).
  */
 import { runOutputGuards } from './pipeline.js'
+import { UnreadableTextPayloadError } from './types.js'
 import type { Guardrail } from './types.js'
 
 /**
@@ -203,4 +204,47 @@ export async function* moderateOutputStream<E, R>(
   // The aggregate travels the same fix as the events. On the fast path above it is untouched by
   // construction: `moderated === accumulated`, so there is nothing to apply.
   return rebuildResult(moderated, step.value)
+}
+
+/**
+ * The `extractText` for an event kind that announces itself as text — one implementation, used by
+ * every seam that moderates a stream.
+ *
+ * B-021 existed because there were two hand-written copies of `typeof e.content === 'string'`, in
+ * `AgentRunner.stream()` and in the served endpoint, and both returned `undefined` for a non-string.
+ * `moderateOutputStream` reads `undefined` as "this event carries no text", so the payload was never
+ * accumulated, never shown to a guard, and yielded verbatim — the DELIVER direction, with a guard
+ * declared to stop exactly that.
+ *
+ * Two different questions were collapsed into one answer:
+ *
+ * | The event | What the extractor must say |
+ * |---|---|
+ * | another kind entirely | `undefined` — not this channel |
+ * | this kind, content readable | the text |
+ * | this kind, content unreadable | **throw** — a guard cannot examine it |
+ *
+ * The third row is the one that was missing, and it cannot be expressed by a return value that also
+ * means "not this kind". Refused rather than coerced: coercing would moderate `"[object Object]"`,
+ * consulting a guard about a string the model never produced while the real payload rides along
+ * underneath.
+ *
+ * Reachable in practice rather than in theory — `StreamEvent` is `{ type: string; [key: string]:
+ * unknown }`, `event-translator.ts` casts an unvalidated provider content block to `{ text?: string
+ * }`, and a consumer-supplied `streamFactory` is a public option.
+ *
+ * Only consulted when a guard defines `checkOutput`: {@link moderateOutputStream} is a transparent
+ * pass-through otherwise, so an agent that declared no guard never meets this error however
+ * malformed the stream is.
+ */
+export function textPayloadExtractor<E extends { type?: unknown }>(
+  kind: string,
+  read: (event: E) => unknown,
+): (event: E) => string | undefined {
+  return (event) => {
+    if (event.type !== kind) return undefined
+    const content = read(event)
+    if (typeof content !== 'string') throw new UnreadableTextPayloadError(kind, content)
+    return content
+  }
 }
