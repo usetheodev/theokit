@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **A configured output style is applied.** `loadOutputStyle` from `@theokit/agents/config` reads
+  `.claude/output-styles/*.md` from the project and the home directory, project winning. Measured
+  before: 0 files mentioned output styles anywhere, against a control of 26 for `skills` — so an
+  author could write a style, select it, and never learn whether it was wrong or simply unread. A
+  named style with no file now throws a typed error listing where it looked; a style nobody
+  requested still returns `undefined`. `keep-coding-instructions` is carried, because a style
+  replaces the built-in task instructions by default and losing them silently is the worse failure
+  (B-022)
+
 - **An operator can declare a credential helper.** `apiKeyHelper` in the operator policy names a
   command that prints a credential, and `resolveOperatorApiKey` from `@theokit/agents/auth` runs it.
   Measured before: all four helpers the reference format names returned zero occurrences here, so an
