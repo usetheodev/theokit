@@ -85,7 +85,12 @@ afterEach(() => {
 it('test_the_shared_marker_path_is_the_one_the_helper_defaults_to', () => {
   // Keeps the injection honest: an isolated marker only proves anything if the real default is the
   // shared file the workers actually agree on.
-  expect(VALIDATION_MARKER).toMatch(/theokit-test-locks/)
+  //
+  // The pattern read `/theokit-test-locks/` — the OS-temp directory the lock used to live in — and
+  // this assertion is what caught the move to `node_modules/.cache/`. It is doing its job, so it is
+  // retargeted rather than loosened: a regex that matched both places would stop noticing the next
+  // move, which is the whole reason this line exists.
+  expect(VALIDATION_MARKER).toMatch(/node_modules\/\.cache\/theokit-build-locks/)
   expect(MARKER).not.toBe(VALIDATION_MARKER)
 })
 
