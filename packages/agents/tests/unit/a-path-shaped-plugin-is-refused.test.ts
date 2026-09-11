@@ -64,3 +64,51 @@ describe('a path-shaped plugin entry is refused rather than ignored', () => {
     expect(() => assertCodePlugins(['nope'])).toThrow(/received string/)
   })
 })
+
+/**
+ * All three plugin kinds are code plugins — the SDK says so, and the refusal must agree.
+ *
+ * `Plugin` in `@theokit/sdk` is a union discriminated on `kind`:
+ *
+ *   general         `register(ctx)`        registers tools, commands, hooks
+ *   model-provider  `profile`              supplies a model provider
+ *   memory          `createProvider`       supplies a memory adapter
+ *
+ * The first version of `CodePlugin` required `register`, so it accepted one of the three and
+ * refused the other two. The docblock on `AgentBuilder.plugins` — written in the same commit —
+ * already said the parameter takes "a model provider / memory adapter (`kind: 'general' |
+ * 'model-provider' | 'memory'`)", so the prose described three kinds while the type admitted one.
+ *
+ * TheoCode found it, which is the useful part. It passes a `model-provider` plugin, and on
+ * `@theokit/agents@13.0.0` its build stopped with `Property 'register' is missing in type
+ * 'BasePlugin & { kind: "model-provider"; profile: ProviderProfile; }'`. A guard written to refuse
+ * the filesystem-bundle form was refusing two thirds of the code form instead.
+ *
+ * What the guard is FOR is unchanged and pinned by the cases above: `{ type, path, source,
+ * marketplace }` is a bundle, belongs in a directory, and is still refused by name.
+ */
+describe('every code-plugin kind the SDK defines is accepted', () => {
+  it('accepts a model-provider plugin, which has `profile` and no `register`', () => {
+    expect(() =>
+      assertCodePlugins([{ name: 'anthropic', kind: 'model-provider', profile: {} }]),
+    ).not.toThrow()
+  })
+
+  it('accepts a memory plugin, which has `createProvider` and no `register`', () => {
+    expect(() =>
+      assertCodePlugins([{ name: 'mem0', kind: 'memory', createProvider: () => ({}) }]),
+    ).not.toThrow()
+  })
+
+  it('still accepts a general plugin', () => {
+    expect(() =>
+      assertCodePlugins([{ name: 'tools', kind: 'general', register: () => {} }]),
+    ).not.toThrow()
+  })
+
+  it('still refuses an object carrying a name and none of the three capabilities', () => {
+    // The control. Widening to three kinds must not widen to "anything with a name" — that would
+    // accept the bundle form back through the front door the moment somebody adds a `name` to it.
+    expect(() => assertCodePlugins([{ name: 'nothing-behind-it' }])).toThrow()
+  })
+})

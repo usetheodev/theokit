@@ -48,6 +48,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Every plugin KIND is accepted, not just `general`.** `CodePlugin` required `register`, so
+  `AgentBuilder.plugins()` admitted `kind: "general"` and refused `model-provider` (`profile`) and
+  `memory` (`createProvider`) — while the builder's own docblock already promised all three. Found by
+  a consumer, not by a gate: TheoCode's build stopped on `@theokit/agents@13.0.0` with "Property
+  'register' is missing", and 1 799 tests, tsc, eslint, knip and CodeQL had all passed over it. The
+  filesystem-bundle form is still refused, and so is an object with a name and none of the three
+  capability keys (B-055 follow-up)
+
 - A hook's `matcher: "*"` fires, as the format defines it. `new RegExp("*")` throws "nothing to repeat" and the catch reads a throw as no-match, so the spelling an author is most likely to write for "always" was the one spelling that meant "never". Measured end to end with a vetoing hook against tool `Bash`: `"*"` let the call through while `""`, `"Bash"` and an omitted matcher all vetoed it. The comma-separated exact-list form (`"Edit, Write"`) also matched nothing — as a pattern it required the space to be part of a tool name — and is now recognised as the list it is. Both shapes are handled BEFORE the regex engine, since neither is valid regex. An uncompilable matcher still does not match, deliberately: a broken matcher must not take down the turn (B-031)
 
 - `${VAR}` in `.mcp.json` resolves against the host environment instead of reaching the server as eleven literal characters. `.mcp.json` is committed, so a named reference is the only documented way to keep a credential out of it; unexpanded, the server authenticated with the text `${API_KEY}` and failed at the remote end, pointing nowhere near the config line. An unset reference is REPORTED and left as written — substituting empty would start the server with a blank credential and fail somewhere further away. This does not loosen the posture `buildEntry` already takes in refusing `envPolicy`: that refusal is about a committed file handing a server the WHOLE environment, while this resolves one variable the host already chose to set (B-037)

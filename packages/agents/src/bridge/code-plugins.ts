@@ -29,10 +29,32 @@ import { ConfigurationError } from '../errors.js'
  * here would be a second declaration to drift from. What this needs to know is the one thing that
  * tells a code plugin from a bundle reference.
  */
-export interface CodePlugin {
-  readonly name: string
-  readonly register: (...args: never[]) => unknown
-}
+/**
+ * A code plugin, in any of the three kinds `@theokit/sdk`'s `Plugin` union defines.
+ *
+ *   `general`         `register(ctx)`     registers tools, commands, hooks
+ *   `model-provider`  `profile`           supplies a model provider
+ *   `memory`          `createProvider`    supplies a memory adapter
+ *
+ * The first version of this type required `register`, which accepted the first kind and refused the
+ * other two — while the docblock on `AgentBuilder.plugins`, written in the same commit, already
+ * described all three. A real consumer found it: on `@theokit/agents@13.0.0` a `model-provider`
+ * plugin failed to compile with "Property 'register' is missing". A guard written to refuse the
+ * FILESYSTEM-bundle form was refusing two thirds of the CODE form instead.
+ *
+ * Modelled here as name-plus-one-capability rather than by importing the SDK union, for the reason
+ * the module header gives: this layer must not depend on the SDK's value side, and the published
+ * floor is `^4.52.1` where the union's shape is not guaranteed identical. The capability keys ARE
+ * the discriminator, so the refusal below stays exact.
+ */
+export type CodePlugin = { readonly name: string } & (
+  | { readonly register: (...args: never[]) => unknown }
+  | { readonly profile: unknown }
+  | { readonly createProvider: (...args: never[]) => unknown }
+)
+
+/** The one field each `Plugin` kind carries. Having a name and none of these is not a code plugin. */
+const CAPABILITY_KEYS = ['register', 'profile', 'createProvider'] as const
 
 /** Keys that mark an entry as the FILESYSTEM-bundle form rather than a code plugin. */
 const BUNDLE_KEYS = ['path', 'type', 'source', 'marketplace'] as const
@@ -71,5 +93,9 @@ function describe(entry: unknown): string {
 function isCodePlugin(entry: unknown): entry is CodePlugin {
   if (typeof entry !== 'object' || entry === null) return false
   const candidate = entry as Record<string, unknown>
-  return typeof candidate.name === 'string' && typeof candidate.register === 'function'
+  if (typeof candidate.name !== 'string') return false
+  // `profile` is a plain object, the other two are functions — so this asks whether the key is
+  // PRESENT and not undefined, rather than whether it is callable. A narrower check would refuse a
+  // model-provider for having the wrong JavaScript type, which is not what makes it a plugin.
+  return CAPABILITY_KEYS.some((key) => candidate[key] !== undefined)
 }
