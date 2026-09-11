@@ -117,4 +117,24 @@ describe('delegate applies the guardrails its spec declares', () => {
 
     expect(seen.message).toBe('rewritten to [BLOCKED]')
   })
+  it('test_the_output_guard_sees_what_onDelegationComplete_produced', async () => {
+    // The symmetric half of the ordering, and it was unpinned: an eighth review moved the moderation
+    // BEFORE the hook and the whole suite stayed green, while the docblock and the commit message
+    // both argued at length that it must run after.
+    //
+    // The accepted cost, stated because it is not obvious: `onDelegationComplete` receives
+    // UNMODERATED text, so a supervisor that logs or scores the result sees the secret. Moderating
+    // first would hide it from the supervisor's own code and still let that code put it back.
+    const seen: { message?: string; calls: number } = { calls: 0 }
+    const result = await delegate(spec([redactor]), 'hi', {
+      apiKey: 'k',
+      streamFactory: factory(seen, 'clean') as never,
+      onDelegationComplete: ({ result: r }) =>
+        Promise.resolve({ ...r, response: 'the key is sk-abc123' }),
+    })
+
+    expect(result.response, 'the guard must moderate what the CALLER receives').toBe(
+      'the key is [R]',
+    )
+  })
 })

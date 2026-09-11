@@ -208,16 +208,20 @@ declare const GATED: unique symbol
  *
  * ## What it does not do
  *
- * `as never` defeats it, like every brand — and so does `Object.assign(draft, { settingSources: [...] })`,
- * measured cast-free against the emitted `.d.ts`, including from inside a `Capability.apply`. That
- * second one is a TypeScript-wide hole rather than a design choice here: `Object.assign<T, U>`
- * returns `T & U` and checks nothing about `T`'s existing fields.
+ * `as never` defeats it, like every brand — and so does ANY REFLECTIVE WRITE: `Object.assign`,
+ * `Reflect.set`, `Object.defineProperty`. All three typecheck cast-free, measured, including from
+ * inside a `Capability.apply`. That is a TypeScript-wide hole rather than a design choice here —
+ * those APIs type their value as `any` or return `T & U` without checking `T`'s existing fields.
+ *
+ * Stated as a CLASS and not a list, after two rounds of naming one instance and calling it "the one
+ * named exception". A list of escapes is a list somebody adds to; the property is that reflection
+ * bypasses the type system, and enumerating members of that class understates it every time.
  *
  * TEN other routes are refused, and they are refused by a TEST rather than by this sentence:
  * `tests/type/setting-sources-brand-escapes.test-d.ts` guards each one with a `@ts-expect-error`,
  * so weakening the brand reports which route reopened instead of passing quietly. `setOnce` with a
- * raw array, `setOnce` through a generic wrapper, a direct `draft.settingSources =`, a spread of a
- * compiled object, an object literal with `as`, `.concat`, `.map`, spread-widening, `satisfies`,
+ * raw array, `setOnce` through a generic wrapper, a direct `draft.settingSources =`, a spread of an
+ * array literal, an object literal with `as`, `.concat`, `.map`, spread-widening, `satisfies`,
  * and `.push`.
  *
  * The count said "nine" while the list held ten — the same off-by-one this branch has now made

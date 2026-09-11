@@ -25,6 +25,7 @@ import {
   type DelegationResult,
 } from '../../src/bridge/delegation-types.js'
 import { createDelegateTool, DelegateToolConfigError } from '../../src/tools/delegate-tool.js'
+import { GuardrailViolationError } from '../../src/guardrails/index.js'
 
 /** A `DelegationPort` double: records what it was asked, answers what the test dictates. */
 function portReturning(response: string): {
@@ -313,5 +314,48 @@ describe('createDelegateTool — reachability (wiring)', () => {
 
     expect(barrel.createDelegateTool).toBe(createDelegateTool)
     expect(barrel.DelegateToolConfigError).toBe(DelegateToolConfigError)
+  })
+
+  it('test_a_guardrail_block_crosses_as_a_refusal_not_a_crash', async () => {
+    // B-015 made `GuardrailViolationError` reachable from `delegate()` for the first time. Before
+    // that it could not come out of this handler, so it fell to the `undefined` arm and was rethrown
+    // as "a defect" — ending the parent's turn, while this tool's own description promises
+    // `{ ok: false, error, message }` on a refusal. Found by review, unmentioned in the commit that
+    // introduced it.
+    const tool = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new GuardrailViolationError('pii-detector', 'output', 'ssn found')),
+        },
+      ],
+    })
+
+    const out = await tool.handler({ agent: 'worker', task: 't' })
+
+    expect(JSON.parse(out as string)).toMatchObject({ ok: false, error: 'guardrail_violation' })
+  })
+
+  it('test_a_guardrail_refusal_does_not_hand_the_model_a_map_around_the_guard', async () => {
+    // Every other code passes the typed error's message through, because a budget or a timeout is a
+    // fact about the work. This one does not: the message reads
+    // `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and its exact trigger.
+    // A model given that learns which words to avoid, not that it should stop.
+    const tool = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new GuardrailViolationError('pii-detector', 'output', 'ssn found')),
+        },
+      ],
+    })
+
+    const payload = JSON.parse((await tool.handler({ agent: 'worker', task: 't' })) as string) as {
+      message: string
+    }
+
+    expect(payload.message).not.toContain('pii-detector')
+    expect(payload.message).not.toContain('ssn found')
+    expect(payload.message, 'the model still learns it was refused').toMatch(/refused|policy/i)
   })
 })

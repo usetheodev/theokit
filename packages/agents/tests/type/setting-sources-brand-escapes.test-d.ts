@@ -42,26 +42,25 @@ wrap(draft, 'settingSources', ['project'])
 // @ts-expect-error assigning the field directly skips the gate too
 draft.settingSources = ['project']
 
-// 4 — a spread of a compiled object
+// 4 — a spread of an array literal (structurally distinct from route 8's `as const` spread)
+const spreadOfLiteral = [...['project']]
 // @ts-expect-error a spread widens to string, which is not gated
-setOnce(draft, 'settingSources', [...['project']], 'r4')
+setOnce(draft, 'settingSources', spreadOfLiteral, 'r4')
 
 // 5 — an object literal with `as`  (as a plain widening, not `as never`)
+const widenedByAs = ['project'] as string[]
 // @ts-expect-error an `as string[]` is not an `as never`
-setOnce(draft, 'settingSources', ['project'] as string[], 'r5')
+setOnce(draft, 'settingSources', widenedByAs, 'r5')
 
 // 6 — .concat
+const concatenated = ([] as string[]).concat('project')
 // @ts-expect-error .concat returns string[], ungated
-setOnce(draft, 'settingSources', ([] as string[]).concat('project'), 'r6')
+setOnce(draft, 'settingSources', concatenated, 'r6')
 
 // 7 — .map
+const mapped = ['project'].map((s) => s)
 // @ts-expect-error .map erases the literal type, and the brand with it
-setOnce(
-  draft,
-  'settingSources',
-  ['project'].map((s) => s),
-  'r7',
-)
+setOnce(draft, 'settingSources', mapped, 'r7')
 
 // 8 — spread-widening
 const widened = [...(['project'] as const)]
@@ -69,8 +68,9 @@ const widened = [...(['project'] as const)]
 setOnce(draft, 'settingSources', widened, 'r8')
 
 // 9 — satisfies
+const satisfied = ['project'] satisfies string[]
 // @ts-expect-error satisfies checks, it does not brand
-setOnce(draft, 'settingSources', ['project'] satisfies string[], 'r9')
+setOnce(draft, 'settingSources', satisfied, 'r9')
 
 // 10 — .push
 const pushed: string[] = []

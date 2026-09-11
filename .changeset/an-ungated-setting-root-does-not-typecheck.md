@@ -54,3 +54,6 @@ projection that needed it did not do it. Measured: `import: ['commands']` forwar
 containing zero names the SDK defines, which is its own empty-list case — the exact ambiguity
 `resolveCompatSources` refuses four lines earlier. A source whose surfaces all belong to this layer
 is now dropped from the SDK's list rather than sent empty.
+
+`CompatImportUnsupportedError` is exported from `@theokit/agents/bridge`, so a consumer can catch the
+refusal by class rather than by matching its message.

@@ -37,15 +37,30 @@ describe('Bundle size regression', () => {
    * The alternative considered and rejected: shrink by dropping the in-process entry's copy of the
    * option. That is the half the parity gate had just refused, and paying for a security default
    * with a transport-dependent one is not a saving.
+   *
+   * ## Raised again to 38 500 for B-004 — measured the same way
+   *
+   * Carrying `CompatImportUnsupportedError` across the barrel cost **64 bytes**, attributed by
+   * building with and without only that export line: 37 484 → 37 548. The old ceiling of 37 500 had
+   * sixteen bytes of headroom, so any public type crossing the barrel was going to trip it.
+   *
+   * The bytes buy a consumer the ability to `catch (e) { if (e instanceof CompatImportUnsupportedError) }`
+   * instead of matching a message string. The refusal shipped one commit WITHOUT crossing the
+   * barrel, while the class it was written to mirror sat beside it — the fifth instance of that
+   * shape (#663, #668, #675, #686), and `the-gate-is-nameable-by-a-consumer.test.ts` exists to catch
+   * exactly it. Paying 64 bytes to keep that guard honest is the cheaper side of the trade.
+   *
+   * Headroom is again about a kilobyte, and again stated so the next barrel addition meets a guard
+   * rather than a formality.
    */
-  it('agents main bundle under 37.5KB', () => {
+  it('agents main bundle under 38.5KB', () => {
     const path = resolve(distDir, 'index.js')
     if (!existsSync(path)) {
       console.log('  SKIP: dist/index.js not found (run pnpm build first)')
       return
     }
     const size = statSync(path).size
-    expect(size).toBeLessThan(37_500)
+    expect(size).toBeLessThan(38_500)
     console.log(`  agents/dist/index.js: ${(size / 1024).toFixed(1)} KB`)
   })
 

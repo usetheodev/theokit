@@ -309,9 +309,15 @@ export async function delegate(
  * a value, exposing no event stream, so the two-channel split that cost B-012 four review rounds
  * cannot repeat here. Saying so is the point — relying on it silently is how that one was missed.
  *
- * `response` only. `toolCalls[].output` is tool output rather than model text, and
- * `loop/agent-runner.ts` excludes it from `extractText` on the same reasoning; leaving it alone here
- * is that decision applied consistently, not an omission.
+ * `response` only, and the enumeration matters because an earlier version of it was incomplete.
+ *
+ * - `toolCalls[].output` — tool output, not model text. `loop/agent-runner.ts` excludes it from
+ *   `extractText` on the same reasoning.
+ * - `toolCalls[].input` — the model's own tool-call ARGUMENTS, correlated from the `tool_call`
+ *   event at `run-reflective-loop.ts:288`. This one genuinely is model text and it is NOT moderated.
+ *   Consistent with `agent-runner.ts`, so not a regression here — and named rather than omitted,
+ *   because the previous paragraph called leaving `output` alone "that decision applied
+ *   consistently" while saying nothing about the field the argument actually applies to.
  */
 async function moderateDelegationResult(
   result: DelegationResult,

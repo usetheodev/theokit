@@ -33,6 +33,12 @@ const THE_GATE_NEEDS = [
   // adding one here is the cheapest moment to notice the barrel does not carry it.
   'CompatSurface',
   'ResolvedCompatSource',
+  // B-004 — the refusal raised when the installed SDK cannot read a narrowed `import`. Added after
+  // a review found it shipped WITHOUT crossing the barrel, while the class it was written to mirror
+  // (`HookGateUnsupportedError`, four lines up) did. A consumer meeting a brand-new refusal could
+  // only match its message string — which is the fifth time this shape has been caught here, and
+  // exactly what the note above predicts.
+  'CompatImportUnsupportedError',
 ] as const
 
 describe('the hook gate is nameable by a consumer (theokit#686)', () => {

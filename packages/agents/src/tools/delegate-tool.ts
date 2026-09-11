@@ -28,6 +28,7 @@ import {
   DelegationError,
   type DelegationResult,
 } from '../bridge/delegation-types.js'
+import { GuardrailViolationError } from '../guardrails/index.js'
 
 /**
  * A roster misconfiguration — always raised at factory time, never at the model's first call.
@@ -114,7 +115,31 @@ function errorCodeOf(error: unknown): string | undefined {
   if (error instanceof DelegationBudgetExceededError) return 'delegation_budget_exceeded'
   if (error instanceof DelegationTimeoutError) return 'delegation_timeout'
   if (error instanceof DelegationError) return 'delegation_failed'
+  // B-015 made this class reachable from `delegate()` for the first time. Before that it could not
+  // come out, so it fell to the `undefined` arm and was rethrown as "a defect" — ending the parent's
+  // turn while this tool's own description, shipped to the model, promises `{ ok: false, … }` on a
+  // refusal. A guard refusal IS a refusal, so it crosses as one.
+  if (error instanceof GuardrailViolationError) return 'guardrail_violation'
   return undefined
+}
+
+/**
+ * What the model is told about a refusal.
+ *
+ * Every other code passes the typed error's message through, because a budget or a timeout is a
+ * fact about the work. A guardrail message is not: it reads
+ * `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and the exact trigger. Give
+ * that to a model and it has a map around the gate — it learns which words to avoid, not that it
+ * should stop.
+ *
+ * So this one code gets a fixed string. The operator still has the full typed error: the guard ran
+ * in their process and `GuardrailViolationError` carries `guardName`, `phase` and `reason` for
+ * whoever catches it. The model gets the one bit it can act on — delegate less, or do the work
+ * itself.
+ */
+function messageForModel(code: string, error: unknown): string {
+  if (code === 'guardrail_violation') return 'the delegated task was refused by a policy guard'
+  return error instanceof Error ? error.message : String(error)
 }
 
 function describeRoster(roster: readonly DelegateRosterEntry[]): string {
@@ -199,11 +224,7 @@ export function createDelegateTool(options: CreateDelegateToolOptions) {
         // A delegation refusal is INFORMATION the model can act on: delegate less, or finish the
         // work itself. Throwing here would end the parent's turn over a recoverable signal. Nothing
         // is swallowed — the typed error's identity crosses as a stable code, its message intact.
-        return JSON.stringify({
-          ok: false,
-          error: code,
-          message: error instanceof Error ? error.message : String(error),
-        })
+        return JSON.stringify({ ok: false, error: code, message: messageForModel(code, error) })
       }
     },
   })

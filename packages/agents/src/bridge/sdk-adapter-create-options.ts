@@ -132,6 +132,20 @@ export class HookGateUnsupportedError extends TheokitAgentError {
  * consumer who asked for "the skills but not the hooks" silently gets NOTHING — strictly further
  * from what they asked for than the un-narrowed form, which at least reads something. Failing loud
  * is recoverable; a silent nothing is discovered by wondering why a skill is missing.
+ *
+ * ## The cost, which this file argues against two functions above
+ *
+ * An unreadable version is refused too, on the principle {@link assertSdkCanGateHooks} states:
+ * "cannot tell" and "is supported" must not collapse. The sibling WARNING takes the opposite view
+ * for itself — *"a bundled or vendored SDK may not resolve that subpath, and refusing to create an
+ * agent over a diagnostic would be the cure being worse than the disease."*
+ *
+ * Both are right for what they guard, and the difference is what the check IS. A diagnostic that
+ * cannot read a version should stay quiet; a GATE that cannot read one has not established the
+ * thing it exists to establish. But the cost is real and belongs here rather than in a reviewer's
+ * report: a consumer who bundles the SDK so `@theokit/sdk/package.json` does not resolve cannot
+ * create an agent with a narrowed `import`, even on 5.4.0+. Their exit is to omit `import` and read
+ * the whole root.
  */
 export class CompatImportUnsupportedError extends TheokitAgentError {
   override readonly name = 'CompatImportUnsupportedError'
@@ -302,12 +316,20 @@ function applyLocalSources(
     applied.push('settingSources')
   }
   if (compiled.compatSources !== undefined && compiled.compatSources.length > 0) {
-    // A narrowed `import` needs a newer SDK than `compatSources` itself does — refuse before the
-    // value travels, because the older runtime's silence is indistinguishable from success.
-    if (compiled.compatSources.some((c) => typeof c === 'object' && 'import' in c)) {
+    // Narrow FIRST, then gate on what would actually be sent.
+    //
+    // The reverse order shipped for one commit and refused a config the SDK is never asked about:
+    // `import: ['commands']` forwards nothing — `commands` is this layer's surface — yet the version
+    // check fired anyway, telling the operator to upgrade for a narrowing that would never travel,
+    // and denying `config/custom-commands.ts` the only surface it reads. Measured on 4.52.1, this
+    // package's declared floor. It also contradicted `compatSourcesForSdk`'s own docblock: "the SDK
+    // is asked for what the SDK handles, and if that is nothing it is not asked."
+    const forSdk = compatSourcesForSdk(compiled.compatSources)
+    if (forSdk.some((c) => typeof c === 'object' && 'import' in c)) {
+      // A narrowed `import` needs a newer SDK than `compatSources` itself does — refuse before the
+      // value travels, because the older runtime's silence is indistinguishable from success.
       assertSdkCanReadNarrowedImport(installedSdkVersion())
     }
-    const forSdk = compatSourcesForSdk(compiled.compatSources)
     if (forSdk.length > 0) {
       options.local = { ...options.local, compatSources: forSdk }
       applied.push('compatSources')

@@ -24,3 +24,16 @@ excludes it from `extractText` on the same reasoning; the docblock says so, beca
 should be a decision somebody reads rather than an omission somebody discovers.
 
 A spec declaring no guardrails behaves byte-identically.
+
+**A guardrail block now crosses the delegate tool as a refusal, not a crash.** `errorCodeOf` mapped
+only the three delegation errors, so `GuardrailViolationError` — reachable from `delegate()` for the
+first time because of this change — hit the "not a delegation outcome, a defect" arm and was
+rethrown, ending the parent's turn. The tool's own description, shipped to the model, promises
+`{ ok: false, error, message }` on a refusal.
+
+It crosses as `guardrail_violation` with a FIXED message: `the delegated task was refused by a
+policy guard`. Every other code passes the typed error's message through, because a budget or a
+timeout is a fact about the work. A guardrail message is not — it reads
+`Guardrail "pii-detector" blocked output: ssn found`, naming the guard and its exact trigger, and a
+model given that learns which words to avoid rather than that it should stop. The operator keeps the
+full typed error, which carries `guardName`, `phase` and `reason`.
