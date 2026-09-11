@@ -19,6 +19,8 @@ import {
   SettingSourcesCapability,
   SkillsResolverCapability,
   HookApprovalCapability,
+  CanUseToolCapability,
+  SessionStoreCapability,
   SubAgentsCapability,
 } from '../../src/capability/agent-capabilities.js'
 import {
@@ -70,6 +72,12 @@ const WAIST_FIELDS = [
   'guardrails',
   'skillsResolver',
   'hookApproval',
+  // B-060 — `SessionStoreCapability`. Added because this compile-time gate demanded it: a new waist
+  // field must be classified before the tests compile, and it fired on the same commit that
+  // introduced the field.
+  'sessionStore',
+  // B-056 — `CanUseToolCapability`. Same gate, same commit-time demand.
+  'canUseTool',
 ] as const satisfies readonly WaistField[]
 
 /**
@@ -211,6 +219,10 @@ describe('capability path — waist coverage is complete', () => {
       new CheckpointCapability({ storage: 'memory' } as never),
       new HumanInTheLoopCapability(new Map() as never),
       new SubAgentsCapability({ c: {} } as never),
+      // B-060 — this fixture is "every capability, fully switched on", so a new one belongs here or
+      // its field reads as inexpressible when it was simply not asked for.
+      new SessionStoreCapability({} as never),
+      new CanUseToolCapability((() => ({ behavior: 'allow' })) as never),
       // #686 — the pre-spawn hook approval gate. Present here for the same reason the selection
       // below declares the foreign dialect: this fixture is "every capability, fully switched on",
       // and a field only produced when asked for reads as inexpressible when it simply was not.

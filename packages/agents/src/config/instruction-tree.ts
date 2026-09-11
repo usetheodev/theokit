@@ -62,6 +62,80 @@ export interface InstructionBlock {
   readonly scopesUnreadable: boolean
 }
 
+/**
+ * Does a block's `paths:` scope cover this file?
+ *
+ * `scopes` shipped without this, and the gap was not cosmetic: the field's own docblock names the
+ * consequence of getting it wrong — a rule written for one subtree applied EVERYWHERE, silently —
+ * and then hands the decision to the product. Delegating the DECISION is deliberate and unchanged.
+ * What was missing is the MEANS: no glob matcher existed anywhere in this package, so a consumer who
+ * wanted to honour a scope had to invent the semantics, and two consumers would invent two.
+ *
+ * `scopesUnreadable` answers FALSE, whatever the path. That is the fail-closed half the flag was
+ * invented for: a `paths:` that was declared and yielded nothing must not read as "no scope
+ * declared", because those two are indistinguishable in `scopes` alone and only one of them is safe
+ * to publish everywhere.
+ *
+ * ## What this supports, and what it refuses to guess
+ *
+ * `**` (crosses separators), `*` (does not), and `?` (one character) — the same three the SDK's own
+ * rule activation implements. Brace expansion `{a,b}` and character classes `[abc]` are NOT
+ * supported: a pattern using them matches literally and therefore almost certainly not at all.
+ *
+ * That is a deliberate floor rather than a step toward a glob library. Three wildcards are a dozen
+ * lines; a dependency for them carries a transitive tree into a package whose direct dependencies
+ * number three. If a caller needs the fuller grammar, that is a decision to make out loud — adding
+ * it quietly here would leave two half-grammars in one ecosystem.
+ */
+export function blockAppliesTo(
+  block: Pick<InstructionBlock, 'scopes' | 'scopesUnreadable'>,
+  filePath: string,
+): boolean {
+  if (block.scopesUnreadable) return false
+  if (block.scopes.length === 0) return true
+  return block.scopes.some((scope) => globToRegExp(scope).test(filePath))
+}
+
+/**
+ * A `**`/`*`/`?` glob as an anchored RegExp.
+ *
+ * Every other character is escaped, so a `.` in a pattern is a literal dot — without that,
+ * `a.ts` would match `axts`, which is the kind of near-miss nobody reports because the rule still
+ * *mostly* applies.
+ *
+ * Order matters: `**` is consumed before `*`, or the first star of a `**` would be rewritten as the
+ * separator-respecting form and the pattern would stop crossing directories.
+ */
+function globToRegExp(scope: string): RegExp {
+  let out = ''
+  for (let i = 0; i < scope.length; i += 1) {
+    const char = scope[i]
+    if (char === '*') {
+      if (scope[i + 1] === '*') {
+        out += '.*'
+        i += 1
+        // `**/` should also match zero directories, so `a/**/b.ts` covers `a/b.ts`.
+        if (scope[i + 1] === '/') i += 1
+        continue
+      }
+      out += '[^/]*'
+      continue
+    }
+    if (char === '?') {
+      out += '[^/]'
+      continue
+    }
+    out += char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  }
+  // The pattern is BUILT here, not taken from the file: every character of `scope` that is not one
+  // of the three wildcards is escaped above, so the only metacharacters in `out` are the `.*`,
+  // `[^/]*` and `[^/]` this function emitted. There is no alternation and no nested quantifier, so
+  // the catastrophic-backtracking shapes this rule exists to catch cannot be constructed from a
+  // `paths:` value.
+  // eslint-disable-next-line security/detect-non-literal-regexp
+  return new RegExp(`^${out}$`)
+}
+
 export interface InstructionTreeBudget {
   /** How deep below each root to descend. */
   readonly maxDepth: number

@@ -373,13 +373,36 @@ function identityOf(spec: HookSpec): HookIdentity {
  */
 function matches(spec: HookSpec, toolName: string): boolean {
   if (spec.matcher === undefined) return true
+
+  // The two shapes the FORMAT defines are recognised before the regex engine sees them, because
+  // neither is valid regex and one of them throws. `new RegExp("*")` is "nothing to repeat", and the
+  // catch below reads a throw as no-match — so `matcher: "*"`, the spelling an author is most likely
+  // to write for "always", became the one spelling that meant "never". Measured end to end: `"*"`
+  // passed the call through while `""`, `"Bash"` and an omitted matcher all vetoed it.
+  const trimmed = spec.matcher.trim()
+  if (trimmed === '' || trimmed === '*') return true
+
+  // A comma-separated list of exact names — `"Edit, Write"` — is also format, not regex: as a
+  // pattern it would need the space to be part of a tool name, so it matched nothing at all.
+  if (trimmed.includes(',')) {
+    return trimmed
+      .split(',')
+      .map((name) => name.trim())
+      .filter((name) => name !== '')
+      .includes(toolName)
+  }
+
   try {
     // eslint-disable-next-line security/detect-non-literal-regexp -- see the docblock
-    return new RegExp(spec.matcher).test(toolName)
+    return new RegExp(trimmed).test(toolName)
   } catch {
+    // Unchanged, and deliberate: a matcher that cannot compile must not take down the turn.
     return false
   }
 }
+
+/** Exported for tests: the match rule is format-level behaviour, not an implementation detail. */
+export const __matchesForTests = matches
 
 /**
  * Wrap hook output in a nonce fence before it reaches the model.

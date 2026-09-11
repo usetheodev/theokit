@@ -12,6 +12,8 @@ import type {
   SkillsSettings,
   SystemPromptResolver,
 } from '@theokit/sdk'
+import type { PermissionGate, SessionStore } from '@theokit/sdk'
+import type { AgentDefinition as SubagentDefinition } from '@theokit/sdk/subagents-loader'
 
 import { ConfigurationError } from '../errors.js'
 import type { Guardrail } from '../guardrails/index.js'
@@ -28,6 +30,7 @@ import type {
   ToolOptions,
 } from '../types.js'
 
+import type { CodePlugin } from './code-plugins.js'
 import type { HookApprovalGate } from './sdk-adapter-create-options.js'
 import type { GatedCompatSource, GatedSettingSource } from './setting-sources-gate.js'
 
@@ -237,18 +240,23 @@ export function compileTools(
   return tools
 }
 
-/** Compiled sub-agent definition matching SDK AgentDefinition shape. */
-export interface CompiledSubAgent {
-  model?: string
-  /**
-   * V4-L.1: typed as the union for consistency with `AgentOptions.systemPrompt`,
-   * so `compileSubAgents` carries whatever the sub-agent declared. Sub-agent
-   * resolver EXECUTION is out of scope this slice (ADR D3): `compiled.agents` is
-   * not spread into `Agent.create` by `createSdkAgentStream`; a resolver here is
-   * carried, not invoked. Top-level agent resolvers are the supported path.
-   */
-  systemPrompt?: string | SystemPromptResolver
-}
+/**
+ * A compiled sub-agent IS the SDK's own `AgentDefinition`, re-exported here under the name the
+ * public barrel already uses for it.
+ *
+ * It used to be a narrower local type, `CompiledSubAgent { model?, systemPrompt? }`, and ADR D3
+ * deferred projecting it: "a resolver here is carried, not invoked". **That deferral has ended** —
+ * `assembleM8CreateOptions` now projects `agents` into `Agent.create`.
+ *
+ * The narrow type could not have been projected as it stood. `AgentDefinition` requires
+ * `description` and `prompt`, and the local shape carried neither; a sub-agent with no description
+ * is one the parent model has no basis to delegate to. Every other surface already agreed on the
+ * SDK shape — `RuntimeOverrides.agents` (the per-run door that always worked) is
+ * `Record<string, AgentDefinition>`, and the same type crosses the barrel as `SubagentDefinition`.
+ * The local type was referenced in exactly two places, both of them its own declaration and the
+ * field that held it, so adopting the SDK shape removed a mismatch rather than migrating users.
+ */
+export type CompiledSubAgent = SubagentDefinition
 
 /** Compiled agent options ready for SDK Agent.create(). */
 export interface CompiledAgentOptions {
@@ -285,7 +293,45 @@ export interface CompiledAgentOptions {
    */
   hookApproval?: HookApprovalGate
   /** Code `Plugin` objects forwarded to `Agent.create({ plugins })` (lifecycle-hook seam). */
-  plugins?: readonly unknown[]
+  /**
+   * Code plugins — `{ name, register }` objects registered with the SDK's lifecycle-hook seam.
+   *
+   * `readonly unknown[]` is what let the WRONG shape through silently: a consumer who read the
+   * Claude Code documentation passed `[{ type: 'local', path: './p' }]`, the compiler accepted it,
+   * and the agent ran with the plugin absent. `assertCodePlugins` refuses it at the projection, and
+   * the type says what belongs here.
+   *
+   * NOT the filesystem-bundle form. A bundle is declared by living in a `plugins/` directory under
+   * `.theokit/` or `.claude/`, where its `skills/` and `agents/` are discovered.
+   */
+  plugins?: readonly CodePlugin[]
+  /**
+   * B-060 — an external session store (Postgres / Redis / KV / durable object), used by the SDK as
+   * the PRIMARY session store and resume source.
+   *
+   * Without it a serverless deployment resumed from a filesystem that no longer exists, and a
+   * multi-pod one resumed from whichever host happened to take the request. The only way to reach
+   * it was importing `@theokit/sdk` directly — the one thing this layer's doctrine forbids, so the
+   * doctrine and the capability disagreed and the consumer paid.
+   *
+   * Typed against the SDK's own `SessionStore` rather than restated here: a hand-written copy that
+   * drifts by one method stops fitting, which the mirrored `permissionMode` field measured one item
+   * earlier.
+   */
+  sessionStore?: SessionStore
+  /**
+   * B-056 — the callback that sees every tool call the earlier steps did not resolve.
+   *
+   * The SDK's engine is fail-closed: an unmatched call resolves to `ask`, and an ABSENT gate blocks
+   * it. So the value of declaring one is not that unresolved calls stop being approved — they never
+   * were — it is that they reach somebody who can decide instead of being refused with nobody to
+   * consult. A tool added after the approvals were written keeps defaulting to asking.
+   *
+   * Typed against the SDK's `PermissionGate`, not restated: its decision shape is veto-or-allow, and
+   * a hand-written copy would be the place an `updatedInput` field gets invented for a seam that
+   * discards it.
+   */
+  canUseTool?: PermissionGate
   tools: CompiledTool[]
   agents: Record<string, CompiledSubAgent>
   memory?: MemoryOptions | MemorySettings
