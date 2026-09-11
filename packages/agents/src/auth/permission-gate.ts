@@ -44,6 +44,8 @@
  * First veto wins; `undefined` falls through. No helper ships for this: it is one line, and a
  * `composePreToolCall` would be a second way to do what `??` already does.
  */
+import { debugLog } from '../debug-log.js'
+
 import type { PermissionQuery, PermissionStore } from './permission-store.js'
 
 /**
@@ -167,6 +169,18 @@ export function grantGate(
         store.lastReadError === undefined
           ? 'no standing grant matches'
           : 'the permission store could not be read, so no grant applies'
+      // Pillar 3 of the wiring triad. A refusal an operator cannot see is a refusal they diagnose
+      // from the model's confusion — and the two causes above look identical from there. The
+      // sibling refusal gate (`bridge/approval-posture.ts`) already logs through this seam; this one
+      // shipped with no counter, no log and no debug line.
+      //
+      // The QUERY is logged and the grant is not: a query names a tool, a directory and a command,
+      // which is what an operator needs; the store's contents are what they are protecting.
+      debugLog('[theokit] permission gate vetoed', {
+        tool: ctx.name,
+        scope: classification.query.scope,
+        because,
+      })
       return Promise.resolve({
         block: true,
         message: `"${ctx.name}" is not permitted in ${classification.query.scope}: ${because}`,
@@ -175,6 +189,10 @@ export function grantGate(
       // A classifier that cannot decide must not pass. Throwing would end the turn over a decision
       // the consumer's own code failed to make; denying leaves the run alive and the reason visible.
       const why = cause instanceof Error ? cause.message : String(cause)
+      // A classifier that threw is a consumer-code defect, and it is invisible from the model's
+      // side — the run just denies. Logged separately from the ordinary veto so the two are not
+      // read as the same event.
+      debugLog('[theokit] permission gate could not classify', { tool: ctx.name, why })
       return Promise.resolve({
         block: true,
         message: `permission gate could not classify "${ctx.name}": ${why}`,
