@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [@theokit/agents 13.0.0-next.12] - 2026-09-10
+
 ### Changed
 
 - **BREAKING for hand-built compiled options:** `resolveCompatSources` returns a branded `GatedCompatSource[]` and `CompiledAgentOptions.compatSources` takes it, so a raw compat source no longer typechecks. The twin of the `settingSources` brand, left bare when that one shipped: measured with the `settingSources` route as control, the control errored and `setOnce(draft, 'compatSources', ['claude-code'], 'cap')` compiled cast-free, while the field's docblock said it "can only hold a source some posture granted". It reaches further than its twin — `Agent.create({ local: { compatSources } })` reads `<cwd>/.claude/`, `hooks.json` included, and that executes shell (B-004)
@@ -44,7 +46,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `inheritHooks` no longer lets a member's `transform_tool_result` or `pre_user_send` handler replace its parent's; both chain parent-first, matching the six events that already composed. Reachable through the exported `inheritHooks` called with two handler maps — `delegate()` itself passes `undefined` for the member, so that path was never affected (B-007)
 - An observational hook handler is assigned to its own key instead of being chosen by a two-branch comparison. A third observational event would have landed on `post_assistant_reply` silently; no behaviour changes for the events wired today (B-006)
-
 
 ## [@theokit/agents 13.0.0-next.11] - 2026-09-08
 
