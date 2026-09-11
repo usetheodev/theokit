@@ -33,16 +33,32 @@ export type DelegationTarget = SubAgentSpec | DelegationPort
 /**
  * Which of the two a caller handed over.
  *
- * Structural, on the presence of `run` — a `SubAgentSpec` is a plain record with `name`/`compiled`
- * and has no method, so the two cannot be confused. Additive by construction: the existing
- * spec-shaped call keeps its exact behaviour (Top-risk 1).
+ * **A tie goes to the spec, because the spec branch is the guarded one.** `isPort` read
+ * `'run' in target` and this docblock argued from the declared type — "a `SubAgentSpec` is a plain
+ * record with `name`/`compiled` and has no method, so the two cannot be confused". That is verbatim
+ * the reasoning `auth/permission-gate.ts` records as having failed open, where the gate read whether
+ * the `governed` KEY was present and waved through anything carrying it. TypeScript rejects an
+ * excess property on a FRESH LITERAL and accepts the identical object through a variable or a
+ * spread, and every real caller goes through one of those.
+ *
+ * The asymmetry is what makes it worth closing. The port branch calls `target.run(task)` directly;
+ * the spec branch calls `delegate()`, which is where the declared guardrails run, where the parent's
+ * veto is inherited and where the budget is clamped. A misread hands the model the unguarded path,
+ * so ambiguity must resolve toward `delegate()` — the same shape as `grantGate` treating anything
+ * that is not literally `false` as governed.
+ *
+ * Still additive: a real port has no `compiled`, so the M81 shape keeps its exact behaviour
+ * (Top-risk 1). Exported because `createDelegateTool` classifies the same union, and an unexported
+ * copy is how the two answers drift apart in silence (G12).
  */
 export function isPort(target: DelegationTarget): target is DelegationPort {
-  // `in` narrows the union without an assertion — `SubAgentSpec` has no `run` member, so TypeScript
-  // proves the discrimination instead of being told it. Exported because `createDelegateTool`
-  // classifies the same union, and an unexported copy is how the two answers drift apart in silence
-  // (G12): a future hybrid shape would be taught to one reader and not the other.
-  return 'run' in target
+  // `compiled` is the spec's own field, so its presence settles the question before `run` is
+  // consulted at all.
+  if ('compiled' in target) return false
+  // `typeof === 'function'`, not `'run' in target`: a JS consumer or an `as` cast can hand back
+  // `run: 'yes'`, and taking the port branch on that throws `target.run is not a function` mid
+  // delegation rather than delegating.
+  return typeof (target as { run?: unknown }).run === 'function'
 }
 
 /** Run one round against whichever shape was supplied, under an optional clock cap. */

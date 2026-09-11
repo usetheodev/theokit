@@ -7,6 +7,7 @@ import {
   type SettingSourceCapability,
 } from '../../src/bridge/setting-sources-gate.js'
 import { assembleM8CreateOptions } from '../../src/bridge/sdk-adapter-create-options.js'
+import { resolveSettingSources } from '../../src/bridge/setting-sources-gate.js'
 import { resolveTrustPosture } from '../../src/index.js'
 import type { TrustPosture } from '../../src/index.js'
 
@@ -124,7 +125,7 @@ describe('M68 — the project setting source requires evidence on the BUILD path
     // `~/.theokit/` is the operator's own machine, and no third party controls it. A gate that
     // refused both would be refused by users and turned off.
     const { options } = assembleM8CreateOptions(
-      compiledWith({ settingSources: ['user'] } as Partial<CompiledAgentOptions>),
+      compiledWith({ settingSources: resolveSettingSources({ user: true }) }),
     )
     expect(options.local?.settingSources).toEqual(['user'])
   })
@@ -133,5 +134,40 @@ describe('M68 — the project setting source requires evidence on the BUILD path
     // The default has to be the safe one. Omitting a root is not enabling it.
     const { options } = assembleM8CreateOptions(compiledWith({}))
     expect(options.local?.settingSources).toBeUndefined()
+  })
+
+  it('test_plugins_is_refused_by_an_untrusting_posture', () => {
+    // B-004 — `plugins` takes the same grant as `project` and not a weaker one: it loads executable
+    // bundles from the same cwd-controlled tree, which usually arrived with the clone.
+    expect(() => resolveSettingSources({ plugins: { trustedBy: denyingPosture() } })).toThrow(
+      /plugins/,
+    )
+  })
+
+  it('test_plugins_reaches_the_sdk_once_the_posture_grants_it', () => {
+    // The half of B-004 that survived measurement: `includesSetting` is called with exactly
+    // "project" and "plugins" (local-agent.ts:174-175), and this facade exposed neither `plugins`
+    // nor a way to get it — so a consumer wanting plugin bundles had to bypass the gate entirely.
+    expect(resolveSettingSources({ plugins: { trustedBy: grantingPosture() } })).toEqual([
+      'plugins',
+    ])
+  })
+
+  it('test_the_resolved_list_is_exactly_the_roots_the_sdk_reads', () => {
+    // The half that did NOT survive. The item was filed about `team` and `mdm`; measured,
+    // `includesSetting` is never called with either, so plumbing them through would forward a name
+    // the runtime discards — a capability in the type and nothing at runtime.
+    //
+    // This asserted `not.toContain('team')` and `not.toContain('mdm')`, which could not fail:
+    // nothing in `resolveSettingSources` can emit either name, so inverting the decision the test
+    // is named after — plumbing them through — left it green. An EXACT list is what pins the
+    // decision: adding a root here fails this line, which is the moment to ask whether the SDK
+    // reads it.
+    const resolved: readonly string[] = resolveSettingSources({
+      user: true,
+      project: { trustedBy: grantingPosture() },
+      plugins: { trustedBy: grantingPosture() },
+    })
+    expect(resolved).toEqual(['user', 'project', 'plugins'])
   })
 })

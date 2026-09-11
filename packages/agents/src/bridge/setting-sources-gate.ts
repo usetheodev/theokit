@@ -65,6 +65,18 @@ export interface SettingSourcesSelection {
   /** `<cwd>/.theokit/` — controlled by whoever wrote the open repository. Requires evidence. */
   readonly project?: ProjectSettingsGrant
   /**
+   * `<cwd>/.theokit/plugins` and any declared foreign dialect's plugin root — executable bundles.
+   *
+   * Same grant as `project`, deliberately: `PluginsManager.refresh` loads code out of the same
+   * cwd-controlled tree, and the tree usually arrived with the clone.
+   *
+   * Absent from this interface until 2026-09-10, while `includesSetting` reads it
+   * (`local-agent.ts:175`) — so a consumer wanting plugins had to bypass this facade, which is the
+   * door it exists to close. `team` and `mdm` remain absent for the opposite reason: the SDK never
+   * reads them.
+   */
+  readonly plugins?: ProjectSettingsGrant
+  /**
    * `<cwd>/.claude/` — a FOREIGN configuration dialect, read only once declared
    * (`usetheokit/theokit-sdk#524`).
    *
@@ -175,13 +187,93 @@ export class UntrustedSettingSourceError extends TheokitAgentError {
  *
  * @throws {UntrustedSettingSourceError} when `project` is requested and the posture does not grant it.
  */
+declare const GATED: unique symbol
+
+/**
+ * A root that some `TrustPosture` authorised — mintable ONLY by {@link resolveSettingSources}.
+ *
+ * ## Why a brand rather than a check
+ *
+ * `define-agent.ts` claimed `CompiledAgentOptions.settingSources` "can only ever hold roots that
+ * some posture authorized". Measured 2026-09-10 against the emitted `.d.ts`:
+ * `setOnce(draft, 'settingSources', ['mdm','team','user','plugins'], 'cap')` typechecked CAST-FREE.
+ * A consumer writing a `Capability` — the documented way to extend the builder — reached the field
+ * directly, and `project`, the root this gate exists to protect, is one of the two the SDK reads.
+ *
+ * The obvious fix was to read `draft.provenance` and refuse a write from a capability. It does not
+ * work, measured: the LEGITIMATE builder path also writes through `setOnce`
+ * (`capability/agent-capabilities.ts:155`), so provenance names a capability either way. What
+ * actually differs is where the VALUE came from, and a brand is a value's provenance carried in its
+ * type.
+ *
+ * ## What it does not do
+ *
+ * `as never` defeats it, like every brand — and so does ANY REFLECTIVE WRITE: `Object.assign`,
+ * `Reflect.set`, `Object.defineProperty`. All three typecheck cast-free, measured, including from
+ * inside a `Capability.apply`. That is a TypeScript-wide hole rather than a design choice here —
+ * those APIs type their value as `any` or return `T & U` without checking `T`'s existing fields.
+ *
+ * Stated as a CLASS and not a list, after two rounds of naming one instance and calling it "the one
+ * named exception". A list of escapes is a list somebody adds to; the property is that reflection
+ * bypasses the type system, and enumerating members of that class understates it every time.
+ *
+ * TEN other routes are refused, and they are refused by a TEST rather than by this sentence:
+ * `tests/type/setting-sources-brand-escapes.test-d.ts` guards each one with a `@ts-expect-error`,
+ * so weakening the brand reports which route reopened instead of passing quietly. `setOnce` with a
+ * raw array, `setOnce` through a generic wrapper, a direct `draft.settingSources =`, a spread of an
+ * array literal, an object literal with `as`, `.concat`, `.map`, spread-widening, `satisfies`,
+ * and `.push`.
+ *
+ * The count said "nine" while the list held ten — the same off-by-one this branch has now made
+ * three times in a docblock. Counting them in a file that fails when the count is wrong is the
+ * point of moving the claim into a test.
+ *
+ * So this refuses the accident — a capability author reaching for the field because it is there —
+ * with the named exceptions above, and not a caller who has decided to bypass the gate. Naming them
+ * exception is the point: the comment this replaced claimed an invariant nothing enforced, and a
+ * replacement that overstated its own coverage would be the same defect one size smaller.
+ *
+ * ## Which roots the SDK actually READS
+ *
+ * `includesSetting` is called with exactly `"project"` and `"plugins"`
+ * (`theokit-sdk/packages/sdk/src/internal/local-agent/local-agent.ts:174-175`). `user`, `team` and
+ * `mdm` are accepted by the option and never consulted, so forwarding them would be a name the
+ * runtime discards. `user` is still resolved here because it costs nothing and the SDK may start
+ * reading it; `team` and `mdm` are deliberately absent from {@link SettingSourcesSelection} rather
+ * than plumbed through to be ignored.
+ */
+export type GatedSettingSource = SettingSource & { readonly [GATED]: true }
+
+/**
+ * A compat source some `TrustPosture` authorised — mintable ONLY by {@link resolveCompatSources}.
+ *
+ * The twin of {@link GatedSettingSource}, and it exists because B-004 branded one of the two fields
+ * one `SettingSourcesSelection` feeds and left the other bare. Measured 2026-09-11, with the
+ * `settingSources` route as the control: the control errored, and
+ * `setOnce(draft, 'compatSources', ['claude-code'], 'cap')` compiled CAST-FREE — while
+ * `agent-compiler.ts` told the reader that field "can only hold a source some posture granted".
+ *
+ * It carries more authority than its twin, not less: `applyLocalSources` forwards it to
+ * `Agent.create({ local: { compatSources } })`, which reads `<cwd>/.claude/` — `hooks.json`
+ * included, and that executes shell. The refusal thrown below spells that out; the brand is what
+ * stops a caller reaching the field without meeting the refusal at all.
+ *
+ * Same `GATED` symbol as the twin, so there is one brand in this module rather than two that must
+ * be kept in step. The escapes are the same CLASS the twin documents — `as never` and any
+ * reflective write — and are not re-listed here.
+ */
+export type GatedCompatSource = ResolvedCompatSource & { readonly [GATED]: true }
+
 export function resolveSettingSources(
   selection: SettingSourcesSelection | undefined,
-): readonly SettingSource[] {
+): readonly GatedSettingSource[] {
   if (selection === undefined) return []
 
-  const sources: SettingSource[] = []
-  if (selection.user === true) sources.push('user')
+  // The one place the brand is minted. Every push below has passed its posture check first, which is
+  // the property the type then carries for the rest of the program.
+  const sources: GatedSettingSource[] = []
+  const gated = (root: SettingSource): GatedSettingSource => root as GatedSettingSource
+  if (selection.user === true) sources.push(gated('user'))
 
   const grant = selection.project
   if (grant !== undefined) {
@@ -196,7 +288,27 @@ export function resolveSettingSources(
         'projectSettings',
       )
     }
-    sources.push('project')
+    sources.push(gated('project'))
+  }
+
+  // `plugins` takes the SAME grant as `project`, and not a weaker one: `PluginsManager.refresh`
+  // loads executable bundles from `pluginBundleRoots(cwd, compatSources)` — the same cwd-controlled
+  // tree `project` protects, which usually arrived with the clone. It is also the root this facade
+  // withheld while the SDK genuinely reads it, which is the half of B-004 that survived measurement.
+  const pluginsGrant = selection.plugins
+  if (pluginsGrant !== undefined) {
+    const posture = pluginsGrant.trustedBy
+    if (!posture.allows.projectSettings) {
+      throw new UntrustedSettingSourceError(
+        `the \`plugins\` setting source loads executable plugin bundles from <cwd>/.theokit/plugins ` +
+          `and from any declared foreign dialect, and the posture does not grant \`projectSettings\` ` +
+          `(level: ${posture.level}, decided by: ${posture.source}). Grant it with a trusted ` +
+          `posture, or omit \`plugins\` to load none.`,
+        posture.source,
+        'projectSettings',
+      )
+    }
+    sources.push(gated('plugins'))
   }
 
   return sources
@@ -221,7 +333,7 @@ export function resolveSettingSources(
  */
 export function resolveCompatSources(
   selection: SettingSourcesSelection | undefined,
-): readonly ResolvedCompatSource[] {
+): readonly GatedCompatSource[] {
   if (selection?.claudeCode === undefined) return []
 
   const posture = selection.claudeCode.trustedBy
@@ -262,6 +374,9 @@ export function resolveCompatSources(
       'projectSettings',
     )
   }
-  if (surfaces !== undefined) return [{ kind: 'claude-code', import: [...surfaces] }]
-  return ['claude-code']
+  // The two places the compat brand is minted. Both are past every posture check above, which is
+  // the property the type then carries for the rest of the program.
+  const gated = (source: ResolvedCompatSource): GatedCompatSource => source as GatedCompatSource
+  if (surfaces !== undefined) return [gated({ kind: 'claude-code', import: [...surfaces] })]
+  return [gated('claude-code')]
 }

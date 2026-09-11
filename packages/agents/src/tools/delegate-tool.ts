@@ -28,6 +28,7 @@ import {
   DelegationError,
   type DelegationResult,
 } from '../bridge/delegation-types.js'
+import { GuardrailViolationError } from '../guardrails/index.js'
 
 /**
  * A roster misconfiguration — always raised at factory time, never at the model's first call.
@@ -114,7 +115,65 @@ function errorCodeOf(error: unknown): string | undefined {
   if (error instanceof DelegationBudgetExceededError) return 'delegation_budget_exceeded'
   if (error instanceof DelegationTimeoutError) return 'delegation_timeout'
   if (error instanceof DelegationError) return 'delegation_failed'
+  // B-015 made this class reachable from `delegate()` for the first time. Before that it could not
+  // come out, so it fell to the `undefined` arm and was rethrown as "a defect" — ending the parent's
+  // turn while this tool's own description, shipped to the model, promises `{ ok: false, … }` on a
+  // refusal. A guard refusal IS a refusal, so it crosses as one.
+  if (error instanceof GuardrailViolationError) return 'guardrail_violation'
   return undefined
+}
+
+/** What a refusal says when its own message must not travel. */
+const REFUSED_BY_POLICY = 'the delegated task was refused by a policy guard'
+
+/**
+ * What the model is told about a refusal.
+ *
+ * A budget or a timeout is a fact about the WORK, and its message is what the model acts on. A
+ * guardrail message is not: it reads `Guardrail "pii-detector" blocked output: ssn found`, naming
+ * the guard and the exact trigger. Give that to a model and it has a map around the gate — it
+ * learns which words to avoid, not that it should stop. It still learns it was refused, which is
+ * the one bit it can act on: delegate less, or do the work itself.
+ *
+ * ## The default is WITHHOLD, and the first version had it backwards
+ *
+ * This began as `if (code === 'guardrail_violation') return fixed` — a denylist, so any code added
+ * to {@link errorCodeOf} later would pass its typed message through by DEFAULT, silently, on the
+ * one function whose entire purpose is withholding. `errorCodeOf` directly above is an allowlist
+ * (unknown → `undefined` → rethrow); this is now one too, and the two read the same way.
+ *
+ * Adding a code to `errorCodeOf` and not to `MESSAGE_MAY_CROSS` makes it withhold. That is the safe
+ * direction of forgetting, and it is the only one a reviewer can rely on.
+ *
+ * ## The hole this used to name, and what closed it
+ *
+ * `DelegationError`'s message is `Delegation to agent "X" failed: ${cause.message}`
+ * (`delegation-types.ts`), and `run-reflective-loop.ts` wrapped a non-delegation round error into
+ * one — so a guard throwing INSIDE a round crossed as `delegation_failed`, which IS on the
+ * allowlist above, with the guard's name and trigger intact. Measured through this tool with a
+ * consumer-supplied `streamFactory`.
+ *
+ * `run-reflective-loop.ts` now lets `GuardrailViolationError` pass through as itself, alongside the
+ * two delegation errors that already did, so it reaches `errorCodeOf` as the class it is. This
+ * section described the hole as open for one round after the commit that closed it, in a file that
+ * commit did not touch.
+ */
+/**
+ * A `Set` and not a `Record<string, true>`, because that record's type LIES: indexing it types the
+ * result `true`, so eslint reported `!MESSAGE_MAY_CROSS[code]` as "always falsy" while at runtime an
+ * unlisted code yields `undefined`. A type that disagrees with its values is how the tagged-union
+ * fail-open in `auth/permission-gate.ts` happened; `has()` returns a real boolean.
+ */
+const MESSAGE_MAY_CROSS: ReadonlySet<string> = new Set([
+  // A budget or a timeout is a fact about the WORK, and the number in it is what the model acts on.
+  'delegation_budget_exceeded',
+  'delegation_timeout',
+  'delegation_failed',
+])
+
+function messageForModel(code: string, error: unknown): string {
+  if (!MESSAGE_MAY_CROSS.has(code)) return REFUSED_BY_POLICY
+  return error instanceof Error ? error.message : String(error)
 }
 
 function describeRoster(roster: readonly DelegateRosterEntry[]): string {
@@ -198,12 +257,9 @@ export function createDelegateTool(options: CreateDelegateToolOptions) {
         }
         // A delegation refusal is INFORMATION the model can act on: delegate less, or finish the
         // work itself. Throwing here would end the parent's turn over a recoverable signal. Nothing
-        // is swallowed — the typed error's identity crosses as a stable code, its message intact.
-        return JSON.stringify({
-          ok: false,
-          error: code,
-          message: error instanceof Error ? error.message : String(error),
-        })
+        // is swallowed — the typed error's identity crosses as a stable code; the message travels except
+        // where withholding it IS the point (see `messageForModel`).
+        return JSON.stringify({ ok: false, error: code, message: messageForModel(code, error) })
       }
     },
   })

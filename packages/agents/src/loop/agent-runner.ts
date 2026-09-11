@@ -252,8 +252,54 @@ export class AgentRunner {
         const safe = await runInputGuards(message, guardrails)
         // Output guards moderate the accumulated text before it reaches the client (M9).
         // `moderateOutputStream` is a transparent pass-through when no output guard is present.
-        return yield* moderateOutputStream(runUnguarded(safe), guardrails, (e) =>
-          e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined,
+        // TWO passes over the two text-EVENT kinds — B-014.
+        //
+        // NOT "one per client-visible text channel", which is what this said for one round and what
+        // measurement refuses. `DoneEvent.result` carries the model's whole answer
+        // (`sdk-adapter-create-options.ts:502`) and reaches every consumer of this generator:
+        // measured, `text_delta` came out `"here: [R]"` and the same turn's `done.result` came out
+        // `"here: sk-abc123"`. `task_progress.text` is a fourth, reaching the web wire through
+        // `present-ui-message-stream.ts:192`.
+        //
+        // A third pass would NOT extend to `done`: there is one per round, so a pass keyed on it
+        // would collapse every round's into one. Those two channels need a different mechanism and
+        // are tracked separately — naming them here is what keeps this comment from claiming a
+        // coverage it does not have.
+        //
+        // `thinking` is a public `AgentStreamEvent` and reaches the client like any other, and this
+        // moderated only `text_delta`: measured, a guard declared over the agent's output delivered
+        // `thinking "the key is sk-abc123"` verbatim. The third channel of a shape this cycle fixed
+        // twice already — a redaction computed and discarded, and `delegate()` consulting no guards.
+        //
+        // NOT one wider `extractText`, which is the obvious move and the wrong one: two kinds under
+        // one extractor COLLAPSE into a single event, so the reasoning would be promoted into a
+        // visible one. The moderation would create the disclosure it exists to close. Composing two
+        // passes is what `moderateOutputStream`'s own docblock prescribes, and each pass seeing one
+        // kind is what keeps them apart.
+        //
+        // The VISIBLE pass is inner and owns the aggregate: `response` accumulates from `text_delta`
+        // upstream, so writing it from the reasoning pass too would REPLACE the answer with the
+        // moderated reasoning.
+        //
+        // This comment said "would apply a non-idempotent guard twice" for one round, which is the
+        // half the measurement REFUTED — the mutation produces
+        // `expected 'the key is [R], I must not say it' to be 'Here is your answer.'`, substitution
+        // rather than double application. The commit body had it right and the source comment kept
+        // the wrong half.
+        return yield* moderateOutputStream(
+          moderateOutputStream(
+            runUnguarded(safe),
+            guardrails,
+            (e) =>
+              e.type === 'text_delta' && typeof e.content === 'string' ? e.content : undefined,
+            (content) => ({ type: 'text_delta', content }),
+            (content, result) => ({ ...result, response: content }),
+          ),
+          guardrails,
+          (e) => (e.type === 'thinking' && typeof e.content === 'string' ? e.content : undefined),
+          (content) => ({ type: 'thinking', content }),
+          // The reasoning pass does NOT touch the aggregate — the visible pass already did.
+          (_content, result) => result,
         )
       })()
     }

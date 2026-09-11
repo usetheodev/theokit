@@ -181,3 +181,17 @@ export {
   type PermissionQuery,
   type PermissionStoreOptions,
 } from './auth/permission-store.js'
+
+/**
+ * The adapter that puts a `PermissionStore` in force. Exported beside the store deliberately: for
+ * one release the store shipped alone, describing a deny-by-default posture with nothing that could
+ * apply it.
+ */
+export {
+  grantGate,
+  type Classification,
+  type Governed,
+  type GrantGateContext,
+  type NotGoverned,
+  type Veto,
+} from './auth/permission-gate.js'

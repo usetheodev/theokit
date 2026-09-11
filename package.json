@@ -6,10 +6,10 @@
   "type": "module",
   "packageManager": "pnpm@10.34.1+sha512.b58fbde6dca66a929538021581f648b4570b6ca19b18e7cbd7f2c07a7b24454155388dacdf08f2af3678e88a6d1fe04f9d609df24bf51735a060ea041b374ab7",
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:types": "vitest --typecheck.only --run",
-    "test:coverage": "vitest run --coverage",
+    "test": "pnpm test:dist-gate && vitest run",
+    "test:watch": "pnpm test:dist-gate && vitest",
+    "test:types": "pnpm test:dist-gate && vitest --typecheck.only --run",
+    "test:coverage": "pnpm test:dist-gate && vitest run --coverage",
     "build": "pnpm -r run build",
     "build:packages": "pnpm --filter \"./packages/*\" --workspace-concurrency=1 build",
     "validate:publint": "npx publint packages/theo && npx publint packages/agents && npx publint packages/http && npx publint packages/presenter && npx publint packages/tauri && npx publint packages/create-theokit",
@@ -39,7 +39,8 @@
     "check:docs": "node scripts/check-doc-citations.mjs",
     "check:changelog": "node scripts/check-changelog-current.mjs",
     "check:audit": "pnpm audit --prod --audit-level=high",
-    "typecheck:fast": "tsc --noEmit"
+    "typecheck:fast": "tsc --noEmit",
+    "test:dist-gate": "tsx scripts/ensure-theo-dist.ts"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",

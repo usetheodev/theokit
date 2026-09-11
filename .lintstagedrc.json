@@ -1,5 +1,6 @@
 {
-  "*.{ts,tsx,mts,cts}": ["eslint --max-warnings=0 --no-warn-ignored", "prettier --write"],
-  "*.{js,mjs,cjs}": ["eslint --max-warnings=0 --no-warn-ignored", "prettier --write"],
-  "*.{json,yml,yaml}": ["prettier --write"]
+  "*.{ts,tsx,mts,cts}": ["prettier --write", "eslint --max-warnings=0 --no-warn-ignored"],
+  "*.{js,mjs,cjs}": ["prettier --write", "eslint --max-warnings=0 --no-warn-ignored"],
+  "*.{json,yml,yaml}": ["prettier --write"],
+  "*.test-d.ts": ["bash -c 'npx tsc --noEmit'"]
 }

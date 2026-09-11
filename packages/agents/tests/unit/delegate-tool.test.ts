@@ -25,6 +25,7 @@ import {
   type DelegationResult,
 } from '../../src/bridge/delegation-types.js'
 import { createDelegateTool, DelegateToolConfigError } from '../../src/tools/delegate-tool.js'
+import { GuardrailViolationError } from '../../src/guardrails/index.js'
 
 /** A `DelegationPort` double: records what it was asked, answers what the test dictates. */
 function portReturning(response: string): {
@@ -313,5 +314,122 @@ describe('createDelegateTool — reachability (wiring)', () => {
 
     expect(barrel.createDelegateTool).toBe(createDelegateTool)
     expect(barrel.DelegateToolConfigError).toBe(DelegateToolConfigError)
+  })
+
+  it('test_a_guardrail_block_crosses_as_a_refusal_not_a_crash', async () => {
+    // B-015 made `GuardrailViolationError` reachable from `delegate()` for the first time. Before
+    // that it could not come out of this handler, so it fell to the `undefined` arm and was rethrown
+    // as "a defect" — ending the parent's turn, while this tool's own description promises
+    // `{ ok: false, error, message }` on a refusal. Found by review, unmentioned in the commit that
+    // introduced it.
+    const tool = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new GuardrailViolationError('pii-detector', 'output', 'ssn found')),
+        },
+      ],
+    })
+
+    const out = await tool.handler({ agent: 'worker', task: 't' })
+
+    expect(JSON.parse(out as string)).toMatchObject({ ok: false, error: 'guardrail_violation' })
+  })
+
+  it('test_a_guardrail_refusal_does_not_hand_the_model_a_map_around_the_guard', async () => {
+    // Every other code passes the typed error's message through, because a budget or a timeout is a
+    // fact about the work. This one does not: the message reads
+    // `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and its exact trigger.
+    // A model given that learns which words to avoid, not that it should stop.
+    const tool = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new GuardrailViolationError('pii-detector', 'output', 'ssn found')),
+        },
+      ],
+    })
+
+    const payload = JSON.parse((await tool.handler({ agent: 'worker', task: 't' })) as string) as {
+      message: string
+    }
+
+    expect(payload.message).not.toContain('pii-detector')
+    expect(payload.message).not.toContain('ssn found')
+    expect(payload.message, 'the model still learns it was refused').toMatch(/refused|policy/i)
+  })
+
+  it('test_a_code_nobody_listed_withholds_its_message_by_default', async () => {
+    // The direction of forgetting, pinned. `messageForModel` began as a denylist — a check for the
+    // ONE code that must withhold — so a code added to `errorCodeOf` later would have passed its
+    // typed message through by default, silently, on the function whose entire purpose is
+    // withholding. `errorCodeOf` above is an allowlist; this is now one too.
+    //
+    // `DelegationError` is in the allowlist and `GuardrailViolationError` is not, so this drives the
+    // pair and asserts they diverge — a future code that nobody lists behaves like the second.
+    const listed = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new DelegationError('worker', new Error('disk full'))),
+        },
+      ],
+    })
+    const unlisted = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new GuardrailViolationError('pii', 'output', 'ssn found')),
+        },
+      ],
+    })
+
+    const a = JSON.parse((await listed.handler({ agent: 'worker', task: 't' })) as string) as {
+      message: string
+    }
+    const b = JSON.parse((await unlisted.handler({ agent: 'worker', task: 't' })) as string) as {
+      message: string
+    }
+
+    expect(a.message, 'a listed code passes its own message').toContain('disk full')
+    expect(b.message, 'an unlisted code does not').not.toContain('ssn found')
+  })
+
+  it('test_a_guard_that_throws_mid_round_is_not_renamed_into_a_delegation_failure', async () => {
+    // The leak the allowlist could not close, because the defect was upstream of it.
+    //
+    // `run-reflective-loop` wrapped any non-delegation round error into `DelegationError`, whose
+    // message is `Delegation to agent "X" failed: ${cause.message}`. `delegation_failed` IS on the
+    // message allowlist — a delegation failure's text is a fact about the work — so the wrapper
+    // carried the guard's own words through: `Guardrail "pii-detector" blocked output: ssn found`.
+    //
+    // Measured with a consumer-supplied `streamFactory` that throws mid-round, which is a public
+    // option. Fixed by CLASSIFICATION rather than by suppressing text downstream: a guard refusal is
+    // not a delegation failure, and a layer that renames it cannot be expected to keep a list of
+    // what the new name must hide.
+    const spec = {
+      name: 'worker',
+      compiled: { model: 'm', tools: [], agents: {}, stream: true },
+    } as never
+    // Throwing before any yield IS the case under test: a guard that refuses mid-round.
+    // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
+    async function* refusesMidRound(): AsyncGenerator<never, void> {
+      throw new GuardrailViolationError('pii-detector', 'output', 'ssn found')
+    }
+    const throwsMidRound = () => refusesMidRound()
+
+    const tool = createDelegateTool({
+      roster: [{ name: 'worker', target: spec }],
+      defaults: { apiKey: 'k', streamFactory: throwsMidRound } as never,
+    })
+
+    const payload = JSON.parse((await tool.handler({ agent: 'worker', task: 't' })) as string) as {
+      error: string
+      message: string
+    }
+
+    expect(payload.error, 'a guard refusal is not a delegation failure').toBe('guardrail_violation')
+    expect(payload.message).not.toContain('pii-detector')
+    expect(payload.message).not.toContain('ssn found')
   })
 })

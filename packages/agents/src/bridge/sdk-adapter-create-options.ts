@@ -75,6 +75,22 @@ export interface HookApprovalRequest {
 const HOOK_GATE_SINCE = { major: 5, minor: 4 } as const
 
 /**
+ * Where the NARROWED `compatSources[].import` shape landed.
+ *
+ * `compatSources` itself landed in 5.0.0 (see {@link warnIfSdkCannotReadCompatSources}); listing
+ * WHICH surfaces to import landed in 5.4.0. The two are different versions and were treated as one,
+ * which is the whole defect: the `import` field's docblock stated the narrowed form was "refused at
+ * resolve time" on an older SDK, and nothing read a version for it. Measured — on 5.0.0 ≤ SDK <
+ * 5.4.0, squarely inside this package's declared `^4.52.1 || ^5.0.0`, a narrowed `import` was
+ * forwarded, dropped by the runtime in silence, and the foreign root was not read AT ALL.
+ *
+ * That is the failure `setting-sources-gate.ts` names as its own reason for existing — declared,
+ * gated, projected, and then discarded with no message — reproduced by the sentence claiming to
+ * prevent it.
+ */
+const COMPAT_IMPORT_SINCE = { major: 5, minor: 4 } as const
+
+/**
  * Refuses when the installed SDK cannot honour a declared hook gate.
  *
  * ## Why this THROWS where its `compatSources` sibling only warns
@@ -106,6 +122,105 @@ export class HookGateUnsupportedError extends TheokitAgentError {
       { code: 'hook_gate_unsupported', isRetryable: false },
     )
   }
+}
+
+/**
+ * A narrowed `import` on an SDK that cannot read it.
+ *
+ * Refuses rather than warns, and the asymmetry with {@link warnIfSdkCannotReadCompatSources} is
+ * deliberate: an unrecognised `compatSources` shape means the foreign root is not read, so a
+ * consumer who asked for "the skills but not the hooks" silently gets NOTHING — strictly further
+ * from what they asked for than the un-narrowed form, which at least reads something. Failing loud
+ * is recoverable; a silent nothing is discovered by wondering why a skill is missing.
+ *
+ * ## The cost, which this file argues against two functions above
+ *
+ * An unreadable version is refused too, on the principle {@link assertSdkCanGateHooks} states:
+ * "cannot tell" and "is supported" must not collapse. The sibling WARNING takes the opposite view
+ * for itself — *"a bundled or vendored SDK may not resolve that subpath, and refusing to create an
+ * agent over a diagnostic would be the cure being worse than the disease."*
+ *
+ * Both are right for what they guard, and the difference is what the check IS. A diagnostic that
+ * cannot read a version should stay quiet; a GATE that cannot read one has not established the
+ * thing it exists to establish. But the cost is real and belongs here rather than in a reviewer's
+ * report: a consumer who bundles the SDK so `@theokit/sdk/package.json` does not resolve cannot
+ * create an agent with a narrowed `import`, even on 5.4.0+. Their exit is to omit `import` and read
+ * the whole root.
+ */
+export class CompatImportUnsupportedError extends TheokitAgentError {
+  override readonly name = 'CompatImportUnsupportedError'
+  constructor(version: string | undefined) {
+    super(
+      `\`claudeCode.import\` narrows WHICH surfaces of a foreign configuration root to read, but ` +
+        `the installed @theokit/sdk (${version ?? 'version unreadable'}) cannot honour it: the ` +
+        `narrowed shape landed in ` +
+        `${String(COMPAT_IMPORT_SINCE.major)}.${String(COMPAT_IMPORT_SINCE.minor)}.0. An older ` +
+        `runtime drops the unrecognised shape in silence, so the root would not be read AT ALL — ` +
+        `less than you asked for, not more. Upgrade @theokit/sdk, or omit \`import\` to read every ` +
+        `surface of the root (usetheokit/theokit#686).`,
+      { code: 'compat_import_unsupported', isRetryable: false },
+    )
+  }
+}
+
+/**
+ * Narrow this layer's compat sources to the surfaces the SDK actually handles.
+ *
+ * The two vocabularies diverge by ONE name on purpose: `commands` is this layer's, because
+ * `<projectDir>/.claude/commands/*.md` is read by `config/custom-commands.ts` and never by the SDK.
+ * `setting-sources-gate.ts` says so and prescribes the remedy — *"Derive the SDK's list from this
+ * one minus `commands` rather than writing four names beside five"* — as advice to a consumer,
+ * while the projection that needed it did not follow it.
+ *
+ * The consequence was measured: `import: ['commands']` forwarded a list containing zero names the
+ * SDK defines, i.e. its own empty-list case. `resolveCompatSources`, one layer up, REFUSES
+ * `import: []` on the ground that "none" and "unset, so all of them" are both defensible and the
+ * difference is whether `<cwd>/.claude/hooks.json` executes — and then this reproduced that exact
+ * ambiguity one layer down, in silence.
+ *
+ * A source whose surfaces all belong to this layer is DROPPED from the SDK's list rather than sent
+ * empty: the SDK is asked for what the SDK handles, and if that is nothing it is not asked. The
+ * compiled value keeps `commands`, because `custom-commands.ts` reads the same field for the half
+ * it owns.
+ *
+ * Exported for the same reason {@link assertSdkCanGateHooks} is — pure, so both directions are
+ * testable without installing two SDKs.
+ *
+ * This sentence used to continue: "the version gate above refuses a narrowed import before this
+ * runs, so a test that went through `assembleM8CreateOptions` could not reach it at all." True for
+ * one commit, and the reorder that put the narrowing FIRST made it false — while the sentence
+ * stayed. That is how the reorder shipped with no test through the path it changed: the docblock
+ * said the test was impossible, so nobody wrote it.
+ *
+ * `the-compat-import-gate-refuses.test.ts` now drives both, and the assembled path is the one that
+ * pins the ordering.
+ */
+export function compatSourcesForSdk(
+  sources: readonly ResolvedCompatSource[],
+): ResolvedCompatSource[] {
+  const out: ResolvedCompatSource[] = []
+  for (const source of sources) {
+    if (typeof source === 'string') {
+      out.push(source)
+      continue
+    }
+    const forSdk = source.import.filter((surface) => surface !== 'commands')
+    if (forSdk.length > 0) out.push({ kind: source.kind, import: forSdk })
+  }
+  return out
+}
+
+/** Pure so both directions are testable without installing two SDKs. */
+export function assertSdkCanReadNarrowedImport(version: string | undefined): void {
+  const [major, minor] = (version ?? '').split('.').map((n) => Number.parseInt(n, 10))
+  const known = Number.isFinite(major) && Number.isFinite(minor)
+  const supported =
+    known &&
+    (major > COMPAT_IMPORT_SINCE.major ||
+      (major === COMPAT_IMPORT_SINCE.major && minor >= COMPAT_IMPORT_SINCE.minor))
+  // Unreadable is NOT supported, same as the hook gate: "cannot tell" and "is gated" must not
+  // collapse, and this defect is one instance of that confusion.
+  if (!supported) throw new CompatImportUnsupportedError(version)
 }
 
 /** Pure so both directions are testable without installing two SDKs. */
@@ -177,8 +292,12 @@ function warnIfSdkCannotReadCompatSources(): void {
  *
  * ## M68 — `settingSources` is a projection, not a decision
  *
- * `CompiledAgentOptions.settingSources` can only hold roots some posture authorized, because every
- * authoring path runs the selection through `resolveSettingSources` (the gate) at compile time.
+ * `CompiledAgentOptions.settingSources` holds only roots some posture authorized — carried by the
+ * TYPE since 2026-09-10, not by the claim this sentence used to make. It said "because every
+ * authoring path runs the selection through `resolveSettingSources`", which was measured false: a
+ * `Capability` is an authoring path and writes the draft directly, so a raw array reached the field
+ * cast-free. `resolveSettingSources` now returns a branded `GatedSettingSource[]`, which a raw root
+ * does not satisfy. See its docblock for what the brand does and does not cover.
  *
  * Two things died here, and both were the defect. A LOCAL function named `resolveSettingSources` —
  * same name as the gate, consulting no posture — is what this used to call, so a grep for the gate
@@ -204,9 +323,25 @@ function applyLocalSources(
     applied.push('settingSources')
   }
   if (compiled.compatSources !== undefined && compiled.compatSources.length > 0) {
-    options.local = { ...options.local, compatSources: [...compiled.compatSources] }
-    applied.push('compatSources')
-    warnIfSdkCannotReadCompatSources()
+    // Narrow FIRST, then gate on what would actually be sent.
+    //
+    // The reverse order shipped for one commit and refused a config the SDK is never asked about:
+    // `import: ['commands']` forwards nothing — `commands` is this layer's surface — yet the version
+    // check fired anyway, telling the operator to upgrade for a narrowing that would never travel,
+    // and denying `config/custom-commands.ts` the only surface it reads. Measured on 4.52.1, this
+    // package's declared floor. It also contradicted `compatSourcesForSdk`'s own docblock: "the SDK
+    // is asked for what the SDK handles, and if that is nothing it is not asked."
+    const forSdk = compatSourcesForSdk(compiled.compatSources)
+    if (forSdk.some((c) => typeof c === 'object' && 'import' in c)) {
+      // A narrowed `import` needs a newer SDK than `compatSources` itself does — refuse before the
+      // value travels, because the older runtime's silence is indistinguishable from success.
+      assertSdkCanReadNarrowedImport(installedSdkVersion())
+    }
+    if (forSdk.length > 0) {
+      options.local = { ...options.local, compatSources: forSdk }
+      applied.push('compatSources')
+      warnIfSdkCannotReadCompatSources()
+    }
   }
 }
 
