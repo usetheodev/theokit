@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [@theokit/agents 13.0.0-next.12] - 2026-09-10
+
 ### Changed
 
 - The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability already lives, instead of saying the handler "does not exist yet". Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput` and `createToolHooksPlugin({ processInput })` — so the old message sent consumers to wait for work that will not come. The third, `on_session_end`, is named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an ending
@@ -18,7 +20,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `inheritHooks` no longer lets a member's `transform_tool_result` or `pre_user_send` handler replace its parent's; both chain parent-first, matching the six events that already composed. Reachable through the exported `inheritHooks` called with two handler maps — `delegate()` itself passes `undefined` for the member, so that path was never affected (B-007)
 - An observational hook handler is assigned to its own key instead of being chosen by a two-branch comparison. A third observational event would have landed on `post_assistant_reply` silently; no behaviour changes for the events wired today (B-006)
-
 
 ## [@theokit/agents 13.0.0-next.11] - 2026-09-08
 

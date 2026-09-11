@@ -1,5 +1,57 @@
 # @theokit/agents
 
+## 13.0.0-next.12
+
+### Minor Changes
+
+- a7e35bb: A guardrail returning `action: 'redact'` with no replacement `text` now throws
+  `MalformedGuardrailResultError` instead of silently redacting nothing.
+
+  `GuardrailResult.text` is optional, so such a guard compiles and reads like a working one. The
+  pipeline tested `r.text !== undefined` and moved on, so the caller received the original text and
+  believed a guard had run on it — the operator believing a protection is in place when none is.
+
+  **This is a behaviour change.** A guard relying on the previous no-op will now throw. That is
+  deliberate: the alternative is unredacted output reaching a model because a guard was written wrong.
+  `text: ''` is unaffected and always was a real redaction — a guard choosing to erase everything.
+
+  `MalformedGuardrailResultError` is exported from `@theokit/agents`, carries the guard's name and the
+  phase, and is not retryable.
+
+  This also reaches the streaming path (`moderateOutputStream`), which shares the same pipeline: a
+  malformed guard there now throws where it previously continued.
+
+### Patch Changes
+
+- 2bc27d3: `inheritHooks` no longer lets a member's `transform_tool_result` or `pre_user_send` handler replace
+  its parent's — both now chain parent-first, matching the six events that already composed.
+
+  `inheritHooks` documents its security property as "the parent's refusal is evaluated first, and a
+  member can only ever ADD a reason to refuse". For these two events the plain object spread did the
+  opposite: a member declaring either handler silently discarded the parent's. The reachable surface is the EXPORTED `inheritHooks`, called with two handler maps.
+  `delegate()` passes `undefined` for the member (`agent-orchestrator.ts:175`), so that path composed
+  nothing and was never affected — a distinction the first version of this note got wrong.
+
+  `pre_user_send` composes additively — both contributions reach the model, parent first — because
+  `PreUserSendResult` carries only `recalledContext` and the seam exposes no prompt mutation.
+
+- eaac7b0: The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability
+  already lives, instead of ending "the handler does not exist yet".
+
+  Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput`
+  for `transform_llm_output`, and `createToolHooksPlugin({ processInput })` for `pre_user_send` — so
+  the old message told consumers to wait for work that will not come. The third, `on_session_end`, is
+  named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an
+  ending, so wiring it would produce a hook that runs and cannot decide.
+
+  Nothing is wired. `HOOK_EVENTS`, `WIRED_EVENTS` and `OBSERVATIONAL_EVENTS` keep the same members.
+
+- ec899f4: An observational hook handler is now assigned to its own key rather than chosen by comparison.
+
+  The dispatch loop used a two-branch conditional over a list of two event names, so a third
+  observational event would have landed on `post_assistant_reply` — silently, with no test objecting.
+  No behaviour changes for the events wired today; the fix removes the trap for the next one added.
+
 ## 13.0.0-next.11
 
 ### Patch Changes
