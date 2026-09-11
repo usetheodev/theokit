@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - `CompatImportUnsupportedError` crosses the `@theokit/agents/bridge` barrel, so a consumer can catch the refusal by class. It shipped one commit without doing so, while `HookGateUnsupportedError` — the class it was written to mirror — sat beside it (B-004)
-- A guardrail block reaches the delegate tool's caller as `{ ok: false, error: 'guardrail_violation' }` instead of ending the parent's turn. The message is deliberately fixed rather than the typed error's own, which names the guard and its trigger — a model given that learns which words to avoid rather than that it should stop (B-015)
+- A guardrail block reaches the delegate tool's caller as `{ ok: false, error: 'guardrail_violation' }` instead of ending the parent's turn. A typed error's message travels only for codes on an explicit allowlist: a guardrail message names the guard and its trigger, and a model given that learns which words to avoid rather than that it should stop (B-015)
 
 - `delegate()` applies the guardrails its spec declares. It accepted a `compiled` object carrying them and consulted neither half — measured: the input reached the model with its injection intact and the caller received the secret, while the run was green. Reachable as a tool (`tools/delegate-tool.ts` wraps it), so an agent could delegate to a sub-agent whose declared guards did nothing (B-015)
 

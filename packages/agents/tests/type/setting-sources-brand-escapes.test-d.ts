@@ -9,9 +9,11 @@
  * `@ts-expect-error` inverts correctly for this. Each directive FAILS the typecheck if the line it
  * guards compiles — so weakening the brand does not quietly pass, it reports which route reopened.
  *
- * `Object.assign` is deliberately absent: it typechecks cast-free and the docblock names it as the
- * one escape the brand does not close. A test asserting otherwise would be the overstatement this
- * file exists to prevent.
+ * Reflective writes are deliberately absent: `Object.assign`, `Reflect.set` and
+ * `Object.defineProperty` all typecheck cast-free, and the gate's docblock names any reflective
+ * write as a CLASS the brand does not close. A test asserting otherwise would be the overstatement
+ * this file exists to prevent — and calling it "the one escape", as this comment did for a round
+ * after the gate stopped, is that overstatement surviving the fix it was part of.
  *
  * Adopted from an independent review's scratch probe. Its two self-controls — a plain type error and
  * a deliberately unused directive — were run and both fired, proving the file is compiled and that
@@ -64,7 +66,7 @@ setOnce(draft, 'settingSources', mapped, 'r7')
 
 // 8 — spread-widening
 const widened = [...(['project'] as const)]
-// @ts-expect-error spread-widening produces string[]
+// @ts-expect-error spread-widening drops the brand while keeping the literal (`"project"[]`)
 setOnce(draft, 'settingSources', widened, 'r8')
 
 // 9 — satisfies

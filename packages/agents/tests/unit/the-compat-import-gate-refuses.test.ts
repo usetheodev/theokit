@@ -5,7 +5,11 @@ import {
   CompatImportUnsupportedError,
 } from '../../src/bridge/sdk-adapter-create-options.js'
 import { resolveSettingSources } from '../../src/bridge/setting-sources-gate.js'
-import { compatSourcesForSdk } from '../../src/bridge/sdk-adapter-create-options.js'
+import {
+  assembleM8CreateOptions,
+  compatSourcesForSdk,
+} from '../../src/bridge/sdk-adapter-create-options.js'
+import type { CompiledAgentOptions } from '../../src/bridge/agent-compiler.js'
 
 /**
  * B-004, seventh review round — a refusal that was documented and did not exist.
@@ -80,9 +84,11 @@ describe('resolveSettingSources reads the declaration, not merely its presence',
 })
 
 describe('the SDK is asked only for the surfaces the SDK handles', () => {
-  // Tested through the pure projection rather than `assembleM8CreateOptions`: on the SDK floor this
-  // package declares (4.52.1), the version gate above refuses a narrowed import before the
-  // projection runs, so the assembled path cannot reach this code at all.
+  // Tested through the pure projection AND through `assembleM8CreateOptions` below.
+  //
+  // This comment used to say the assembled path "cannot reach this code at all", because the version
+  // gate ran first. That was true for one commit and the reorder that fixed it made it false — and
+  // the sentence stayed, which is how the reorder shipped with no test through the path it changed.
 
   it('test_commands_is_subtracted_because_the_sdk_does_not_read_it', () => {
     // The two vocabularies diverge by one name on purpose: `commands` is this layer's, because
@@ -102,5 +108,41 @@ describe('the SDK is asked only for the surfaces the SDK handles', () => {
 
   it('test_the_whole_root_is_forwarded_unchanged', () => {
     expect(compatSourcesForSdk(['claude-code'])).toEqual(['claude-code'])
+  })
+})
+
+describe('the gate reads what would actually be sent, not what was declared', () => {
+  const base: CompiledAgentOptions = { model: 'm', tools: [], agents: {}, stream: true }
+
+  it('test_a_narrowing_the_sdk_never_receives_is_not_refused', () => {
+    // The reorder, pinned through the path it changed. `commands` is this layer's surface, so
+    // `import: ['commands']` forwards NOTHING — and the version gate ran first anyway, telling an
+    // operator on the declared floor (4.52.1) to upgrade for a narrowing that would never travel,
+    // and denying `config/custom-commands.ts` the only surface it reads.
+    //
+    // Reverting the order leaves this test failing and every other one green: the fix had no test
+    // at all, which is the same defect this file's sibling reports fixing one commit earlier.
+    const { options } = assembleM8CreateOptions({
+      ...base,
+      compatSources: [{ kind: 'claude-code', import: ['commands'] }],
+    })
+
+    expect(options.local?.compatSources, 'nothing the SDK handles remains').toBeUndefined()
+  })
+
+  it('test_a_narrowing_the_sdk_would_receive_is_still_refused', () => {
+    // The other half: the reorder must not have disarmed the gate. `skills` IS forwarded, so on an
+    // SDK that cannot read the narrowed shape the refusal still fires.
+    expect(() =>
+      assembleM8CreateOptions({
+        ...base,
+        compatSources: [{ kind: 'claude-code', import: ['skills'] }],
+      }),
+    ).toThrow(CompatImportUnsupportedError)
+  })
+
+  it('test_the_whole_root_needs_no_narrowing_and_is_forwarded', () => {
+    const { options } = assembleM8CreateOptions({ ...base, compatSources: ['claude-code'] })
+    expect(options.local?.compatSources).toEqual(['claude-code'])
   })
 })

@@ -123,22 +123,52 @@ function errorCodeOf(error: unknown): string | undefined {
   return undefined
 }
 
+/** What a refusal says when its own message must not travel. */
+const REFUSED_BY_POLICY = 'the delegated task was refused by a policy guard'
+
 /**
  * What the model is told about a refusal.
  *
- * Every other code passes the typed error's message through, because a budget or a timeout is a
- * fact about the work. A guardrail message is not: it reads
- * `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and the exact trigger. Give
- * that to a model and it has a map around the gate — it learns which words to avoid, not that it
- * should stop.
+ * A budget or a timeout is a fact about the WORK, and its message is what the model acts on. A
+ * guardrail message is not: it reads `Guardrail "pii-detector" blocked output: ssn found`, naming
+ * the guard and the exact trigger. Give that to a model and it has a map around the gate — it
+ * learns which words to avoid, not that it should stop. It still learns it was refused, which is
+ * the one bit it can act on: delegate less, or do the work itself.
  *
- * So this one code gets a fixed string. The operator still has the full typed error: the guard ran
- * in their process and `GuardrailViolationError` carries `guardName`, `phase` and `reason` for
- * whoever catches it. The model gets the one bit it can act on — delegate less, or do the work
- * itself.
+ * ## The default is WITHHOLD, and the first version had it backwards
+ *
+ * This began as `if (code === 'guardrail_violation') return fixed` — a denylist, so any code added
+ * to {@link errorCodeOf} later would pass its typed message through by DEFAULT, silently, on the
+ * one function whose entire purpose is withholding. `errorCodeOf` directly above is an allowlist
+ * (unknown → `undefined` → rethrow); this is now one too, and the two read the same way.
+ *
+ * Adding a code to `errorCodeOf` and not to `MESSAGE_MAY_CROSS` makes it withhold. That is the safe
+ * direction of forgetting, and it is the only one a reviewer can rely on.
+ *
+ * ## What this does NOT cover
+ *
+ * `DelegationError`'s message is `Delegation to agent "X" failed: ${cause.message}`
+ * (`delegation-types.ts`), and `run-reflective-loop.ts` wraps a non-delegation round error into one
+ * — so a guard throwing INSIDE a round would cross as `delegation_failed` with its text intact.
+ * Measured 2026-09-10: not reachable from the framework's own wiring, because
+ * `createSdkAgentStream` applies no guards and `withGuardrails` wraps only the `toAgentFactory`
+ * handle. Stated because the shape exists and the next seam that runs a guard mid-round reopens it.
  */
+/**
+ * A `Set` and not a `Record<string, true>`, because that record's type LIES: indexing it types the
+ * result `true`, so eslint reported `!MESSAGE_MAY_CROSS[code]` as "always falsy" while at runtime an
+ * unlisted code yields `undefined`. A type that disagrees with its values is how the tagged-union
+ * fail-open in `auth/permission-gate.ts` happened; `has()` returns a real boolean.
+ */
+const MESSAGE_MAY_CROSS: ReadonlySet<string> = new Set([
+  // A budget or a timeout is a fact about the WORK, and the number in it is what the model acts on.
+  'delegation_budget_exceeded',
+  'delegation_timeout',
+  'delegation_failed',
+])
+
 function messageForModel(code: string, error: unknown): string {
-  if (code === 'guardrail_violation') return 'the delegated task was refused by a policy guard'
+  if (!MESSAGE_MAY_CROSS.has(code)) return REFUSED_BY_POLICY
   return error instanceof Error ? error.message : String(error)
 }
 
@@ -223,7 +253,8 @@ export function createDelegateTool(options: CreateDelegateToolOptions) {
         }
         // A delegation refusal is INFORMATION the model can act on: delegate less, or finish the
         // work itself. Throwing here would end the parent's turn over a recoverable signal. Nothing
-        // is swallowed — the typed error's identity crosses as a stable code, its message intact.
+        // is swallowed — the typed error's identity crosses as a stable code; the message travels except
+        // where withholding it IS the point (see `messageForModel`).
         return JSON.stringify({ ok: false, error: code, message: messageForModel(code, error) })
       }
     },

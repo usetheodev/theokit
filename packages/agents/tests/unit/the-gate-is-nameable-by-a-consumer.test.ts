@@ -35,9 +35,12 @@ const THE_GATE_NEEDS = [
   'ResolvedCompatSource',
   // B-004 — the refusal raised when the installed SDK cannot read a narrowed `import`. Added after
   // a review found it shipped WITHOUT crossing the barrel, while the class it was written to mirror
-  // (`HookGateUnsupportedError`, four lines up) did. A consumer meeting a brand-new refusal could
-  // only match its message string — which is the fifth time this shape has been caught here, and
-  // exactly what the note above predicts.
+  // (`HookGateUnsupportedError`, three entries up) did. A consumer meeting a brand-new refusal could
+  // only match its message string.
+  //
+  // The fifth INSTANCE of the shape, and the first this guard did not catch — it was added by hand
+  // after a review, which is precisely what the note above says the list exists to prevent. Saying
+  // "caught here" would credit the guard with work a person did.
   'CompatImportUnsupportedError',
 ] as const
 

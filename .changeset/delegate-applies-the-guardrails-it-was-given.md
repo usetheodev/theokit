@@ -32,8 +32,9 @@ rethrown, ending the parent's turn. The tool's own description, shipped to the m
 `{ ok: false, error, message }` on a refusal.
 
 It crosses as `guardrail_violation` with a FIXED message: `the delegated task was refused by a
-policy guard`. Every other code passes the typed error's message through, because a budget or a
-timeout is a fact about the work. A guardrail message is not — it reads
+policy guard`. The message travels only for codes on an explicit ALLOWLIST — a budget or a timeout
+is a fact about the work, and the number in it is what the model acts on. A code nobody lists
+withholds, so forgetting is safe in the direction that matters. A guardrail message is not — it reads
 `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and its exact trigger, and a
 model given that learns which words to avoid rather than that it should stop. The operator keeps the
 full typed error, which carries `guardName`, `phase` and `reason`.

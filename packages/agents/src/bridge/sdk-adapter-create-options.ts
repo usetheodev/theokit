@@ -184,9 +184,16 @@ export class CompatImportUnsupportedError extends TheokitAgentError {
  * it owns.
  *
  * Exported for the same reason {@link assertSdkCanGateHooks} is — pure, so both directions are
- * testable without installing two SDKs. On the floor this package declares (`4.52.1`), the version
- * gate above refuses a narrowed import before this runs, so a test that went through
- * `assembleM8CreateOptions` could not reach it at all.
+ * testable without installing two SDKs.
+ *
+ * This sentence used to continue: "the version gate above refuses a narrowed import before this
+ * runs, so a test that went through `assembleM8CreateOptions` could not reach it at all." True for
+ * one commit, and the reorder that put the narrowing FIRST made it false — while the sentence
+ * stayed. That is how the reorder shipped with no test through the path it changed: the docblock
+ * said the test was impossible, so nobody wrote it.
+ *
+ * `the-compat-import-gate-refuses.test.ts` now drives both, and the assembled path is the one that
+ * pins the ordering.
  */
 export function compatSourcesForSdk(
   sources: readonly ResolvedCompatSource[],

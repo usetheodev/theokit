@@ -358,4 +358,40 @@ describe('createDelegateTool — reachability (wiring)', () => {
     expect(payload.message).not.toContain('ssn found')
     expect(payload.message, 'the model still learns it was refused').toMatch(/refused|policy/i)
   })
+
+  it('test_a_code_nobody_listed_withholds_its_message_by_default', async () => {
+    // The direction of forgetting, pinned. `messageForModel` began as a denylist — a check for the
+    // ONE code that must withhold — so a code added to `errorCodeOf` later would have passed its
+    // typed message through by default, silently, on the function whose entire purpose is
+    // withholding. `errorCodeOf` above is an allowlist; this is now one too.
+    //
+    // `DelegationError` is in the allowlist and `GuardrailViolationError` is not, so this drives the
+    // pair and asserts they diverge — a future code that nobody lists behaves like the second.
+    const listed = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new DelegationError('worker', new Error('disk full'))),
+        },
+      ],
+    })
+    const unlisted = createDelegateTool({
+      roster: [
+        {
+          name: 'worker',
+          target: portThrowing(new GuardrailViolationError('pii', 'output', 'ssn found')),
+        },
+      ],
+    })
+
+    const a = JSON.parse((await listed.handler({ agent: 'worker', task: 't' })) as string) as {
+      message: string
+    }
+    const b = JSON.parse((await unlisted.handler({ agent: 'worker', task: 't' })) as string) as {
+      message: string
+    }
+
+    expect(a.message, 'a listed code passes its own message').toContain('disk full')
+    expect(b.message, 'an unlisted code does not').not.toContain('ssn found')
+  })
 })

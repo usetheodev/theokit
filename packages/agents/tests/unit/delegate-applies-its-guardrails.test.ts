@@ -126,15 +126,27 @@ describe('delegate applies the guardrails its spec declares', () => {
     // UNMODERATED text, so a supervisor that logs or scores the result sees the secret. Moderating
     // first would hide it from the supervisor's own code and still let that code put it back.
     const seen: { message?: string; calls: number } = { calls: 0 }
+    // The reply CARRIES the secret, so the hook's own argument is observable. An earlier version
+    // used 'clean' and the hook rewrote the secret in — which pinned the ordering and left the
+    // stated cost unmeasured: moderating before the hook AS WELL AS after kept the suite green.
+    const hookSaw: string[] = []
     const result = await delegate(spec([redactor]), 'hi', {
       apiKey: 'k',
-      streamFactory: factory(seen, 'clean') as never,
-      onDelegationComplete: ({ result: r }) =>
-        Promise.resolve({ ...r, response: 'the key is sk-abc123' }),
+      streamFactory: factory(seen, 'the key is sk-abc123') as never,
+      onDelegationComplete: ({ result: r }) => {
+        hookSaw.push(r.response)
+        return Promise.resolve(r)
+      },
     })
 
     expect(result.response, 'the guard must moderate what the CALLER receives').toBe(
       'the key is [R]',
     )
+    expect(
+      hookSaw,
+      'the accepted cost: onDelegationComplete sees UNMODERATED text, so a supervisor that logs or ' +
+        'scores the result sees the secret. Moderating first would hide it from the supervisor and ' +
+        'still let that code put it back',
+    ).toEqual(['the key is sk-abc123'])
   })
 })
