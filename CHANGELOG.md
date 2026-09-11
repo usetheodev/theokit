@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **An operator can declare a credential helper.** `apiKeyHelper` in the operator policy names a
+  command that prints a credential, and `resolveOperatorApiKey` from `@theokit/agents/auth` runs it.
+  Measured before: all four helpers the reference format names returned zero occurrences here, so an
+  agent on a rotating token failed mid-run with no seam to refresh it. A helper that hangs is killed
+  at 10 s with a typed error; one that prints nothing fails rather than returning an empty key; and
+  its output never reaches the error text, because a failure is read from logs and screenshots. The
+  raw command runner is not exported — offering it would hand a caller the choice of what executes,
+  which is the decision the operator tier exists to take away (B-069)
+
 - **The settings precedence stack is named.** `SettingsLayer`, `SETTINGS_LAYERS`,
   `layerPrecedence` and `settingsLayerChain` declare which layers exist and in what order — managed
   settings, command line, project local, shared project, user, and below all five the values passed

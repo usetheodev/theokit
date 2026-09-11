@@ -160,6 +160,27 @@ export {
 } from './auth/resolve-credential.js'
 export type { AgentCredentialInput } from './auth/resolve-credential.js'
 export type { CredentialSourcesInput } from './auth/resolve-credential.js'
+
+/**
+ * B-069 — the operator-declared credential helper.
+ *
+ * Exported rather than wired into `resolveCredential`, and the reason is this module's own stance:
+ * the package offers the MECHANISM and the app composes the POLICY — `resolveCredential` takes its
+ * `env` from the caller precisely so that "which providers exist" stays the app's decision. A helper
+ * that fired implicitly inside resolution would reverse that, and it could not anyway:
+ * `resolveCredential` is synchronous and running a command is not.
+ *
+ * So the shape is: the app asks the operator tier for a key, and hands it to resolution.
+ *
+ *     const fromOperator = await resolveOperatorApiKey(warn)
+ *     const env = fromOperator === undefined ? process.env : { ...process.env, ANTHROPIC_API_KEY: fromOperator }
+ *     const credential = resolveCredential({ env, providers })
+ *
+ * `runCredentialHelper` is NOT exported. It takes an arbitrary command string, and offering that on
+ * a public surface would hand a caller the choice of what to execute — the exact decision the
+ * operator tier exists to take away from them.
+ */
+export { resolveOperatorApiKey, type RunCredentialHelperOptions } from './auth/credential-helper.js'
 export type {
   CredentialResolution,
   ProviderDescriptor as CredentialProviderDescriptor,
