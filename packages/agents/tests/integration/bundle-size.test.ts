@@ -53,10 +53,13 @@ describe('Bundle size regression', () => {
    * Headroom is again about a kilobyte, and again stated so the next barrel addition meets a guard
    * rather than a formality.
    */
-  it('agents main bundle under 38.5KB', () => {
+  it('agents main bundle under 38.5KB', (ctx) => {
     const path = resolve(distDir, 'index.js')
     if (!existsSync(path)) {
-      console.log('  SKIP: dist/index.js not found (run pnpm build first)')
+      // `ctx.skip()`, not `return`. A bare return reports the test as PASSED, so a suite run with no
+      // `packages/agents` build says the size gates held when none of them ran. Skipped and passed
+      // are different facts and the report must not collapse them.
+      ctx.skip()
       return
     }
     const size = statSync(path).size
@@ -64,21 +67,17 @@ describe('Bundle size regression', () => {
     console.log(`  agents/dist/index.js: ${(size / 1024).toFixed(1)} KB`)
   })
 
-  it('agents decorators sub-path under 15KB', () => {
-    const path = resolve(distDir, 'decorators.js')
-    if (!existsSync(path)) {
-      console.log('  SKIP: dist/decorators.js not found')
-      return
-    }
-    const size = statSync(path).size
-    expect(size).toBeLessThan(15_000)
-    console.log(`  agents/dist/decorators.js: ${(size / 1024).toFixed(1)} KB`)
-  })
+  // `agents decorators sub-path under 15KB` lived here and could never assert: there is no
+  // `decorators` entry in `tsup.config.ts` or in `package.json`, so `dist/decorators.js` cannot
+  // exist, so the test took its `SKIP` branch and reported GREEN on every run — built tree
+  // included. A size gate that has never executed its assertion is a gate the next regression walks
+  // past while the suite stays green. The subpath is gone; the gate for it should have gone with
+  // it.
 
-  it('agents bridge sub-path under 20KB', () => {
+  it('agents bridge sub-path under 20KB', (ctx) => {
     const path = resolve(distDir, 'bridge.js')
     if (!existsSync(path)) {
-      console.log('  SKIP: dist/bridge.js not found')
+      ctx.skip()
       return
     }
     const size = statSync(path).size

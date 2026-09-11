@@ -9,6 +9,7 @@ import {
   __acquireBuildLockForTests,
   __releaseBuildLockForTests,
   __isBuildLockStaleForTests,
+  __recoverStaleBuildLockForTests,
 } from '../integration/_helpers/build-theokit-package.js'
 
 /**
@@ -128,5 +129,50 @@ describe('the build lock', () => {
 
     __releaseBuildLockForTests(b)
     expect(existsSync(LOCK)).toBe(false)
+  })
+
+  /**
+   * The branch that deletes ANOTHER process's file had no coverage at all, and the re-check its
+   * comment credited for safety was `statSync(path).ino === staleIno` with `staleIno` read on the
+   * line above — a value compared against itself. Removing it changed no behaviour, which is the
+   * point: the guard that does the work is the freshness test, and now something asserts it.
+   */
+  it('test_a_live_lock_is_never_recovered_as_stale', () => {
+    const held = __acquireBuildLockForTests(LOCK)
+    expect(held).not.toBeNull()
+
+    expect(__isBuildLockStaleForTests(LOCK), 'a lock taken just now is not stale').toBe(false)
+    expect(__recoverStaleBuildLockForTests(LOCK), 'recovery must refuse a live lock').toBe(false)
+    expect(existsSync(LOCK), "the live holder's lock survives").toBe(true)
+
+    __releaseBuildLockForTests(held)
+  })
+
+  it('test_a_dead_holders_lock_is_recovered_so_one_crash_does_not_block_every_run', () => {
+    const held = __acquireBuildLockForTests(LOCK)
+    expect(held).not.toBeNull()
+    closeSync(held!.fd)
+
+    // Age the lock past BUILD_TIMEOUT_MS + STALE_MARGIN_MS by moving its mtime back an hour —
+    // the holder is gone and nothing will ever release this file.
+    const anHourAgo = new Date(Date.now() - 3_600_000)
+    utimesSync(LOCK, anHourAgo, anHourAgo)
+
+    expect(__isBuildLockStaleForTests(LOCK)).toBe(true)
+    expect(__recoverStaleBuildLockForTests(LOCK), 'a dead holder must be recovered').toBe(true)
+    expect(existsSync(LOCK), 'the dead lock is gone, so the next run can acquire').toBe(false)
+
+    // And the path is usable again — the recovery is only worth anything if it unblocks.
+    const next = __acquireBuildLockForTests(LOCK)
+    expect(next, 'the lock is acquirable after recovery').not.toBeNull()
+    __releaseBuildLockForTests(next)
+  })
+
+  it('test_recovering_an_absent_lock_reports_nothing_was_removed', () => {
+    if (existsSync(LOCK)) unlinkSync(LOCK)
+    // Absent is not stale — answering `true` here would have the caller report a recovery it did
+    // not perform, which is the same false claim in a smaller place.
+    expect(__isBuildLockStaleForTests(LOCK)).toBe(false)
+    expect(__recoverStaleBuildLockForTests(LOCK)).toBe(false)
   })
 })

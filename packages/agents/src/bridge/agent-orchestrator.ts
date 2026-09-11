@@ -314,7 +314,10 @@ export async function delegate(
  * - `toolCalls[].output` — tool output, not model text. `loop/agent-runner.ts` excludes it from
  *   `extractText` on the same reasoning.
  * - `toolCalls[].input` — the model's own tool-call ARGUMENTS, correlated from the `tool_call`
- *   event at `run-reflective-loop.ts:288`. This one genuinely is model text and it is NOT moderated.
+ *   event in `run-reflective-loop.ts`: `accumulateEvent` records the call's input into `callInputs`,
+ *   and `pushToolResult` reads it back when the result arrives. Named rather than cited by line —
+ *   the previous reference said `:288`, which was accurate when written and drifted 19 lines to a
+ *   `return 'stop'` inside the same branch that added it. This one genuinely is model text and it is NOT moderated.
  *   Consistent with `agent-runner.ts`, so not a regression here — and named rather than omitted,
  *   because the previous paragraph called leaving `output` alone "that decision applied
  *   consistently" while saying nothing about the field the argument actually applies to.

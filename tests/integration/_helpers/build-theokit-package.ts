@@ -252,6 +252,37 @@ const isLockStale = (lockPath: string = LOCK_FILE): boolean => {
   }
 }
 
+/**
+ * Remove a lock whose holder is gone, so one crashed run does not block every future run.
+ *
+ * **What makes this safe is the staleness re-check, not an inode comparison.** The previous version
+ * read `statSync(LOCK_FILE).ino` into `staleIno` and then compared `statSync(LOCK_FILE).ino` against
+ * it on the very next line — a value against itself, across a window of microseconds. Its comment
+ * claimed that test stopped "two processes that both find the lock stale" from both recovering. It
+ * did not, and could not: the guard that actually stops that is the freshness test below. When a
+ * competing recoverer has already removed the dead lock and taken its own, the file at this path is
+ * a NEW lock with a current mtime, so it is not stale and is left alone.
+ *
+ * Residual window, stated rather than implied: the holder can release and a new holder can acquire
+ * between this check and the `unlinkSync`, in which case a live lock is removed. It is the same
+ * TOCTOU `releaseLock` closes by inode, and it is not closed here — an unlink is by path, and POSIX
+ * has no unlink-by-inode. The recovery only runs after a wait of `BUILD_TIMEOUT_MS` has already
+ * expired, so the window is bounded by two adjacent syscalls rather than by the build.
+ *
+ * @returns whether a lock was removed. Exported for tests as {@link __recoverStaleBuildLockForTests}
+ *          — the branch that deletes another process's file had no coverage at all.
+ */
+const recoverStaleLock = (lockPath: string = LOCK_FILE): boolean => {
+  if (!isLockStale(lockPath)) return false
+  try {
+    unlinkSync(lockPath)
+    return true
+  } catch {
+    // Someone else recovered it first. Not an error: the caller retries the acquire.
+    return false
+  }
+}
+
 const waitForLockRelease = (timeoutMs = 240_000): void => {
   const start = Date.now()
   while (existsSync(LOCK_FILE) && Date.now() - start < timeoutMs) {
@@ -287,18 +318,8 @@ export const buildTheokitPackageOnce = (): void => {
     // still building. Two tsup runs clean one output directory, which is the `ENOENT: unlink
     // dist/chunk-*.js.map` measured on a root suite run.
     held = acquireLock()
-    if (held === null && isLockStale()) {
-      // The holder outlived the timeout that bounds its own build, so it is gone. Take the lock
-      // rather than blocking every future run until somebody clears /tmp by hand.
-      // Unlink the inode we JUDGED stale, not whatever sits at the path when we get here. Without
-      // the re-check two processes that both find the lock stale can both recover it — the second
-      // deleting the first's fresh lock — and both go on to build.
-      try {
-        const staleIno = statSync(LOCK_FILE).ino
-        if (statSync(LOCK_FILE).ino === staleIno && isLockStale()) unlinkSync(LOCK_FILE)
-      } catch {
-        // Someone else recovered it first — the retry below decides.
-      }
+    if (held === null) {
+      recoverStaleLock()
       held = acquireLock()
     }
     if (held === null) {
@@ -351,6 +372,7 @@ export const THEOKIT_DIST = DIST
 export const __acquireBuildLockForTests = acquireLock
 export const __releaseBuildLockForTests = releaseLock
 export const __isBuildLockStaleForTests = isLockStale
+export const __recoverStaleBuildLockForTests = recoverStaleLock
 
 /** Reset the per-process decision. Exists so the guard below can exercise both branches. */
 export const __resetBuildDecisionForTests = (): void => {

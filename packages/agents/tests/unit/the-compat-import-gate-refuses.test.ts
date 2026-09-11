@@ -4,7 +4,11 @@ import {
   assertSdkCanReadNarrowedImport,
   CompatImportUnsupportedError,
 } from '../../src/bridge/sdk-adapter-create-options.js'
-import { resolveSettingSources } from '../../src/bridge/setting-sources-gate.js'
+import {
+  resolveCompatSources,
+  resolveSettingSources,
+} from '../../src/bridge/setting-sources-gate.js'
+import type { SettingSourcesSelection } from '../../src/bridge/setting-sources-gate.js'
 import {
   assembleM8CreateOptions,
   compatSourcesForSdk,
@@ -27,6 +31,27 @@ import type { CompiledAgentOptions } from '../../src/bridge/agent-compiler.js'
  * `compatSources` itself landed in 5.0.0 and the NARROWED shape in 5.4.0. Treating those two
  * versions as one is the whole defect.
  */
+/**
+ * Compat sources are BRANDED, and the brand is mintable only by `resolveCompatSources`. These
+ * fixtures therefore go through the real resolver instead of hand-building the value — which the
+ * type now refuses, and which is the point: the field claimed "a value here can only hold a source
+ * some posture granted" while a raw array reached it cast-free.
+ *
+ * Going through the resolver is also the stronger test. The narrowing these cases exercise is
+ * produced by the same function production calls, so a change to its output shape fails here rather
+ * than passing against a fixture nobody kept in step.
+ */
+const trusted = (
+  surfaces?: readonly string[],
+): NonNullable<SettingSourcesSelection['claudeCode']> =>
+  ({
+    trustedBy: { level: 'trusted', source: 'test', allows: { projectSettings: true } },
+    ...(surfaces === undefined ? {} : { import: surfaces }),
+  }) as unknown as NonNullable<SettingSourcesSelection['claudeCode']>
+
+const compatFor = (surfaces?: readonly string[]) =>
+  resolveCompatSources({ claudeCode: trusted(surfaces) })
+
 describe('the narrowed compat import is refused when the SDK cannot read it', () => {
   it('test_an_sdk_that_can_read_the_narrowed_shape_is_accepted', () => {
     expect(() => {
@@ -124,7 +149,7 @@ describe('the gate reads what would actually be sent, not what was declared', ()
     // at all, which is the same defect this file's sibling reports fixing one commit earlier.
     const { options } = assembleM8CreateOptions({
       ...base,
-      compatSources: [{ kind: 'claude-code', import: ['commands'] }],
+      compatSources: compatFor(['commands']),
     })
 
     expect(options.local?.compatSources, 'nothing the SDK handles remains').toBeUndefined()
@@ -136,13 +161,13 @@ describe('the gate reads what would actually be sent, not what was declared', ()
     expect(() =>
       assembleM8CreateOptions({
         ...base,
-        compatSources: [{ kind: 'claude-code', import: ['skills'] }],
+        compatSources: compatFor(['skills']),
       }),
     ).toThrow(CompatImportUnsupportedError)
   })
 
   it('test_the_whole_root_needs_no_narrowing_and_is_forwarded', () => {
-    const { options } = assembleM8CreateOptions({ ...base, compatSources: ['claude-code'] })
+    const { options } = assembleM8CreateOptions({ ...base, compatSources: compatFor() })
     expect(options.local?.compatSources).toEqual(['claude-code'])
   })
 })

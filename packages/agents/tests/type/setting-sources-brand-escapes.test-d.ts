@@ -1,9 +1,11 @@
 /**
  * B-004 — the routes by which a raw setting root does NOT reach the branded field.
  *
- * `setting-sources-gate.ts` claims "Nine other routes ARE refused, each verified against the emitted
- * declarations", and until this file that claim was prose supported by a measurement somebody ran
- * once. On this branch that is the recurring defect: a safety property asserted where nothing checks
+ * `setting-sources-gate.ts` claims "TEN other routes are refused, and they are refused by a TEST
+ * rather than by this sentence", and until this file that claim was prose supported by a
+ * measurement somebody ran once. (This comment quoted it as "Nine other routes ARE refused, each
+ * verified against the emitted declarations" — wording that exists in no file. The gate's own
+ * docblock records the nine-to-ten correction; the file quoting it did not follow.) On this branch that is the recurring defect: a safety property asserted where nothing checks
  * it. The claim now has the mechanism it describes.
  *
  * `@ts-expect-error` inverts correctly for this. Each directive FAILS the typecheck if the line it
@@ -79,3 +81,31 @@ const pushed: string[] = []
 pushed.push('project')
 // @ts-expect-error .push builds a plain string[]
 setOnce(draft, 'settingSources', pushed, 'r10')
+
+/*
+ * The SIBLING field. `compatSources` is resolved by `resolveCompatSources`, guarded by the same
+ * `ProjectSettingsGrant` and refused with the same `UntrustedSettingSourceError` — and its docblock
+ * in `agent-compiler.ts` makes the same claim this file exists to mechanise: "a value here can only
+ * hold a source some posture granted".
+ *
+ * Measured on 2026-09-11, with the route-1 line above as the control: the control errored (the brand
+ * holds for `settingSources`) and `setOnce(draft, 'compatSources', ['claude-code'], 'cap')` compiled
+ * cast-free. The gate was closed on one of the two fields one selection object feeds, while
+ * `agent-capabilities.ts` writes both from that same object.
+ *
+ * It matters more than its twin, not less: `applyLocalSources` forwards this field to
+ * `Agent.create({ local: { compatSources } })`, which reads `<cwd>/.claude/` — `hooks.json`
+ * included, and that executes shell.
+ */
+
+// 11 — setOnce with a raw array
+// @ts-expect-error a raw compat source never passed a TrustPosture
+setOnce(draft, 'compatSources', ['claude-code'], 'r11')
+
+// 12 — a direct draft.compatSources =
+// @ts-expect-error assigning the field directly skips resolveCompatSources
+draft.compatSources = ['claude-code']
+
+// 13 — the narrowed object form, which carries the same authority as the bare string
+// @ts-expect-error a hand-built narrowed source is not a resolved one
+setOnce(draft, 'compatSources', [{ kind: 'claude-code', import: ['agents' as never] }], 'r13')

@@ -229,7 +229,7 @@ declare const GATED: unique symbol
  * point of moving the claim into a test.
  *
  * So this refuses the accident — a capability author reaching for the field because it is there —
- * with one named exception, and not a caller who has decided to bypass the gate. Naming the
+ * with the named exceptions above, and not a caller who has decided to bypass the gate. Naming them
  * exception is the point: the comment this replaced claimed an invariant nothing enforced, and a
  * replacement that overstated its own coverage would be the same defect one size smaller.
  *
@@ -243,6 +243,26 @@ declare const GATED: unique symbol
  * than plumbed through to be ignored.
  */
 export type GatedSettingSource = SettingSource & { readonly [GATED]: true }
+
+/**
+ * A compat source some `TrustPosture` authorised — mintable ONLY by {@link resolveCompatSources}.
+ *
+ * The twin of {@link GatedSettingSource}, and it exists because B-004 branded one of the two fields
+ * one `SettingSourcesSelection` feeds and left the other bare. Measured 2026-09-11, with the
+ * `settingSources` route as the control: the control errored, and
+ * `setOnce(draft, 'compatSources', ['claude-code'], 'cap')` compiled CAST-FREE — while
+ * `agent-compiler.ts` told the reader that field "can only hold a source some posture granted".
+ *
+ * It carries more authority than its twin, not less: `applyLocalSources` forwards it to
+ * `Agent.create({ local: { compatSources } })`, which reads `<cwd>/.claude/` — `hooks.json`
+ * included, and that executes shell. The refusal thrown below spells that out; the brand is what
+ * stops a caller reaching the field without meeting the refusal at all.
+ *
+ * Same `GATED` symbol as the twin, so there is one brand in this module rather than two that must
+ * be kept in step. The escapes are the same CLASS the twin documents — `as never` and any
+ * reflective write — and are not re-listed here.
+ */
+export type GatedCompatSource = ResolvedCompatSource & { readonly [GATED]: true }
 
 export function resolveSettingSources(
   selection: SettingSourcesSelection | undefined,
@@ -313,7 +333,7 @@ export function resolveSettingSources(
  */
 export function resolveCompatSources(
   selection: SettingSourcesSelection | undefined,
-): readonly ResolvedCompatSource[] {
+): readonly GatedCompatSource[] {
   if (selection?.claudeCode === undefined) return []
 
   const posture = selection.claudeCode.trustedBy
@@ -354,6 +374,9 @@ export function resolveCompatSources(
       'projectSettings',
     )
   }
-  if (surfaces !== undefined) return [{ kind: 'claude-code', import: [...surfaces] }]
-  return ['claude-code']
+  // The two places the compat brand is minted. Both are past every posture check above, which is
+  // the property the type then carries for the rest of the program.
+  const gated = (source: ResolvedCompatSource): GatedCompatSource => source as GatedCompatSource
+  if (surfaces !== undefined) return [gated({ kind: 'claude-code', import: [...surfaces] })]
+  return [gated('claude-code')]
 }

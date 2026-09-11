@@ -153,16 +153,21 @@ describe('M68 — the project setting source requires evidence on the BUILD path
     ])
   })
 
-  it('test_team_and_mdm_stay_absent_because_the_sdk_never_reads_them', () => {
-    // The half that did NOT survive. The item was filed about these two; measured, `includesSetting`
-    // is never called with either, so plumbing them through would forward a name the runtime
-    // discards — a capability in the type and nothing at runtime.
+  it('test_the_resolved_list_is_exactly_the_roots_the_sdk_reads', () => {
+    // The half that did NOT survive. The item was filed about `team` and `mdm`; measured,
+    // `includesSetting` is never called with either, so plumbing them through would forward a name
+    // the runtime discards — a capability in the type and nothing at runtime.
+    //
+    // This asserted `not.toContain('team')` and `not.toContain('mdm')`, which could not fail:
+    // nothing in `resolveSettingSources` can emit either name, so inverting the decision the test
+    // is named after — plumbing them through — left it green. An EXACT list is what pins the
+    // decision: adding a root here fails this line, which is the moment to ask whether the SDK
+    // reads it.
     const resolved: readonly string[] = resolveSettingSources({
       user: true,
       project: { trustedBy: grantingPosture() },
       plugins: { trustedBy: grantingPosture() },
     })
-    expect(resolved).not.toContain('team')
-    expect(resolved).not.toContain('mdm')
+    expect(resolved).toEqual(['user', 'project', 'plugins'])
   })
 })

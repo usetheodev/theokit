@@ -42,11 +42,19 @@ import type { Guardrail } from './types.js'
  *                    `moderateOutputStream` over that kind, not widen one `extractText` to cover
  *                    both.
  *
- *                    `replaced` is `undefined` in exactly one case, and the type says so rather
- *                    than asserting it away: no event in the stream carried text and the guard
- *                    produced some from `''`. There is nothing to preserve, so the caller builds
- *                    from the text alone. Note the boundary — an event whose extracted text is the
- *                    EMPTY STRING is still text-carrying, and can be the one replaced. For
+ *                    `replaced` is ALWAYS an event, and used to be typed `E | undefined` for a case
+ *                    that cannot happen. The absence check below returns before `runOutputGuards` is
+ *                    ever called when no event carried text, so by the time `rebuildText` runs there
+ *                    is always a text-carrying event to replace. Proof, from the accumulation loop:
+ *                    `accumulated` grows only inside `if (text !== undefined)`, and `textAt` records
+ *                    that same predicate — so `!textAt.includes(true)` implies `accumulated === ''`,
+ *                    the absence check fires, and everything after it has `textAt.includes(true)`.
+ *                    The package's own test already pinned the opposite of the old wording
+ *                    (`rebuildText is never called for a channel that is not there`), and three
+ *                    shipping artifacts described the unreachable case as a live one.
+ *
+ *                    Note the boundary that IS real — an event whose extracted text is the EMPTY
+ *                    STRING is still text-carrying, and can be the one replaced. For
  *                    `[text('secret'), text('')]` the moderated string lands on the trailing empty
  *                    delta, so a `{ ...replaced }` caller inherits the terminator's metadata rather
  *                    than the content-bearing event's.
@@ -76,7 +84,7 @@ export async function* moderateOutputStream<E, R>(
   inner: AsyncGenerator<E, R>,
   guards: readonly Guardrail[],
   extractText: (event: E) => string | undefined,
-  rebuildText: (text: string, replaced: E | undefined) => E,
+  rebuildText: (text: string, replaced: E) => E,
   rebuildResult: (text: string, result: R) => R,
 ): AsyncGenerator<E, R> {
   const hasOutputGuard = guards.some((g) => g.checkOutput != null)
@@ -115,11 +123,16 @@ export async function* moderateOutputStream<E, R>(
   //   3. A predicate that flags blank input blocked EVERY turn — and a block throws before any
   //      event reaches the client, so the agent stopped answering entirely.
   //
-  // `textAt` records what the stream actually carried, so "no text-carrying event AND nothing
-  // accumulated" is the honest test for absence. An empty string that a text event genuinely
-  // carried still moderates: `[text('')]` has a text-carrying event and is a channel with empty
-  // content, which is a different fact from a channel that is not there.
-  if (!textAt.includes(true) && accumulated === '') {
+  // `textAt` records what the stream actually carried, so "no text-carrying event" IS the test for
+  // absence. It was written `!textAt.includes(true) && accumulated === ''`, and the second clause
+  // never discriminated: `accumulated` grows only where `textAt` records `true`, so the first
+  // implies the second. A conjunct that cannot change an answer reads as a second condition somebody
+  // needed, which is how the dead branch below it survived three reviews.
+  //
+  // An empty string that a text event genuinely carried still moderates: `[text('')]` has a
+  // text-carrying event and is a channel with empty content, which is a different fact from a
+  // channel that is not there.
+  if (!textAt.includes(true)) {
     for (const event of buffered) yield event
     return step.value
   }
@@ -168,8 +181,12 @@ export async function* moderateOutputStream<E, R>(
   // stopped making sense; `stream-order-is-not-preserved-across-a-redaction` pins it.
   //
   // A guard that rewrites UNCONDITIONALLY — a disclaimer appender, a trim, an NFC normaliser —
-  // takes this path on every stream that carries a tool call, and adds a text event to rounds that
-  // produced none. Measured on review; the cost is not proportional to how much the guard changed.
+  // takes this path on every stream that DOES carry text, so the cost is not proportional to how
+  // much the guard changed. It does NOT add a text event to a round that produced none: this
+  // sentence used to claim exactly that, and the absence check above returns before the guards run,
+  // so a tool-only round yields its tool call and nothing else. The claim outlived the fix that
+  // falsified it, in this comment and in two shipping artifacts.
+  //
   // `textAt` is recorded during accumulation, where `extractText` is called anyway — see the
   // accumulation loop. An earlier version mapped over `buffered` here, which RELOCATED the second
   // call per event instead of removing it: measured 8 calls before and 8 after, for a comment that
@@ -183,17 +200,6 @@ export async function* moderateOutputStream<E, R>(
     }
     if (index === last) yield rebuildText(moderated, event)
   }
-  // The stream carried NO text-carrying event and the guard produced some — there is nothing to
-  // replace, so `undefined` is passed and the caller builds from the text alone.
-  //
-  // This line read `buffered[0]` for one round, and that was the defect this whole function exists
-  // to remove, restored on its last branch. For `[tool_call]` — reachable with any guard that
-  // rewrites unconditionally — `buffered[0]` IS the tool call, which is not being replaced and is
-  // still yielded. A caller following the pattern this module's own test documents as correct,
-  // `{ ...replaced, content }`, would emit a SECOND tool call carrying the first one's id and
-  // arguments: a duplicated invocation, produced by a redaction. Three documents stated `replaced`
-  // was absent here while the code handed over a live event.
-  if (last === -1) yield rebuildText(moderated, undefined)
   // The aggregate travels the same fix as the events. On the fast path above it is untouched by
   // construction: `moderated === accumulated`, so there is nothing to apply.
   return rebuildResult(moderated, step.value)

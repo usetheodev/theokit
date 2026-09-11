@@ -173,7 +173,7 @@ export class CompatImportUnsupportedError extends TheokitAgentError {
  * while the projection that needed it did not follow it.
  *
  * The consequence was measured: `import: ['commands']` forwarded a list containing zero names the
- * SDK defines, i.e. its own empty-list case. Four lines of `resolveCompatSources` REFUSE
+ * SDK defines, i.e. its own empty-list case. `resolveCompatSources`, one layer up, REFUSES
  * `import: []` on the ground that "none" and "unset, so all of them" are both defensible and the
  * difference is whether `<cwd>/.claude/hooks.json` executes — and then this reproduced that exact
  * ambiguity one layer down, in silence.

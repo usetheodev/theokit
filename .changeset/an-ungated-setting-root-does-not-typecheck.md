@@ -52,7 +52,7 @@ diverge by one name on purpose — `.claude/commands/*.md` is read by this packa
 SDK — and `setting-sources-gate.ts` prescribed the subtraction as advice to consumers while the
 projection that needed it did not do it. Measured: `import: ['commands']` forwarded a list
 containing zero names the SDK defines, which is its own empty-list case — the exact ambiguity
-`resolveCompatSources` refuses four lines earlier. A source whose surfaces all belong to this layer
+`resolveCompatSources` refuses one layer up. A source whose surfaces all belong to this layer
 is now dropped from the SDK's list rather than sent empty.
 
 `CompatImportUnsupportedError` is exported from `@theokit/agents/bridge`, so a consumer can catch the

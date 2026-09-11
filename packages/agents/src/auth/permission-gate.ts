@@ -47,8 +47,21 @@
 import type { PermissionQuery, PermissionStore } from './permission-store.js'
 
 /**
- * Minimal shape mirrored from `@theokit/sdk` — type-only, no runtime import, so the SDK peer stays
- * optional. Same precedent as `bridge/hitl-plugin.ts`.
+ * Minimal shape mirrored from `@theokit/sdk`.
+ *
+ * The reason used to read "type-only, no runtime import, so the SDK peer stays optional", and that
+ * does not justify mirroring anything: `bridge/hook-handlers.ts` imports these very two SDK types
+ * (`PreToolCallContext`, `PreToolCallDecision`) with `import type` and costs the optional peer
+ * nothing. A type-only import IS type-only.
+ *
+ * The real reason is the NAME, and it is written out three paragraphs down: `@theokit/sdk` already
+ * exports `PermissionGateContext` with a different shape, so a consumer importing both would get a
+ * duplicate identifier or silently the wrong one. What is mirrored here is also a deliberate
+ * SUBSET — the fields this gate reads — rather than a copy kept in step with the SDK's.
+ *
+ * A mirror can drift into a consumer-side compile error that no gate here would see first, so the
+ * assignment this docblock instructs a consumer to make is pinned by
+ * `tests/type/the-grant-gate-fits-the-hook-it-is-for.test-d.ts`.
  *
  * NOT named `PermissionGateContext`: `@theokit/sdk` already exports a type by that name, with a
  * different shape (`{ toolName, mode }`), alongside `PermissionGate`, `PermissionGateDecision`,

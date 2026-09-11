@@ -10,7 +10,7 @@ its work thrown away: measured against the built artifact, a guard returning `[R
 `sk-abc123`. Only `block` reached the client honestly.
 
 **Signature change**: `moderateOutputStream` takes a fourth argument,
-`rebuildText: (text: string, replaced: E | undefined) => E`, which builds one event carrying the
+`rebuildText: (text: string, replaced: E) => E`, which builds one event carrying the
 moderated text, given the text-carrying event it replaces. It is required rather than optional —
 optional would let the function compute a redaction it cannot apply, which is the defect being
 removed. Only the caller knows how to construct its own events.
@@ -23,9 +23,10 @@ extractor.
 
 `replaced` does not prevent that collapse, and an earlier draft of this entry said it did. What it
 buys is narrower: the surviving event keeps the KIND and metadata of the text-carrying event it
-replaces, instead of being rebuilt from the text alone. `replaced` is `undefined` whenever no event
-in the stream carried text, including a stream of only tool calls; it is never a non-text event,
-because a caller spreading one would emit a duplicate of it.
+replaces, instead of being rebuilt from the text alone. `replaced` is ALWAYS the event being replaced.
+It was typed `E | undefined` for a case that cannot happen — a stream where no event carried text
+returns from the absence check before the guards run, so `rebuildText` is not reached at all. It is
+also never a non-text event, because a caller spreading one would emit a duplicate of it.
 
 **Second signature change**: a fifth argument, `rebuildResult: (text, result) => R`, applies the
 moderated text to the generator's RETURN value. A stream has two channels and the first release of
@@ -53,5 +54,6 @@ whole string and the boundaries are gone by the time it exists. A test pins this
 here rather than in a transcript that stopped making sense.
 
 A guard that rewrites **unconditionally** — a disclaimer appender, a trim, an NFC normaliser —
-takes this path on every stream carrying a tool call, and adds a text event to rounds that produced
-none. The cost is not proportional to how much the guard changed.
+takes this path on every stream that DOES carry text. The cost is not proportional to how much the
+guard changed. It does NOT add a text event to a round that produced none — this entry claimed so,
+and the absence check refuses it: a tool-only round yields its tool call and nothing else.
