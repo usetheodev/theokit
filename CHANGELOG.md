@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A hook's `matcher: "*"` fires, as the format defines it. `new RegExp("*")` throws "nothing to repeat" and the catch reads a throw as no-match, so the spelling an author is most likely to write for "always" was the one spelling that meant "never". Measured end to end with a vetoing hook against tool `Bash`: `"*"` let the call through while `""`, `"Bash"` and an omitted matcher all vetoed it. The comma-separated exact-list form (`"Edit, Write"`) also matched nothing — as a pattern it required the space to be part of a tool name — and is now recognised as the list it is. Both shapes are handled BEFORE the regex engine, since neither is valid regex. An uncompilable matcher still does not match, deliberately: a broken matcher must not take down the turn (B-031)
+
+### Changed
+
+- `@ContextWindow` documents that declaring it is also what turns instruction discovery on. The SDK builds its `FileContextManager` only when `options.context` is set, and this capability is the only place that sets it — so declaring a compaction budget silently enables discovery of `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules` and `.theokit/rules`, and omitting it leaves every one of them inert with no warning. The option's whole surface was one key doc-commented "Maximum tokens before compaction triggers", so a consumer debugging "why is my CLAUDE.md ignored" had no path from the symptom back to the decorator. Behaviour is unchanged; the coupling is now stated where the author chooses, and pinned by a test that goes red if discovery ever gains its own switch (B-035)
+
+- `blockAppliesTo(block, filePath)` is exported from `@theokit/agents/config`, so a `paths:` scope can finally be applied. `InstructionBlock.scopes` shipped with no glob matcher anywhere in the package, so a consumer who wanted to honour a scope had to invent the semantics — and the field's own docblock names what happens when that goes wrong: a rule written for one subtree applied EVERYWHERE, silently. Delegating the DECISION to the product is unchanged; what was missing was the means. `scopesUnreadable` answers `false` whatever the path, which is the fail-closed half the flag was invented for. Supports `**`, `*` and `?` — the three the SDK's own rule activation implements — and refuses to guess at brace expansion or character classes (B-036)
+
+### Fixed
+
+- `${VAR}` in `.mcp.json` resolves against the host environment instead of reaching the server as eleven literal characters. `.mcp.json` is committed, so a named reference is the only documented way to keep a credential out of it; unexpanded, the server authenticated with the text `${API_KEY}` and failed at the remote end, pointing nowhere near the config line. An unset reference is REPORTED and left as written — substituting empty would start the server with a blank credential and fail somewhere further away. This does not loosen the posture `buildEntry` already takes in refusing `envPolicy`: that refusal is about a committed file handing a server the WHOLE environment, while this resolves one variable the host already chose to set (B-037)
+
+- `\$1` is an escaped literal again, instead of being substituted. Measured: `price \$1.00 here` with argument `alpha` produced `price \alpha.00 here` — prose containing a price became prose containing an argument, and the backslash the author typed to prevent exactly that survived as punctuation. Two neighbouring behaviours are deliberately UNCHANGED: `$1` remains the first argument (a convention this module documents, tests and depends on in its own examples — changing it would rebind every argument of every command already written), and an unmatched `$3` still expands to empty rather than to the literal, as the call site states (B-047)
+
+- An inline `` !`command` `` is recognised only at a boundary — the start of a line or after whitespace — as the contract specifies. The guard was applied to the `@file` branch and not to the shell branch, so `` KEY=!`echo boom` `` executed from a position defined as literal text. Measured: both segments ran. This was the one place this module did MORE than its contract allows, and the trigger is a markdown file loaded out of a working directory (B-041)
+
 ### Changed
 
 - The test build lock moved from the OS temp directory into `node_modules/.cache/`. CodeQL reported `js/insecure-temporary-file` (high) on it and on the test beside it, and the mitigation that was in place did not hold: `mkdirSync(…, { recursive: true, mode: 0o700 })` does not change the mode of a directory that already exists, so whoever creates the predictable path first owns it — and the mode was the mitigation. Internal to the test harness; no published behaviour changes (B-016)
