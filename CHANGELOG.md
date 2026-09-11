@@ -57,6 +57,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **An `.mcp.json` field this runtime does not carry is reported, not dropped.** `buildEntry` built
+  each server from a fixed key set and let the rest fall off in silence; `alwaysLoad` is declared by
+  the format, allowlisted away here, and nothing said so — the shape B-032 closed for hooks. The
+  report is general, because naming one field fixes the instance and leaves the class. `alwaysLoad`
+  carries its reason: it distinguishes eager loading from TOOL SEARCH, which does not exist here.
+  Two absences are now stated in the module — tool search, and the user-level `.mcp.json`, whose
+  second location is a precedence decision rather than a second read (B-071)
+
 - **Every plugin KIND is accepted, not just `general`.** `CodePlugin` required `register`, so
   `AgentBuilder.plugins()` admitted `kind: "general"` and refused `model-provider` (`profile`) and
   `memory` (`createProvider`) — while the builder's own docblock already promised all three. Found by

@@ -147,6 +147,28 @@ export class McpFileError extends TheokitAgentError {
 }
 
 /** The file read from the project directory — the Claude Code / Cursor convention. */
+/**
+ * ONE location, and the two neighbours of this file that are NOT implemented (B-071).
+ *
+ * The reference format reads `.mcp.json` from the project AND a user-level location, merging them
+ * with the project winning. This layer reads the project file only. That is a real gap and it is
+ * written here rather than left as an absence, because the failure it produces is silent in the
+ * direction that matters: a user who declares a server in their home directory sees no server and no
+ * complaint, and every symptom points at the project file that never mentioned it.
+ *
+ * It is not implemented HERE because a second location is a precedence decision, not a second
+ * `readFileSync`: which file wins per key, whether a user may add a server the project did not
+ * declare, and how that interacts with the operator gates in `operator-policy.ts` that already
+ * decide which servers may start. `rules/` names precedence as a thing to settle deliberately, and
+ * `settings-layers.ts` now has the vocabulary for it — so this belongs in that stack rather than as
+ * a private merge rule invented inside a loader.
+ *
+ * TOOL SEARCH is the other absence, and it is a capability rather than a location: the format lets a
+ * model discover tools on demand instead of receiving every server's full tool list up front. This
+ * runtime always sends the full list. The consequence is context cost, not incorrectness — which is
+ * why `alwaysLoad` is refused above rather than honoured: the field distinguishes eager from
+ * on-demand, and with only one of those behaviours, accepting it would name a choice nobody can make.
+ */
 const MCP_FILENAME = '.mcp.json'
 
 /**
@@ -334,12 +356,68 @@ function validateRemote(entry: Record<string, unknown>): string | undefined {
  * Whoever wants full inheritance declares it in the code that builds the agent, where a human
  * reviews it.
  */
+/** Keys a REMOTE entry carries. Anything else on a remote server is reported, never dropped. */
+const REMOTE_KEYS = new Set(['url', 'type', 'headers', 'auth', 'requestTimeoutMs'])
+
+/** Keys a STDIO entry carries. */
+const STDIO_KEYS = new Set(['command', 'args', 'env', 'cwd'])
+
+/**
+ * Fields this layer knows the reference format declares and deliberately does not carry, each with
+ * the reason a reader needs instead of a changelog.
+ *
+ * `alwaysLoad` marks a server whose tools are loaded eagerly rather than discovered on demand, which
+ * only means something where TOOL SEARCH exists — and it does not exist here (measured 0/0, B-071).
+ * Honouring it would mean inventing a behaviour and shipping it under the format's name.
+ */
+// Typed with `| undefined` because that is what an index into it actually yields. `Record<string,
+// string>` claims every string key maps to a string, which is false for every key not written below
+// — and the claim is what makes `no-unnecessary-condition` call the guard dead. Third time this
+// session that obeying the rule would have removed a live runtime check; the cast is the lie.
+const EXPLAINED_KEYS: Readonly<Record<string, string | undefined>> = {
+  alwaysLoad:
+    'it marks a server whose tools load eagerly instead of through TOOL SEARCH, and tool search ' +
+    'is not implemented here — so there is nothing for "always" to be relative to',
+}
+
+/**
+ * Report every key the entry declares and this layer does not carry.
+ *
+ * B-032 established the rule for hooks and it generalises: a field that is declared, allowlisted
+ * away and never mentioned tells the author — by the absence of any complaint — that it took effect.
+ * The report costs one line and removes the whole class of belief, not just the instance somebody
+ * happened to measure.
+ *
+ * Reported rather than refused: the SERVER is still started. Refusing the entry over an unknown key
+ * would turn a cosmetic mistake into an outage, and the format gains keys faster than this layer
+ * does.
+ */
+function reportUncarriedKeys(
+  entry: Record<string, unknown>,
+  carried: ReadonlySet<string>,
+  name: string,
+  warn: (warning: string) => void,
+): void {
+  for (const key of Object.keys(entry)) {
+    if (carried.has(key)) continue
+    const because = EXPLAINED_KEYS[key]
+    warn(
+      `${MCP_FILENAME}: server "${name}" declares "${key}", which this runtime does not carry — ` +
+        (because === undefined
+          ? 'it is NOT being applied'
+          : `${because}. It is NOT being applied`) +
+        '.',
+    )
+  }
+}
+
 function buildEntry(
   entry: Record<string, unknown>,
   name: string,
   env: Record<string, string | undefined>,
   warn: (warning: string) => void,
 ): McpServerConfig {
+  reportUncarriedKeys(entry, entry.url !== undefined ? REMOTE_KEYS : STDIO_KEYS, name, warn)
   if (entry.url !== undefined) {
     const remote: Record<string, unknown> = { url: entry.url }
     // NORMALISED, not forwarded. `streamable-http` is the MCP spec's current name for the transport
