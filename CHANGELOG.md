@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- **The settings precedence stack is named.** `SettingsLayer`, `SETTINGS_LAYERS`,
+  `layerPrecedence` and `settingsLayerChain` declare which layers exist and in what order — managed
+  settings, command line, project local, shared project, user, and below all five the values passed
+  to `defineAgent()`. The SDK shipped the folding mechanism and, correctly for a library, no
+  vocabulary: `DeclaredLayer.layer` is a free-form string with an optional number, so two consumers
+  could each invent an order, fold in opposite directions, and both pass `verifyLayerOrdering` —
+  a chain is only ever checked against itself. The order is the format's, and it places code below
+  every file a human can edit, which is the operator tier in one line. A layer added without a
+  declared position now fails to compile (B-067)
+
 - **Telemetry reaches the SDK from the authoring surface.** `defineAgent({ telemetry })`,
   `AgentBuilder.create().telemetry(...)` and `TelemetryCapability` now forward the SDK's
   `TelemetrySettings` to `Agent.create({ telemetry })`, so a run emits OpenTelemetry spans for

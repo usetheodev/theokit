@@ -83,6 +83,25 @@ export {
   type TemplateDeps,
 } from './config/command-template.js'
 
+/**
+ * B-067 — the settings precedence stack, named.
+ *
+ * Exported because the defect it fixes is DISAGREEMENT BETWEEN CONSUMERS, and a vocabulary nobody
+ * can import cannot be agreed on. The SDK's `foldLayers` takes any string with any number; these are
+ * the names and the order this ecosystem folds by, so two products reach the same answer instead of
+ * two internally-consistent different ones.
+ *
+ * A test importing it is not a consumer — the same rule the dead-code auditor applies to a declared
+ * public surface. The door is the export.
+ */
+export {
+  LAYERS_ARE_POSITIONED,
+  SETTINGS_LAYERS,
+  layerPrecedence,
+  settingsLayerChain,
+  type SettingsLayer,
+} from './config/settings-layers.js'
+
 export { frontmatterValue, splitFrontmatter, type ParsedFrontmatter } from './config/frontmatter.js'
 
 export {
