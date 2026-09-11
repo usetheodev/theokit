@@ -1,5 +1,144 @@
 # @theokit/agents
 
+## 13.1.0
+
+### Minor Changes
+
+- 62f64de: `loadOutputStyle` reads `.claude/output-styles/*.md`, so a configured output style is no longer
+  ignored.
+
+  Measured for B-022 against the parity reference, which loads the project and home directories with
+  the project winning and honours the `outputStyle` key of a `settings.json`. This layer read none of
+  it: a grep for `output-style`, `outputStyle` and `output_style` over every package source tree
+  returned **0 files** against a control of **26** for `skills`, and the same query over the SDK's
+  built output returned **0** against a control of **22** for `SKILL.md`.
+
+  The failure was the silent kind. An author writes a style, selects it, gets ordinary responses back,
+  and cannot tell "my style is wrong" from "nothing reads styles".
+
+  - The **project wins** over the home directory, as the reference resolves them. Searched rather than
+    merged: a style is one document, and two files with one name are a choice, not a composition.
+  - **A named style with no file THROWS** a typed `OutputStyleError` listing the directories searched.
+    Returning `undefined` there would reproduce the exact state this fixes. A style that was never
+    requested still returns `undefined` — not configuring one is the ordinary case, not an error.
+  - **`keep-coding-instructions` is carried**, because a style REPLACES the built-in
+    software-engineering instructions by default. A consumer who does not know that loses them
+    silently, so the flag travels and the decision stays with the caller.
+  - **A style with no frontmatter is still a style** — the whole file is the body and every key takes
+    its default. `tsc` found that case, not a test: `splitFrontmatter` returns `undefined` for a file
+    with no fence, and esbuild strips types so vitest never saw it.
+
+  Composing the text into the prompt stays with `composeInstructions`, which already owns the
+  character budget and the drop report. A style pushed past the ceiling is reported through the same
+  path as every other source rather than through a second one invented here.
+
+- b3a61c3: An operator can declare `apiKeyHelper` — a command that prints a credential — in the operator policy,
+  and `resolveOperatorApiKey` from `@theokit/agents/auth` runs it.
+
+  Measured before (B-069): `apiKeyHelper`, `awsAuthRefresh`, `gcpAuthRefresh` and `otelHeadersHelper`
+  all returned zero occurrences against a control of 31 on the word `hooks`. An agent holding a token
+  that rotates failed mid-run, and the only answer was to restart the process with a fresh environment
+  variable.
+
+  It is an OPERATOR declaration, not a `defineAgent` argument, per the decision B-065 recorded: the
+  person answerable for what runs on a machine is frequently not the person who wrote the code, and a
+  command that mints a secret is the most operator-shaped thing in the system.
+
+  Three refusals are part of the contract, each pinned by a test:
+
+  - **A helper that hangs** is killed at 10 s (configurable) and fails with a typed error naming the
+    command. A credential helper runs before every request that needs the key; "the agent is slow" is
+    the hardest symptom to trace back to a line in a policy file.
+  - **A helper that prints nothing** fails rather than returning `''`, which would surface later as a
+    401 whose message says nothing about the helper.
+  - **The output never reaches the error text.** A failure is read from logs, issue trackers and
+    screenshots. `stderr` is not even named as a callback parameter.
+
+  `runCredentialHelper` — which takes an arbitrary command string — is deliberately NOT exported.
+  Offering it publicly would hand a caller the choice of what to execute, the exact decision the
+  operator tier exists to take away from them.
+
+  `awsAuthRefresh`, `gcpAuthRefresh` and `otelHeadersHelper` are still absent, and the module says so
+  rather than leaving silence: the first two refresh an ambient cloud session instead of returning a
+  value, and the third supplies headers for a telemetry exporter this layer does not own.
+
+### Patch Changes
+
+- 996538d: An `.mcp.json` field this runtime does not carry is now REPORTED instead of silently dropped.
+
+  `buildEntry` assembled each server from a fixed set of keys and let everything else fall off the end
+  in silence. Measured (B-071): `alwaysLoad` is declared by the reference format, allowlisted away
+  here, and nothing said so. That is the shape B-032 closed for hooks — an author who writes a field
+  and sees the server start has been told, by the absence of any complaint, that the setting took
+  effect.
+
+  The report is general rather than a special case for the one field somebody measured: naming only
+  `alwaysLoad` would fix the instance and leave the class, and the format gains keys faster than this
+  layer does. The server still starts — refusing an entry over an unknown key would turn a cosmetic
+  mistake into an outage.
+
+  `alwaysLoad` gets its reason named in the message: it marks a server whose tools load eagerly rather
+  than through TOOL SEARCH, and tool search does not exist here, so there is nothing for "always" to be
+  relative to. Honouring it would mean inventing a behaviour and shipping it under the format's name.
+
+  Two absences are now stated in the module rather than left implicit:
+
+  - **Tool search.** This runtime always sends every server's full tool list. The cost is context, not
+    correctness — and it is why `alwaysLoad` is refused rather than accepted.
+  - **The user-level `.mcp.json`.** Only the project file is read. A second location is a precedence
+    decision, not a second `readFileSync` — which file wins per key, whether a user may add a server
+    the project did not declare, how that composes with the operator gates that already decide which
+    servers may start. It belongs in the named settings stack, not in a merge rule invented inside a
+    loader.
+
+- bdd160d: Report a `.claude/workflows/` directory instead of passing over it in silence
+
+  A project that declares the `claude-code` dialect and ships workflow scripts now learns, on load,
+  that they were found and not executed — with the reason and with the supported alternative. It was
+  previously the one surface of the dialect that produced no message at all, so an author who watched
+  rules, skills, subagents and commands load out of the same folder had no way to tell a broken
+  workflow from a workflow nothing reads.
+
+  The scripts are still not executed, deliberately. Every configuration surface this package loads is
+  data; a workflow file is code, and executing JavaScript found under a caller-supplied directory is a
+  trust decision that belongs to the consumer rather than to a library. The orchestration itself is
+  unaffected — `Workflow`, `agentStep` and `createSquad` from `@theokit/sdk` build the same pipeline
+  from an import the consumer writes.
+
+- a50c6af: `AgentBuilder.plugins()` and `defineAgent({ plugins })` accept all three plugin kinds the SDK
+  defines, not just one.
+
+  `CodePlugin` required `register`, so it admitted `kind: "general"` and refused `kind:
+"model-provider"` (which carries `profile`) and `kind: "memory"` (which carries `createProvider`).
+  The docblock on `AgentBuilder.plugins`, written in the same change, already described the parameter
+  as taking "a model provider / memory adapter (`kind: 'general' | 'model-provider' | 'memory'`)" — so
+  the prose promised three kinds while the type admitted one.
+
+  Found by a real consumer rather than by a gate. On `@theokit/agents@13.0.0`, TheoCode's build stopped
+  with `Property 'register' is missing in type 'BasePlugin & { kind: "model-provider"; profile:
+ProviderProfile }'`. Nothing in this package caught it: 1 799 tests, `tsc`, eslint, knip and CodeQL
+  were all green over a type that refused two thirds of its own contract.
+
+  What the guard is FOR is unchanged: the Claude Code filesystem-bundle form (`{ type, path, source,
+marketplace }`) is still refused with a message naming where a bundle belongs. An object carrying a
+  `name` and none of the three capability keys is still refused too — widening to three kinds must not
+  widen to "anything with a name", which would let the bundle form back in through the front door.
+
+- e0813b5: Say at `DelegateOptions.cwd` that a worktree gets no gitignored files
+
+  Pointing a sub-agent at a git worktree you created gives it a checkout without `.env`, without local
+  config, without credentials — and the resulting failure reads as a broken agent rather than as a
+  missing file. The option now says so.
+
+  No copier was built, and the reason is that there is nothing to copy into: this layer creates no
+  worktree. Measured with controls — zero `git worktree` invocations, zero `isolation` options, the
+  four files mentioning the word being a trust comment, a memory-scope comment, a detector for running
+  inside one, and a sentence in a prompt. A `.worktreeinclude` implementation would be a mechanism for
+  an event that never happens here.
+
+  The absence is held falsifiable rather than merely asserted: a test fails the day something does
+  create a worktree, and names the obligation that arrives with it.
+
 ## 13.0.0
 
 ### Minor Changes
