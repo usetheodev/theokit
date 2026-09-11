@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Telemetry reaches the SDK from the authoring surface.** `defineAgent({ telemetry })`,
+  `AgentBuilder.create().telemetry(...)` and `TelemetryCapability` now forward the SDK's
+  `TelemetrySettings` to `Agent.create({ telemetry })`, so a run emits OpenTelemetry spans for
+  `agent.send`, `llm.call`, `tool.call` and `memory.search`. The SDK has emitted them since 4.52.1 —
+  exporter selector, service name, auto-detection of Langfuse / Sentry / PostHog — and this layer
+  never passed the field through, so no operator could switch any of it on. Measured before the
+  change: four occurrences of "telemetry" in the package source, all four in prose, zero
+  assignments. `@opentelemetry/api` is an OPTIONAL peer of the SDK, so without it the whole thing is
+  a silent no-op even with `enabled: true` — usually the real reason a run reports no spans (B-072)
+
 ### Fixed
 
 - A hook's `matcher: "*"` fires, as the format defines it. `new RegExp("*")` throws "nothing to repeat" and the catch reads a throw as no-match, so the spelling an author is most likely to write for "always" was the one spelling that meant "never". Measured end to end with a vetoing hook against tool `Bash`: `"*"` let the call through while `""`, `"Bash"` and an omitted matcher all vetoed it. The comma-separated exact-list form (`"Edit, Write"`) also matched nothing — as a pattern it required the space to be part of a tool name — and is now recognised as the list it is. Both shapes are handled BEFORE the regex engine, since neither is valid regex. An uncompilable matcher still does not match, deliberately: a broken matcher must not take down the turn (B-031)
