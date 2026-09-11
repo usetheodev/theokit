@@ -1,5 +1,1299 @@
 # @theokit/agents
 
+## 13.0.0
+
+### Minor Changes
+
+- c59abf6: A foreign configuration root can be imported in part
+
+  `resolveCompatSources` returned the bare literal `'claude-code'`, which the SDK reads as "import
+  every surface" — hooks, plugins, skills, subagents. `settingSources.claudeCode.import` now names the
+  surfaces, and the resolved value carries them.
+
+  The distinction is the reason the grant exists: `.claude/` usually arrives with the clone and its
+  `hooks.json` executes shell, so "take the skills, refuse the hooks" is the ordinary thing to want,
+  and the only choices were all of it or none of it.
+
+  Absent `import` still means the whole root, so nothing existing changes. An EMPTY list is refused
+  rather than guessed: "no surfaces" and "unset, so all of them" are both defensible readings of `[]`,
+  they differ by whether shell executes, and picking one would settle a security question by
+  convention.
+
+  `CompatSurface` and `ResolvedCompatSource` are declared here rather than imported from the SDK, for
+  the reason already recorded beside the literal: they do not exist in `@theokit/sdk@4.52.1`, this
+  package's declared floor.
+
+  Closes usetheokit/theokit#686.
+
+- ca44ee7: A narrowed foreign root can name `commands`
+
+  `settingSources.claudeCode.import` narrows the foreign root to named surfaces, and `CompatSurface`
+  listed four of them — `hooks`, `plugins`, `skills`, `subagents`. It fed a fifth: this package loads
+  `<projectDir>/.claude/commands/*.md` itself, outside the SDK's `compatSources` path. The name was
+  missing from the vocabulary, so a consumer could neither ask for that directory nor be told it had
+  gone unread, and `loadCustomCommands` tested `sources.includes('claude-code')` — string equality
+  against a union whose narrowed member is an object, so every narrowed list read as _not declared_.
+
+  `CompatSurface` now includes `'commands'`, and the loader understands both shapes: the bare source
+  name grants every surface the root feeds, the narrowed form grants the ones it names.
+
+  Purely additive — before this, no narrowed list reached the directory at all, so nothing that works
+  today stops working. A narrowed list that wants foreign commands adds `'commands'` to `import`.
+
+  An enumeration used to narrow a root must cover every surface that root feeds; otherwise it is not
+  a narrowing but an undeclared drop. Reported as usetheokit/theokit#704, found by measuring a claim
+  in a consumer's adoption report rather than by any test here — the fifth time a gap in this
+  package's public surface was invisible from inside it.
+
+- dcb461f: `.plugins()` refuses a filesystem-bundle entry instead of accepting and ignoring it, and its parameter says what belongs there.
+
+  **BREAKING:** `plugins` was `readonly unknown[]` and is now `readonly CodePlugin[]`. Anything that
+  already passed `{ name, register }` objects is unaffected.
+
+  The word `plugins` appears in both vocabularies and means different things. This layer's are CODE
+  objects registered with the runtime's lifecycle seam; the Claude Code format's are filesystem
+  BUNDLES. A consumer who read the other product's documentation passed
+  `[{ type: 'local', path: './p' }]`, the compiler accepted it because the parameter was `unknown[]`,
+  and the agent ran with the plugin absent — **the typecheck that should have caught it was what let it
+  through**.
+
+  **The survey's "not implemented on either side" was too strong, and the correction matters for the
+  error message.** A bundle _directory_ is discovered: `pluginBundleDirs` reads `.claude/plugins/*` and
+  `.theokit/plugins/*`, and the `skills/` and `agents/` subdirectories of each are loaded. What is
+  absent is the manifest (`.claude-plugin/plugin.json`), marketplaces, and the format's other
+  contributions — hooks, MCP servers, output styles, LSP servers.
+
+  So a path-shaped entry is not refused because bundles are unsupported. It is refused because this
+  _parameter_ is not how a bundle is declared, and the message says where one goes and what a bundle
+  does and does not contribute. A refusal that does not name where the capability lives sends the
+  reader to a changelog.
+
+  The check runs at the projection, the single point every authoring path converges on. Putting it on
+  the builder method would miss `defineAgent({ plugins })` and the capability — which is how the shape
+  reached the runtime unexamined in the first place.
+
+  A plain wrong value gets a different message from a bundle reference: a string is not a bundle, and
+  pointing its author at a `plugins/` directory would send them somewhere that cannot help.
+
+- 6b07960: New `grantGate(store, classify)` in `@theokit/agents/auth` — the supported way to put a
+  `PermissionStore` in force.
+
+  The store shipped with a careful grant key, a "deny by default, always" docblock and no reader.
+  Measured: `isGranted` had zero callers outside its own unit test, and `PermissionStore` appeared in
+  zero files across six sibling repositories. An operator reading `.theokit/tool-permissions.json` to
+  learn what an agent may run was reading a control that was not in force — a grant and its revocation
+  produced identical behaviour.
+
+  `grantGate` adapts the store to `pre_tool_call`, which is documented as the only hook with veto
+  power and runs before the tool by construction, so a refusal is a refusal before the side effect. No
+  new gate and no framework wiring: nothing is enforced unless a consumer attaches the handler, and an
+  agent that does not is unaffected.
+
+  `classify` returns `{ governed: true, query }` **or** `{ governed: false }` — a tagged union whose
+  BOTH arms carry the discriminant. A bare `undefined` would say "this tool needs no permission" and
+  "I forgot this tool" in the same word, and on a security gate the second must not silently pass.
+
+  The discriminant is on both arms because the first shape — discriminated by whether a `governed` KEY
+  was present — **failed open**: a consumer writing a policy record `{ governed: true, scope }` and
+  spreading it into the query got the tool waved through, and so did `governed: undefined`. TypeScript
+  does not stop that; excess properties pass freely through a variable or a spread. Fail-closed is now
+  measured across `true` / `undefined` / `false` / `null`, and only `false` passes.
+
+  Named `grantGate`, not `permissionGate`, because `@theokit/sdk` already exports `PermissionGate`,
+  `PermissionGateContext`, `PermissionGateDecision`, `PermissionEngine` and `PermissionPlugin`. The
+  rename also says something true: this gates on a standing grant the operator made, and the SDK's
+  permission engine is a separate system — neither satisfies the other.
+
+  A classifier that throws DENIES, naming the throw, rather than ending the turn. A corrupt store
+  denies with a message that says so — "the permission store could not be read, so no grant applies" —
+  distinct from "no standing grant matches", so an operator can tell the two apart.
+
+  The read error's own text is deliberately NOT in that message: the veto travels to the model, and
+  `lastReadError.message` carries the absolute store path and its file mode. It stays on
+  `store.lastReadError` for the operator, which is where the actionable remedy (`chmod 600 …`) lives.
+  The scope IS still interpolated, so this narrows the exposure rather than eliminating it.
+
+  **Composing with a `pre_tool_call` you already have**: the field is singular, so assigning the gate
+  over an existing handler loses one of the two silently. Compose explicitly —
+  `async (ctx) => (await gate(ctx)) ?? (await mine(ctx))`; first veto wins.
+
+  `PermissionStore`'s docblock now states that the class enforces nothing on its own, and records the
+  precedence among the surfaces IN THIS PACKAGE that can refuse a tool — saying plainly that the list
+  is not exhaustive, because `@theokit/sdk` has its own permission system that neither knows about
+  these nor is known by them.
+
+- a7e35bb: A guardrail returning `action: 'redact'` with no replacement `text` now throws
+  `MalformedGuardrailResultError` instead of silently redacting nothing.
+
+  `GuardrailResult.text` is optional, so such a guard compiles and reads like a working one. The
+  pipeline tested `r.text !== undefined` and moved on, so the caller received the original text and
+  believed a guard had run on it — the operator believing a protection is in place when none is.
+
+  **This is a behaviour change.** A guard relying on the previous no-op will now throw. That is
+  deliberate: the alternative is unredacted output reaching a model because a guard was written wrong.
+  `text: ''` is unaffected and always was a real redaction — a guard choosing to erase everything.
+
+  `MalformedGuardrailResultError` is exported from `@theokit/agents`, carries the guard's name and the
+  phase, and is not retryable.
+
+  This also reaches the streaming path (`moderateOutputStream`), which shares the same pipeline: a
+  malformed guard there now throws where it previously continued.
+
+- dcb461f: `blockAppliesTo(block, filePath)` is exported from `@theokit/agents/config`.
+
+  `InstructionBlock.scopes` carries the `paths:` frontmatter, and the package shipped no way to apply
+  it — no glob matcher existed anywhere in the tree. A consumer who wanted to honour a scope had to
+  invent the semantics, and two consumers would invent two.
+
+  The field's own docblock names the consequence of getting it wrong: "A consumer rendering the block
+  would then apply a rule written for one subtree EVERYWHERE — the one frontmatter failure with a
+  consequence, and a silent one."
+
+  Delegating the **decision** to the product is deliberate and unchanged: a consumer still chooses
+  whether to filter. What changes is that it now has the **means**.
+
+  `scopesUnreadable` answers `false` for every path. That is the fail-closed half the flag was invented
+  for — a `paths:` key that was declared and yielded nothing must not read as "no scope declared",
+  because those two are indistinguishable in `scopes` alone and only one of them is safe to publish
+  everywhere.
+
+  **Supported:** `**` (crosses separators), `*` (does not), `?` (one character) — the three the SDK's
+  own rule activation implements. **Not supported:** brace expansion `{a,b}` and character classes
+  `[abc]`, which match literally and therefore almost certainly not at all. That floor is deliberate:
+  three wildcards are a dozen lines, and a glob dependency would carry a transitive tree into a package
+  with three direct dependencies. Needing the fuller grammar is a decision to make out loud.
+
+- dcb461f: A shared session store can be declared through the authoring surface. Serverless and multi-pod were unreachable without it.
+
+  The SDK takes `local.sessionStore` — a Postgres / Redis / KV / durable-object store used as the
+  primary session store and resume source, for deployments where the filesystem is ephemeral or the
+  next request lands on a different host. Measured: `sessionStore` returned 0 files in this layer.
+
+  This layer's stated doctrine, repeated across roughly eight docblocks, is that a consumer should not
+  import `@theokit/sdk` directly. With no authoring surface for the store, the only way to reach it was
+  to do exactly that — so **the doctrine and the capability disagreed, and the consumer paid**.
+
+  `SessionStoreCapability` writes the field and `assembleM8CreateOptions` projects it. `SessionStore`
+  crosses the barrel with it: forwarding a capability whose type cannot be named does not close the
+  gap, and the item says so.
+
+  The block is written only when a store was declared. An unconditional write creates `local` for every
+  agent — a claim about setting sources and a cwd that no author made. The first version of the control
+  asserted only `local?.sessionStore`, which passes for the unconditional write too since the key lands
+  as `undefined` either way; it asserts the block now.
+
+  Two existing gates fired on this change and were right both times: the compile-time waist-field
+  exhaustiveness check demanded the new field be classified, and the derived coverage test demanded the
+  capability join the "everything switched on" fixture. Neither needed to be found by review.
+
+- 5211721: `moderateOutputStream` now delivers the redacted text to the client instead of computing it and
+  replaying the original events.
+
+  It called `runOutputGuards` and discarded the return value, so a guard that redacted correctly had
+  its work thrown away: measured against the built artifact, a guard returning `[REDACTED]` delivered
+  `sk-abc123`. Only `block` reached the client honestly.
+
+  **Signature change**: `moderateOutputStream` takes a fourth argument,
+  `rebuildText: (text: string, replaced: E) => E`, which builds one event carrying the
+  moderated text, given the text-carrying event it replaces. It is required rather than optional —
+  optional would let the function compute a redaction it cannot apply, which is the defect being
+  removed. Only the caller knows how to construct its own events.
+
+  **`extractText` MUST match exactly one event kind.** When it matches several, they COLLAPSE INTO
+  ONE — measured: `[thinking('CoT: the key is sk-abc'), message(' Here you go.')]` yields a single
+  `message` reading `"CoT: the key is [R] Here you go."`, with no `thinking` event surviving. A
+  consumer who wants reasoning moderated runs a SECOND pass over that kind rather than widening one
+  extractor.
+
+  `replaced` does not prevent that collapse, and an earlier draft of this entry said it did. What it
+  buys is narrower: the surviving event keeps the KIND and metadata of the text-carrying event it
+  replaces, instead of being rebuilt from the text alone. `replaced` is ALWAYS the event being replaced.
+  It was typed `E | undefined` for a case that cannot happen — a stream where no event carried text
+  returns from the absence check before the guards run, so `rebuildText` is not reached at all. It is
+  also never a non-text event, because a caller spreading one would emit a duplicate of it.
+
+  **Second signature change**: a fifth argument, `rebuildResult: (text, result) => R`, applies the
+  moderated text to the generator's RETURN value. A stream has two channels and the first release of
+  this fix moderated one: the events were redacted while `step.value` — the aggregate `run()` returns
+  — still carried the original text. Measured: the guard computed `"the key is [R]"` and
+  `run().response` was `"the key is sk-abc123"`, so **`run()`, the primary non-streaming API, kept
+  delivering the secret**. That was this fix's own defect one channel over. Required for the same
+  reason `rebuildText` is; passed rather than re-derived, because re-running the guards on the
+  aggregate would apply a non-idempotent guard twice.
+
+  When the text is unchanged, the buffered events are replayed verbatim as before. When it changed,
+  the **last** text-carrying event is REPLACED by a newly built event carrying the whole moderated
+  string, and the earlier text events are dropped. Events carrying no text are never dropped. Note
+  "replaced", not "modified": any non-text payload the surviving event carried is lost, as is that of
+  the dropped ones — a consumer whose text events carry per-event metadata should moderate one kind
+  only, or rebuild from `replaced`. An event whose extracted text is the EMPTY STRING is still
+  text-carrying and can be the one replaced.
+
+  **Known consequence:** when text events straddle a non-text event, their relative order does not
+  survive a redaction. Given `text('tok ') , tool_call , text('sk-abc')` the client now receives
+  `tool_call , text('tok [R]')` — text that preceded the tool call follows it. Landing on the last
+  text-carrying event keeps a trailing terminator in place and keeps any completion claim after the
+  work that produced it; what it cannot keep is the interleaving, because the redaction is about the
+  whole string and the boundaries are gone by the time it exists. A test pins this so it is found
+  here rather than in a transcript that stopped making sense.
+
+  A guard that rewrites **unconditionally** — a disclaimer appender, a trim, an NFC normaliser —
+  takes this path on every stream that DOES carry text. The cost is not proportional to how much the
+  guard changed. It does NOT add a text event to a round that produced none — this entry claimed so,
+  and the absence check refuses it: a tool-only round yields its tool call and nothing else.
+
+- dcb461f: The served handle offers a schema-validated, tool-using run. The capability existed and the door did not.
+
+  **The survey's conclusion did not survive measurement.** It said "structured output cannot be
+  combined with tools", on evidence that `outputFormat`, `structuredOutput`, `outputSchema` and
+  `responseFormat` returned 0 files here, and that `generateObject`'s options carry no `tools` field.
+  Both facts are true; the conclusion is not.
+
+  `generateObject` is the **toolless path by design** — it builds a transient agent whose only tool is
+  the synthetic output tool. The tool-using path is `agent.generate(input, { output })`, which runs the
+  agent's normal tool loop, the user's tools first, and then coerces the final answer into a Zod schema.
+  It exists on the published SDK's agent.
+
+  **The real gap was this layer's.** `SdkAgentHandle` — what is served to ACP, the delegation surfaces
+  and the autonomous loop — declared `send` and `dispose` and not `generate`, so a consumer of
+  `@theokit/agents` could reach it only by importing `@theokit/sdk` directly. Same shape as the session
+  store: the capability existed, the door did not.
+
+  It is optional on the interface, because a caller-injected handle (tests, a custom transport) need not
+  implement it, and requiring it would break every such double to add a method most never call.
+
+  **Both wrappers forward it**, and that is the half that actually breaks: `withStepCeiling` and
+  `withGuardrails` each construct a new object, so every method they do not name disappears — the
+  consumer meets the loss at runtime as "the handle has no `generate`", after the types said it had
+  one. Each forward is pinned by its own mutation.
+
+  `generate` is **not** put through the output guards, stated rather than assumed. It resolves to a
+  validated object and those guards moderate text; running them over a serialised object would moderate
+  a shape no guard was written against. Guarding the structured path needs its own decision about what
+  a redaction means to a schema, and inventing one here would be the gate that reports without gating
+  this module already refuses to build.
+
+- dcb461f: A usage record can carry the cache split that justifies its cost, and usage can be narrowed by model.
+
+  **Two of the item's three claims did not survive measurement, and the correction is the point.**
+
+  The survey reported "cost is computed without cache-token accounting, so it is systematically wrong",
+  on evidence that `cacheCreation`, `cache_read`, `modelUsage` and `total_cost_usd` returned 0 files.
+  Those are the _wire_ spellings. The real field names are `cacheReadTokens` and `cacheWriteTokens`,
+  carried in five files of this layer — `DoneEvent.usage` has had them since V4-O.
+
+  Nothing in this layer _computes_ cost either: `costUsd` is supplied by the caller on the record, and
+  the storage only sums what it is given.
+
+  **What was genuinely missing is narrower and still worth closing.** `UsageRecord.tokens` was
+  `{ input, output }`, so a record stated a cost it could not explain: cached reads are billed at a
+  fraction of input tokens, and two runs with identical `input` totals and different cache ratios cost
+  different amounts. The audit trail showed the figure and not the reason. `cacheRead` and `cacheWrite`
+  are optional and **absent rather than `0`** when a provider does not report — "not reported" and
+  "reported as zero" are different facts, and defaulting would claim a measurement nobody made.
+
+  **The per-model breakdown was absent at the query surface**, not in the data: every record carries
+  `model`, and `UsageQuery` had no way to ask. It is a query rather than a second shape on
+  `UsageResult`, because a breakdown returned alongside a total is two numbers that can disagree; one
+  source asked a different question cannot.
+
+  One implementation note worth keeping. The model predicate first carried an explicit
+  `kind === 'tool'` exclusion, and a mutation proved it dead: `getUsage` already drops tool records
+  before summing, so inverting the condition left every assertion green. It was removed rather than
+  kept — a conjunct that cannot change an answer reads as a second condition somebody needed, which is
+  how a dead branch survives review.
+
+- 1202e86: A failed injected command now aborts the expansion instead of building a prompt out of its own error message, and a fenced command block is refused instead of ignored.
+
+  **BREAKING:** `expandCommandTemplate` used to promise it never throws. It now throws in exactly two
+  cases, both of which produce NO prompt rather than a wrong one.
+
+  **The failure path.** The spec is explicit — "A failed command aborts the entire skill invocation…
+  Claude never sees the skill content for that invocation." What happened instead was substitution plus
+  a warning: a command whose `gh pr diff` failed produced a prompt containing
+  `fatal: not a git repository`, handed to a model that had been asked to review a diff, which answered
+  as though that _were_ the diff.
+
+  The previous behaviour was decided, and the reasoning it was decided against is worth keeping:
+  substituting SILENCE renders as a command that ran and returned nothing, which the model cannot
+  detect. That is correct, and it weighed the wrong two options. Substituting the ERROR is worse than
+  silence, not better — `fatal:` reads as prose, while silence at least leaves a gap. The third option
+  is the one the spec names, and the only one where the caller learns anything.
+
+  **A missing `@file` is still a warning**, deliberately. The line is what the template CAUSED versus
+  what it merely POINTED at: only the first can hand the model a plausible lie.
+
+  **The fenced form.** A ` ```! ` block containing real commands came back byte-identical — the
+  model received the command text as markdown, nothing ran, and nothing said so. It is now refused with
+  a message naming the inline form, rather than implemented: "run a multi-line block" has real
+  unanswered semantics (each line a command, or one script? which shell? what is the exit status of
+  four lines?), and inventing them would ship behaviour under a name that promises the spec's. The
+  detector is anchored to a line of its own, so an ordinary ` ```bash ` block is untouched.
+
+  Callers that relied on best-effort expansion should catch `ConfigurationError` with code
+  `command_template_segment_failed` or `command_template_fenced_block`.
+
+- 1202e86: An operator can stop a skill body from running shell.
+
+  A skill is a markdown file a repository can carry, and `` !`command` `` in its body executes at
+  expansion time. Measured: `disableSkillShellExecution` returned 0 files here and 0 in the SDK dist,
+  against a control of 31 on the word `hooks`. The only way to decline was to stop reading skills at
+  all.
+
+  **The switch lives inside the expander, and that inverts an invariant on purpose.** The module's rule
+  was "never spawns anything and never opens a file — `shell` and `readFile` are injected, [because]
+  the trust decision is the caller's, not this module's." That _reason_ is what the operator-tier
+  decision overturned (README § "Who decides policy"): the caller decides everything the operator has
+  not spoken about. Leaving the check to the caller would have made it a constructor argument again,
+  which is the shape the decision replaced. The module still spawns nothing — it refuses _before_
+  calling the injected `shell`, and that ordering is pinned by a mutation test.
+
+  **This package reads the policy file itself**, rather than importing `@theokit/sdk`'s reader. It
+  ships from a separate repository against a published SDK (`^4.52.1 || ^5.0.0`), so a symbol added to
+  that package's source is not importable here until it is released — and a control that only works
+  after somebody else cuts a release is a control nobody can reach. One FORMAT (Claude Code's path and
+  key names) is the contract; two readers that release independently is a consequence of the repository
+  boundary, stated rather than hidden.
+
+  **What this does not pretend:** `expandCommandTemplate` has zero production callers, measured across
+  `theokit`, `theokit-sdk`, `theokit-tui`, `theokit-studio` and `theokit-hub`. The hazard has no live
+  path today. Enforcing at a call site that does not exist would have been the unreachable-control
+  failure; enforcing here means the switch bites the moment a caller appears rather than being
+  remembered then.
+
+  A value the reader cannot understand — `"disableSkillShellExecution": "true"`, a string — is reported
+  and ignored, never coerced. Accepting it by truthiness would make `"false"` forbid shell too.
+
+- 1202e86: An operator can decide which MCP servers from a project `.mcp.json` may start. Nothing decided before.
+
+  Measured: `allowedMcpServers`, `deniedMcpServers`, `allowManagedMcpServersOnly`,
+  `enabledMcpjsonServers`, `disabledMcpjsonServers` and `enableAllProjectMcpServers` all returned 0
+  files, against a control of 31 on the word `hooks`, while `loadMcpJson` does read `<cwd>/.mcp.json`.
+
+  **The loader shipped and the gate did not, which is worse than having neither** — a consumer who
+  wanted the convenience of the file inherited the exposure without being offered the control.
+
+  **The default is now decided rather than inherited.** It stays "every declared server starts",
+  because the file is the project's own declaration and refusing it outright would break every existing
+  consumer to protect against something they wrote themselves. What changed is that an operator can
+  narrow it: `deniedMcpServers` removes named servers, and `allowedMcpServers` — once present — makes
+  the list exhaustive. An absent allow list means "no allow list", not "allow nothing"; an empty array
+  is a real decision and refuses everything.
+
+  **Deny wins over allow.** A server named in both is a contradiction, and the safe reading of a
+  contradiction is the restrictive one — resolving it the other way would let an allow entry re-enable
+  something an operator explicitly refused.
+
+  A refused server is **named** in the warning channel, like every other refusal in this loader: a
+  server that silently does not start is indistinguishable from one that started and has no tools.
+
+  One trust vocabulary, not two. This composes with the same `managed-settings.json` the hook and
+  skill-shell controls read, with the same "the project cannot switch it off" precedence and the same
+  report-never-carry rule. `TrustPosture` is unchanged and stays what it is — the gate over whether a
+  directory's config is read at all; this is the gate over which servers inside an admitted file may
+  start.
+
+  A list value of the wrong shape — `"deniedMcpServers": "postgres"` — is reported and ignored.
+  Coercing a bare string would make every character a server name; ignoring it silently would leave the
+  organisation believing a server is blocked.
+
+- 98b2565: `resolveSettingSources` now returns `readonly GatedSettingSource[]`, and
+  `CompiledAgentOptions.settingSources` takes that type — so a setting root no `TrustPosture`
+  authorised no longer fits the field.
+
+  `define-agent.ts` claimed that field "can only ever hold roots that some posture authorized".
+  Measured against the emitted `.d.ts`: `setOnce(draft, 'settingSources', ['mdm','team','user','plugins'], 'cap')`
+  typechecked **cast-free**. Writing a `Capability` is the documented way to extend the builder, and a
+  capability writes the draft directly — so the gate was reachable around, for `project`, the root it
+  exists to protect.
+
+  A brand rather than a runtime check, because the obvious runtime check does not work: reading
+  `draft.provenance` to refuse a capability's write would also refuse the LEGITIMATE builder path,
+  which writes through `setOnce` too. What differs is where the value came from, and that is what a
+  brand carries.
+
+  **It refuses the accident, not the determined caller** — `as never` defeats it, like every brand.
+  Saying so is the point: the comment it replaces claimed an invariant nothing enforced.
+
+  **New: `settingSources.plugins`**, taking the same `ProjectSettingsGrant` as `project`.
+  `PluginsManager.refresh` loads executable bundles from the same cwd-controlled tree, usually
+  arriving with the clone, so it gets the same gate and not a weaker one. This is the root the SDK
+  genuinely reads and the facade withheld.
+
+  `team` and `mdm` stay absent, and that is the item's original premise dying under measurement: the
+  SDK never reads them — `includesSetting` is called with exactly `"project"` and `"plugins"` — so
+  forwarding them would be a capability in the type and nothing at runtime.
+
+  **Migration**: a consumer constructing `CompiledAgentOptions` by hand must build roots through
+  `resolveSettingSources` instead of a string array. That is the supported construction and always was.
+
+  **Also: a narrowed `claudeCode.import` is now REFUSED on an SDK that cannot read it.**
+
+  That field's docblock said the narrowed form was "refused at resolve time" below `@theokit/sdk`
+  5.4.0. Nothing read a version for it — the only checks in this layer are the hook gate (a different
+  option) and a `compatSources` warning that returns silently for any major ≥ 5. So on
+  5.0.0 ≤ SDK < 5.4.0, inside this package's declared `^4.52.1 || ^5.0.0`, a narrowed `import` was
+  forwarded, dropped by the runtime in silence, and the foreign root was **not read at all** — a
+  consumer asking for "the skills but not the hooks" got nothing, which is further from what they
+  asked for than the un-narrowed form. `compatSources` landed in 5.0.0 and the narrowing in 5.4.0;
+  treating the two versions as one was the defect.
+
+  `CompatImportUnsupportedError` now refuses, naming both versions and what would otherwise happen.
+  It refuses rather than warns because a silent nothing is discovered by wondering why a skill is
+  missing. An unreadable version is refused too: "cannot tell" and "is supported" must not collapse.
+
+  **And `commands` is subtracted before the compat sources reach the SDK.** The two vocabularies
+  diverge by one name on purpose — `.claude/commands/*.md` is read by this package and never by the
+  SDK — and `setting-sources-gate.ts` prescribed the subtraction as advice to consumers while the
+  projection that needed it did not do it. Measured: `import: ['commands']` forwarded a list
+  containing zero names the SDK defines, which is its own empty-list case — the exact ambiguity
+  `resolveCompatSources` refuses one layer up. A source whose surfaces all belong to this layer
+  is now dropped from the SDK's list rather than sent empty.
+
+  `CompatImportUnsupportedError` is exported from `@theokit/agents/bridge`, so a consumer can catch the
+  refusal by class rather than by matching its message.
+
+- 59d6dcc: A transcript nobody can read is listed without an id, and keeps its protection
+
+  `listSessions` fell back to the filename stem whenever the first record could not be read. Under
+  `@theokit/sdk` 5.x that stem is a one-way hash of the id, so the fallback did not return a degraded
+  id — it returned an identifier belonging to no session. Session GC keyed protection on it, so a
+  session someone had DECLARED protected lost its protection and was planned for deletion, while the
+  registry removal was called with the hash and left the real entry behind.
+
+  Protection now runs in the direction that has a function. `transcriptPath(root, cwd, id)` is total on
+  both majors and its inverse is not, so protection is keyed by transcript PATH and caller-supplied ids
+  are mapped forward onto paths. Whether a transcript can be read stops mattering to whether it is
+  protected.
+
+  Breaking, inside the unreleased 13.0.0 line:
+
+  - `SessionSummary.id` is `string | undefined`, alongside a new `idSource: 'transcript' | 'unavailable'`.
+    It is never derived from the filename.
+  - **`protectedTranscripts` is RENAMED to `protectedTranscriptPaths`, and the rename is the fix.** Its
+    keys changed from session ids to transcript paths while the signature stayed `Map<string, string>`,
+    so a consumer that mapped the keys forward through `transcriptPath` — correct when they were ids —
+    kept compiling and started double-mapping, leaving its protection array matching nothing. Measured
+    on a real consumer against this build: `deleteSession` collected a session holding a LIVE writer
+    lease. The old name is gone rather than aliased; a silent break that loses data is worse than a
+    loud one, and an alias would have preserved the silence. `transcriptOf(id, cwd, root)` maps forward
+    for callers that hold an id.
+  - `GCCandidate.id`, `GCKept.id` and `GCError.id` admit `undefined` for the same reason.
+  - `RunTranscriptGCResult` gains `orphaned` — transcripts collected whose session id could not be
+    read, by path. A separate list rather than a second meaning inside `removed`, which answers "which
+    sessions did I collect"; `theo sessions gc` reports both, and never prints a filename where an id
+    belongs.
+
+  Closes usetheokit/theokit#668.
+
+- feb5781: `AgentBuilder.create().hookApproval()` — the fluent twin of `defineAgent({ hookApproval })`
+
+  `13.0.0-next.7` shipped the hook approval gate reachable through `defineAgent` and capabilities, and
+  not through the fluent builder. A consumer that authors with `AgentBuilder.create()` had no way to
+  reach it: `.use()` composes presets rather than sinking capabilities, and the definition reaches
+  `streamAgentTurnInProcess` with `local` already assembled, so there was no downstream place to inject
+  `local.hooks` by hand either.
+
+  Fifth instance of one family and a NEW variant. The first four were "the symbol exists and the barrel
+  omits it", which the emitted-export guard now catches. This one is the opposite: the symbol is
+  exported, on the compiled waist, and reachable through one authoring door — the other door simply
+  does not offer it, and an export check is green on that.
+
+  So the guard for this variant builds the SAME agent through BOTH doors and asserts they arrive at the
+  same compiled waist. It catches the worst case too: an interface that declares the method while the
+  factory never wires it compiles, does nothing, and fails this test.
+
+- e7a4d65: **A declared `.claude/` now reaches commands too** (theocode B-152).
+
+  `loadCustomCommands` takes `compatSources`, in the SDK's own vocabulary: `['claude-code']` adds
+  `<projectDir>/.claude/commands/` to what it reads.
+
+  Three surfaces already reached that directory when a consumer declared it — hooks, skills and
+  subagents, through the SDK's `compatSources`. Commands are loaded by this package instead, and were
+  the one surface that never learned about it. Measured against a real TUI: the same command file was
+  invocable under `.theokit/commands/` and silent under `.claude/commands/`, with no diagnostic
+  anywhere. A partial dialect is worse than none — whoever watched the other three work has no reason
+  to suspect the fourth.
+
+  **The trust gate does not move.** The foreign directory is read only when the caller declared it
+  AND the project is trusted, which is the same pair `resolveCompatSources` already requires. A
+  command is a prompt that runs on the operator's behalf, and this one usually arrives with the
+  repository, written for another product. An untrusted project now COUNTS the foreign commands it
+  refused, so the refusal is not silent either.
+
+  **The native root wins a name collision**, and the two frontmatter vocabularies stay separate: this
+  loader reads `description:` and nothing else, so the other product's `model` and `argument-hint`
+  are carried in the body rather than adopted.
+
+- fe8a0c6: **`compatSources` reaches the SDK, and says so when the installed SDK cannot hear it** (#634).
+
+  `@theokit/sdk` stopped reading `<cwd>/.claude/` unconditionally (`theokit-sdk#524`) and put it
+  behind `local.compatSources`. This layer had no way to forward that, so an agent built here could
+  not opt into the foreign dialect at all.
+
+  The issue held the work back for a real reason: forwarding an option an older SDK does not know
+  would be **silently inert** — the operator declares it, nothing reads `.claude/`, and no message
+  explains why. The silence turns out to be removable from this side. `@theokit/sdk` declares
+  `"./package.json"` in `exports` — verified on **4.52.1**, the oldest version a consumer can have
+  today, not only on the 5.x prerelease — so the installed version is readable at runtime and a
+  mismatch warns once per process. The floor stays `^4.52.1`; nobody is pinned to a prerelease.
+
+  Declaring the dialect goes through `settingSources`, next to the roots it already gates:
+
+  ```ts
+  settingSources: {
+    project: { trustedBy: posture },
+    claudeCode: { trustedBy: posture },   // reads <cwd>/.claude/
+  }
+  ```
+
+  **Two questions, answered by two different halves of that field**, because the SDK's own docblock
+  separates them: _declaring_ the field answers "do I want another product's configuration imported?"
+  (omitting is not enabling), and the `TrustPosture` inside answers "do I trust this directory's code
+  to run?". The grant is `ProjectSettingsGrant` — the same type `project` takes — not because the
+  questions are the same, but because a separate `'foreignDialects'` capability could not carry the
+  distinction: `TrustPosture.allows` is `Record<K, boolean>` whose values all move with the trust
+  level, so a second name would promise an operator a choice `resolveTrustPosture` never gives them.
+
+  This is deliberately **stricter than the SDK**, where listing a dialect is sufficient: `.claude/`
+  holds a `hooks.json` that executes shell, in a directory that usually arrived with the clone.
+
+- 2bc5d84: `delegate()` now applies the guardrails its spec declares. It accepted them and never consulted them.
+
+  Measured against the built artifact with a guard declaring both halves: the input reached the model
+  with its injection intact and the caller received `sk-abc123`. `bridge/agent-orchestrator.ts`
+  contained **zero** occurrences of `guardrail` — control on the same sweep: `loop/agent-runner.ts`
+  has 9 — and called `runReflectiveLoop` bare. The operator had declared guardrails and the run was
+  green.
+
+  This is the same defect class as the streamed-redaction fix in this release, on a sibling public
+  API, and it is model-reachable: `tools/delegate-tool.ts` wraps `delegate()`, so an agent can invoke
+  a sub-agent whose declared guards do nothing.
+
+  `checkInput` runs after `onDelegationStart` and `checkOutput` after `onDelegationComplete` — each
+  moderating what actually crosses the boundary rather than a string a hook may then rewrite. A
+  blocking input guard throws before the model is called at all, so a refused delegation costs
+  nothing.
+
+  `response` only. `toolCalls[].output` is tool output rather than model text, and `agent-runner.ts`
+  excludes it from `extractText` on the same reasoning; the docblock says so, because leaving it alone
+  should be a decision somebody reads rather than an omission somebody discovers.
+
+  A spec declaring no guardrails behaves byte-identically.
+
+  **A guardrail block now crosses the delegate tool as a refusal, not a crash.** `errorCodeOf` mapped
+  only the three delegation errors, so `GuardrailViolationError` — reachable from `delegate()` for the
+  first time because of this change — hit the "not a delegation outcome, a defect" arm and was
+  rethrown, ending the parent's turn. The tool's own description, shipped to the model, promises
+  `{ ok: false, error, message }` on a refusal.
+
+  It crosses as `guardrail_violation` with a FIXED message: `the delegated task was refused by a
+policy guard`. The message travels only for codes on an explicit ALLOWLIST — a budget or a timeout
+  is a fact about the work, and the number in it is what the model acts on. A code nobody lists
+  withholds, so forgetting is safe in the direction that matters. A guardrail message is not — it reads
+  `Guardrail "pii-detector" blocked output: ssn found`, naming the guard and its exact trigger, and a
+  model given that learns which words to avoid rather than that it should stop. The operator keeps the
+  full typed error, which carries `guardName`, `phase` and `reason`.
+
+- dcb461f: A declared `canUseTool` gate reaches the runtime, so a tool call the earlier steps did not resolve has somebody to ask.
+
+  Measured: `canUseTool` returned 0 files in this layer, against controls of `hooks` 31 and `session` 37. The SDK has the seam — a permission plugin invoked on an `ask` verdict — and this layer offered
+  no way to reach it.
+
+  **The default was never the problem, and saying so matters.** The SDK's engine is fail-closed: an
+  unmatched call resolves to `ask`, and an _absent_ gate blocks it. A tool added after the approvals
+  were written already defaulted to asking. What was missing is that the ask reached nobody, so it
+  resolved to a refusal with no way to decide otherwise.
+
+  `CanUseToolCapability` writes the gate and the adapter projects it as a permission plugin over an
+  engine with **no rules** — so every call resolves to `ask` and every call reaches the gate. That is
+  what "sees every tool call the earlier steps did not resolve" means when there are no earlier steps.
+  A consumer who also wants rules composes them through the SDK directly; accepting both here would
+  mean inventing a precedence between a rule set and a gate that nobody stated.
+
+  The plugin is **appended**, never replacing: a consumer that already registers lifecycle plugins must
+  not have them dropped by declaring a gate. And only when a gate was declared — installing an empty
+  permission plugin would gate every `ask` verdict on a callback that does not exist, which the SDK
+  resolves by blocking. That is strictly worse than the absence it would replace.
+
+  **`updatedInput` is decided upstream, not by silence here.** The spec lets a gate _correct_ a call,
+  and the SDK states its position: the `pre_tool_call` seam is veto-only, and arg rewrite is
+  intentionally unsupported. Surfacing a gate that accepted an `updatedInput` this runtime would
+  discard is the fabricated mechanism this backlog keeps finding; the narrower contract is carried as
+  it is.
+
+- 019f828: Output guards now moderate `thinking` events, not only `text_delta`.
+
+  `AgentRunner` handed `moderateOutputStream` an extractor matching `text_delta` and nothing else,
+  while `thinking` is a public `AgentStreamEvent` that reaches the client like any other. Measured: a
+  guard declared over the agent's output delivered `thinking "the key is sk-abc123"` verbatim.
+
+  **This closes one channel and does not close all of them.** `DoneEvent.result` carries the model's
+  whole answer and is still unmoderated — measured on the same turn, `text_delta` came out
+  `"here: [R]"` while `done.result` came out `"here: sk-abc123"`. `task_progress.text` is a fourth and
+  reaches the web wire. A third pass does not extend to them: there is one `done` per round, so a pass
+  keyed on it would collapse every round's into one, and they need a different mechanism. Tracked
+  separately; stated here because a security note that overstates its coverage is worse than one that
+  does not exist.
+
+  The third channel of a shape fixed twice already in this release — a streamed redaction that was
+  computed and discarded, and `delegate()` consulting no guards at all.
+
+  **Two passes, not one wider extractor.** Widening `extractText` to match both kinds is the obvious
+  move and the wrong one: two kinds under one extractor COLLAPSE into a single event, so the reasoning
+  would be promoted into a visible one — the moderation creating the disclosure it exists to close.
+  Composing two passes is what `moderateOutputStream`'s own docblock prescribes, and each pass seeing
+  one kind is what keeps them apart.
+
+  The visible pass owns the aggregate: `DelegationResult.response` accumulates from `text_delta`
+  upstream, so the reasoning pass passes the result through rather than replacing it.
+
+  A blocking guard on either channel still throws before any event is emitted. An agent with no output
+  guard is byte-identical.
+
+- 6ca2f50: Names the settings precedence stack: `SettingsLayer`, `SETTINGS_LAYERS`, `layerPrecedence` and
+  `settingsLayerChain` in `@theokit/agents/config`.
+
+  The SDK ships the mechanism — `foldLayers` folds `{ layer, precedence?, values }` and
+  `verifyLayerOrdering` refuses a self-contradicting chain — and deliberately not the vocabulary:
+  `DeclaredLayer.layer` is a free-form string and `precedence` is optional. That is the right shape
+  for a library, and it left one thing undecided that two consumers must agree on: which layers exist
+  and in what order. Each could invent their own names and numbers, fold in opposite orders, and both
+  pass `verifyLayerOrdering`, because a chain is only ever checked against itself.
+
+  The order is the format's, measured against <https://code.claude.com/docs/en/settings>: managed
+  settings, command line, project local, shared project, user. `code` — what `defineAgent()` was
+  passed — sits below all five, because every file above it is editable by a human who did not write
+  the code and is answerable for what the agent does on their machine. That single line is the whole
+  operator tier, and it reconciles the three levels B-026 named for four policy keys with the full
+  stack instead of leaving them beside it.
+
+  A layer added to the union without a declared position now fails to COMPILE, the same gate this
+  package puts on the compiled-options waist.
+
+- a7f4d3d: `deleteSession` stops reporting a registry removal it cannot confirm
+
+  `registryRemoved` was computed as `outcome !== false`, so a remover that resolved saying **nothing**
+  was reported as a removal. That is the shape `Agent.delete` has — `Promise<void>` — and below
+  `@theokit/sdk@5.3.1` it is what a no-op returns: measured in `4.52.1`, `removeRegisteredAgent`
+  mutates an in-memory map and schedules a save only when the entry was in it, while `delete` — unlike
+  `list` — never hydrates from disk. In any freshly started process the entry is not in memory, so the
+  call resolves having left `registry.json` untouched and throws nothing.
+
+  Breaking, inside the unreleased 13.0.0 line:
+
+  - `DeleteSessionResult.registryRemoved: boolean` is replaced by
+    `registryOutcome: 'removed' | 'nothing-to-remove' | 'unconfirmed' | 'failed' | 'not-attempted'`.
+    Renamed rather than retyped: `if (result.registryRemoved)` would have kept compiling while
+    silently changing which branch it took.
+  - `SessionInUseError.registryRemoved` becomes `registryOutcome`, and the refusal no longer advertises
+    "the registry entry was already removed" for a half it cannot confirm — it tells the caller to
+    verify instead.
+
+  `not-attempted` and `unconfirmed` are distinct on purpose: "nobody asked" and "we asked and got
+  silence" lead a caller to opposite actions, and the old boolean said `false` to both.
+
+  The declared SDK range is unchanged. `5.3.1` fixes the behaviour and not the signature — `delete`
+  still returns `Promise<void>` — so `unconfirmed` remains the honest answer on every admitted version,
+  and raising the floor is a separate decision that would make the removal happen without making it
+  reportable.
+
+  Closes usetheokit/theokit#675.
+
+- 0ed0d96: Telemetry is reachable from the authoring surface: `defineAgent({ telemetry })`,
+  `AgentBuilder.create().telemetry(...)`, and `TelemetryCapability` all forward the SDK's
+  `TelemetrySettings` to `Agent.create({ telemetry })`, so a run emits OpenTelemetry spans for
+  `agent.send`, `llm.call`, `tool.call` and `memory.search`.
+
+  The SDK has emitted these spans since 4.52.1 — with an exporter selector, a service name, and
+  auto-detection of Langfuse / Sentry / PostHog. This layer never passed the field through, so an
+  operator could not turn any of it on and had no way to see a run as a trace alongside the rest of
+  their system. Measured before the change: four occurrences of the word "telemetry" in the package
+  source, all four in prose, zero assignments.
+
+  `@opentelemetry/api` is an OPTIONAL peer of the SDK. Without it, telemetry is a silent no-op even
+  with `enabled: true` — which is the usual explanation for a run that reports no spans, rather than a
+  misconfigured collector. Content (prompts, responses, tool args) is omitted unless you set
+  `includeContent: true`.
+
+- 462bb62: The pre-spawn hook approval gate crosses the layer, or refuses to pretend it did
+
+  `@theokit/sdk@5.4.0` added `local.hooks.approve` — a consumer's decision point before the runtime
+  spawns a hook. This layer never forwarded it, so a hook declared in a config root, including a
+  foreign dialect imported through `compatSources`, ran shell without passing the consumer's approval.
+
+  Measured in a consumer against 5.4.0, with a control arm proving the zero was not an empty turn:
+
+  ```
+  control_nothing             fires=0  tool_ran=yes
+  claude_project_unapproved   fires=1  tool_ran=yes
+  ```
+
+  `defineAgent({ hookApproval })` and the new `HookApprovalCapability` now carry it to
+  `Agent.create({ local: { hooks } })`. Named `hookApproval` rather than `hooks` because
+  `defineAgent({ hooks })` is already the LIFECYCLE seam, and two security-relevant things under one
+  name is how a consumer configures the wrong one.
+
+  **Declaring it against an SDK older than 5.4.0 is REFUSED, not forwarded.** The option is 5.4.0-only
+  while this package's floor is `^4.52.1`, so a pass-through would compile and do nothing on most
+  admitted versions — a gate that silently does not gate, which is worse than offering none, because
+  whoever configured it stops looking. An unreadable SDK version is refused for the same reason:
+  "cannot tell" and "is gated" must not collapse.
+
+  The floor is unchanged, so no consumer is pinned to a newer SDK for a feature they did not ask for.
+
+  Closes usetheokit/theokit#686 (the `hooks` half; `resolveCompatSources` widening is tracked there).
+
+- ecda4ae: The agent-module parameter names what it accepts, so a wrong shape fails at compile time
+
+  `streamAgentTurnInProcess` and `compileAgentModule` took `mod: unknown`, so the contract lived only
+  in the runtime guard. A consumer whose producer became `async` handed a `Promise` straight through
+  and shipped two releases in which no turn could run — with typecheck, 1213 tests, lint and twelve CI
+  checks green. The runtime was never wrong: it refused the Promise and threw a typed error. What
+  failed was the moment.
+
+  Both now take `AgentModule`, exported alongside them and re-exported from `theokit/server/agent`.
+  The type mirrors the runtime guard rather than the fuller `CompiledAgentOptions` — an array under
+  `tools`, an object under `agents` — so it refuses nothing that compiled before.
+
+  `@theokit/tauri/sidecar`'s `runTurnToJsonl` is narrowed too: a desktop sidecar imports its agent
+  module statically, which is exactly where a type catches the mistake.
+
+  Entry points that receive a module from a path discovered at runtime keep taking `unknown`, and now
+  say so by calling the new `compileLoadedAgentModule`. Their `unknown` has a reason; before this, the
+  boundary that had one was indistinguishable from the one that did not.
+
+  Closes usetheokit/theokit#663.
+
+- cfe7f4c: **`@theokit/sdk@5.x` is now supported, alongside 4.x**
+  ([#654](https://github.com/usetheokit/theokit/issues/654)).
+
+  The declared range becomes `^4.52.1 || ^5.0.0` (`^4.49.0 || ^5.0.0` for `@theokit/presenter`), and
+  the full suite passes on both halves: 7533 tests against `4.52.1` and 7533 against `5.0.1`.
+
+  This unblocks plugins whose open-ended `@theokit/sdk` peer resolves to 5.x. Until now `theokit` was
+  the package that **refused** that resolution — the ERESOLVE named the plugin, but the bound that
+  could not be satisfied was this one.
+
+  **What had to change, and why it was not a version bump.** SDK 5.x writes a transcript to
+  `${sessionUuidFor(sessionId)}.jsonl` where 4.x wrote `${safeSessionId(sessionId)}.jsonl` — a
+  SHA-256 over a namespace, so the filename stopped being the session id and the mapping does not
+  invert. `listSessions` derived ids from filenames, so listing, protection, GC and deletion all
+  returned UUIDs where callers passed ids. One defect, twenty-nine failing tests.
+
+  The id is now read from the transcript **record**, which the SDK writes on both majors and which is
+  authoritative where the name was only a convention. The filename stem remains the fallback, so a
+  truncated transcript still appears in a listing rather than dropping out of GC's sight.
+
+  `LiveTranscriptError` — 5.x's new name for `LiveSessionError` — deliberately does not cross the
+  `@theokit/agents` layer: it does not exist on the 4.x half, and 5.x keeps the old name working and
+  deprecated, so the name that crosses is the one both majors have.
+
+- 0731584: `resolveCompatSources` now returns `readonly GatedCompatSource[]`, and
+  `CompiledAgentOptions.compatSources` takes that type — so a compat source no `TrustPosture`
+  authorised no longer fits the field.
+
+  **BREAKING for hand-built compiled options**, exactly as its sibling was. Build compat sources
+  through `resolveCompatSources`.
+
+  The twin of the `settingSources` brand, and it exists because that fix closed one of the two fields
+  one `SettingSourcesSelection` feeds and left the other bare. Measured, with the `settingSources`
+  route as the control: the control errored, and `setOnce(draft, 'compatSources', ['claude-code'],
+'cap')` compiled cast-free — while `agent-compiler.ts` told the reader that field "can only hold a
+  source some posture granted".
+
+  It carries more authority than its twin, not less. `applyLocalSources` forwards it to
+  `Agent.create({ local: { compatSources } })`, which reads `<cwd>/.claude/` — `hooks.json` included,
+  and that executes shell.
+
+  **Signature narrowing**: `moderateOutputStream`'s `rebuildText` is now
+  `(text: string, replaced: E) => E`. It was typed `E | undefined` for a case that cannot happen — a
+  stream where no event carried text returns from the absence check before the guards run, so
+  `rebuildText` is never reached. The branch handling that case was dead code, and three shipping
+  artifacts described it as live.
+
+  **Fixed**: `isPort` discriminated on the presence of `run`, so an object carrying both `compiled`
+  and a `run` — reachable through a spread, which is how targets are built in practice — took the port
+  branch and skipped `delegate()` entirely: no declared guardrails, no inherited parent veto, no
+  budget clamp. A tie now goes to the spec, because the spec branch is the guarded one.
+
+### Patch Changes
+
+- 1202e86: A backslash escapes a `$N` placeholder: `\$1` now renders as the literal `$1` with the backslash
+  dropped, instead of being substituted with the first argument.
+
+  Measured before the fix: `price \$1.00 here` with argument `alpha` produced `price \alpha.00 here`.
+  A template describing a price produced a template describing an argument, and the backslash the
+  author typed to prevent that survived into the output as stray punctuation.
+
+  **Two neighbouring behaviours are deliberately unchanged**, because a parity survey flagged all three
+  together and only one of them is a defect:
+
+  - `$1` is the FIRST argument here. That convention is stated in the module docblock, fixed by its
+    existing tests, and depended on by its own `` !`git diff $1` `` example. Changing it would silently
+    rebind every argument of every command already written — a compatibility decision, not a fix.
+  - An unmatched `$3` expands to empty rather than to the literal, which the call site documents:
+    "Empty, never the literal. A leaked `$3` reads to the model as text the user wrote."
+
+  The escape was the one of the three with no decision behind it.
+
+- bb0f451: A guardrail refusal thrown inside a round is no longer renamed into a delegation failure.
+
+  `runReflectiveLoop` wrapped any error that was not already a delegation error into
+  `DelegationError`, whose message reads `Delegation to agent "X" failed: ${cause.message}`. That code
+  is on the delegate tool's message allowlist — a delegation failure's text is a fact about the work —
+  so the wrapper carried the guard's own words to the model: `Guardrail "pii-detector" blocked output:
+ssn found`, naming the guard and its exact trigger.
+
+  Measured through `createDelegateTool` with a consumer-supplied `streamFactory` that throws
+  mid-round. `streamFactory` is a public option, so this was reachable rather than theoretical.
+
+  `GuardrailViolationError` now passes through as itself, alongside the two delegation errors that
+  already did, so the tool classifies it `guardrail_violation` and withholds the message.
+
+  Fixed by classification rather than by suppressing text downstream: a guard refusal is not a
+  delegation failure, and a layer that renames an error cannot be expected to maintain a list of what
+  the new name must hide.
+
+- 9725bf1: A malformed guardrail result no longer hands the model the name of the guard that failed, and a third guardrail error class is covered by construction.
+
+  B-015 made `GuardrailViolationError` pass through `run-reflective-loop.ts` unwrapped, because
+  `DelegationError` interpolates its cause and `delegation_failed` is on the delegate tool's message
+  allowlist. Its sibling in the same file was not added. `MalformedGuardrailResultError` takes the same
+  wrapping, and its message also names the guard: `Guardrail "X" returned action 'redact' for output
+with no replacement text.`
+
+  Smaller payload than a violation — the guard's name and phase, not its trigger text — and the same
+  leak through the same allowlist. It additionally **mislabelled a guard defect as a delegation
+  failure**, which is a fact about the work the model would act on.
+
+  **The passthrough is now structural.** `GuardrailError` is the abstract base every guardrail error
+  shares, and `run-reflective-loop.ts` and `errorCodeOf` both key on it — so a new class is covered by
+  its own declaration rather than by someone remembering to extend a list of two. A list of two is how
+  this defect existed.
+
+  A base alone is not airtight: a class can still extend `TheokitAgentError` directly. The test walks
+  the guardrails barrel and fails on any exported error class that skipped the base. The two together
+  are the construction; either alone is a convention.
+
+  A malformed result crosses as `guardrail_error`, not `guardrail_violation`: a guard that is written
+  wrong did not refuse anything, and telling the model it was refused would be wrong in the other
+  direction. Neither code is on the message allowlist, so both withhold. `CostBudgetExceededError` now
+  descends from the same base and crosses as a refusal instead of being rethrown as a defect.
+
+- dcb461f: A hook's `matcher: "*"` now fires on every tool, as the format defines it.
+
+  `new RegExp("*")` throws — "nothing to repeat" — and the catch in `matches()` reads a throw as
+  no-match. So the spelling an author is most likely to write for "always" was the one spelling that
+  meant "never", while the two synonyms worked.
+
+  Measured end to end before the fix, a vetoing `pre_tool_call` against tool `Bash`:
+
+  ```
+  matcher "*"           -> allowed through   <- documented match-all, guard never ran
+  matcher ""            -> VETOED
+  matcher "Bash"        -> VETOED
+  matcher omitted       -> VETOED
+  matcher "Edit, Write" -> allowed through   <- documented exact-list form, matched nothing
+  ```
+
+  The comma-separated list is the second half: as a regex it required the space to be part of a tool
+  name, so it matched nothing at all. It is now read as the list it is.
+
+  Both shapes are recognised **before** the regex engine sees them, because neither is valid regex and
+  one of them throws.
+
+  **Unchanged and deliberate:** a matcher that cannot compile still does not match. A broken matcher
+  must not take down the turn — that trade is the reason the `catch` exists, and this fix does not
+  touch it.
+
+- 9725bf1: An agent served over HTTP or the terminal now applies its declared guardrails. It applied none of them.
+
+  `streamAgentUIMessages` called `createSdkAgentStream` directly on both of its branches. Guardrails
+  were applied in exactly two other places — `AgentRunner.stream()` and `withGuardrails`, the latter
+  reached only from `toAgentFactory` — and neither is on this path. Measured:
+  `grep -c guardrail agent-endpoint.ts` → 0, against 23 files in `packages/agents/src`.
+
+  Its reachable callers are the HTTP mount, the terminal runner and the streamer builder: every surface
+  a deployed agent is actually reached through. So a `defineAgent({ guardrails: [...] })` served to a
+  browser ran no input guard, applied no `redact`, and a `block` never threw.
+
+  This is the same shape as three defects already closed in this release, one layer up. B-014 and B-018
+  measured _channels_ inside a stream that was already being moderated; this is the surface where the
+  moderation never started.
+
+  **The composition is copied from `AgentRunner.stream()`, not reinvented** — two passes over the two
+  text-carrying kinds, visible inner and reasoning outer. NOT one wider extractor: two kinds under one
+  `extractText` collapse into a single event, so the model's private reasoning would be promoted into
+  the visible answer, and the moderation would create the disclosure it exists to close. That mutation
+  survived the first version of the test, which asserted over the flattened stream where every word is
+  still present; the assertions are per channel now.
+
+  Moderation runs on the wire chunks rather than upstream events, because the translator sits between
+  them — moderating upstream and letting the translator re-derive text would moderate one channel and
+  deliver another. `done.result` and `task_progress.text` remain uncovered here, exactly as in
+  `AgentRunner`: there is one `done` per round, so a pass keyed on it would collapse every round's into
+  one. They need a different mechanism and are tracked separately.
+
+  An agent that declared no guardrail takes an untouched pass-through — wrapping unconditionally would
+  buffer every served stream to enforce an empty list.
+
+- ac29eff: A permission-gate veto now emits a debug line.
+
+  `grantGate` refused and emitted nothing — no log, no counter, no debug line. An operator could
+  observe the refusal only through the tool result the model received, and the two causes the veto
+  message distinguishes ("no standing grant matches" versus "the permission store could not be read,
+  so no grant applies") are indistinguishable from there.
+
+  That is pillar 3 of the wiring triad missing on a refusal seam. `bridge/approval-posture.ts`, the
+  sibling gate, already logged through this exact seam.
+
+  The QUERY is logged — tool, scope, and which of the two causes fired — and the grant is not: a query
+  names what an operator needs to diagnose, while the store's contents are the thing being protected.
+  A classifier that threw logs as its own event rather than as an ordinary veto, so a consumer-code
+  defect is not read as a denied tool.
+
+- 1202e86: An inline `` !`command` `` is now recognised only at a boundary: the start of a line, or after
+  whitespace. When `!` follows another character the placeholder stays literal and the command does
+  not run, which is what the contract specifies.
+
+  `REFERENCE_REGEX` applied its leading-boundary guard `(?<!\S)` to the `@file` branch only, so the
+  shell branch matched anywhere. Measured before the fix: `` inline !`echo hi` and KEY=!`echo boom` ``
+  produced `inline <ran:echo hi> and KEY=<ran:echo boom>` — both ran.
+
+  This was the one place this module did **more** than its contract allows. Every other divergence
+  found in the same survey is something that fails to happen; this was something that happened, from a
+  markdown file loaded out of a working directory.
+
+  The test keeps three positive cases beside the negative one — a change that stopped recognising
+  inline commands altogether would satisfy the negative and destroy the feature.
+
+- 1202e86: `${VAR}` in a `.mcp.json` `env` or `headers` block now resolves against the host environment.
+
+  `.mcp.json` is committed to the repository, so a named reference is the specification's only way to
+  keep a credential out of it. Nothing expanded the placeholder, and the shape check accepts it as a
+  perfectly valid string — so the entry validated, the server started, and it authenticated with the
+  literal text `${API_KEY}`. The failure surfaced as a remote auth error with no path back to the
+  config line.
+
+  An unset reference is **reported and left as written**. Substituting empty would start the server
+  with a blank credential and fail somewhere further away; dropping the key would look like the author
+  never wrote it.
+
+  The environment is injected (`loadMcpJson(cwd, { env })`, defaulting to `process.env`), matching how
+  the rest of the package reads env — so a test proves the expansion without mutating the process it
+  runs in.
+
+  **This does not loosen the posture this loader already takes.** `buildEntry` refuses `envPolicy`
+  deliberately: "A file committed to the repository is no place to loosen a process-level defence."
+  That refusal is about a committed file handing a server the _whole_ environment. A named reference
+  resolves _one_ variable the host already chose to set — and refusing to expand it protects nothing,
+  since it pushes the author to paste the literal secret into the file instead.
+
+- 1202e86: The two permission vocabularies meet, and the mirrored `permissionMode` field says what it mirrors.
+
+  Measured: `permissionMode` appeared in exactly one file, as a mirrored field nothing branches on;
+  `dontAsk`, `autoMode`, `useAutoModeDuringPlan` and `classifyAllShell` all returned 0 files. This
+  layer offers `suggest | auto-edit | full-auto` — the values a real consumer put in front of users —
+  while the runtime resolves `default | plan | acceptEdits | bypass`. A reader of either had no way to
+  the other.
+
+  `approvalModeToPermissionMode` translates them. `suggest` maps to `default`, **not** to something
+  that asks unconditionally: `default` means the rules decide and an unmatched call asks, so mapping it
+  otherwise would discard every allow rule the operator shipped. `full-auto` maps to `bypass`, which
+  allows everything **except an explicit deny** — mapping the most permissive local mode onto something
+  that also cleared denies would turn a UI convenience into a policy override.
+
+  The signature takes `ApprovalMode`, so a fourth local mode is a compile error rather than a silent
+  fallthrough to a posture nobody chose.
+
+  **`plan` has no local counterpart, deliberately.** It is an explore-only posture an _operator_
+  imposes, not something this surface offers, and inventing a fourth local name would put a decision
+  that belongs to the operator into the user's mode picker. The absence is named rather than filled.
+
+  `PermissionGate`'s mirrored field is now the SDK's own `PermissionMode` instead of a bare `string`. A
+  mirror that accepts any word mirrors nothing in particular — `"readonly"`, what somebody writes when
+  they mean `plan`, would have sat there looking applied. Restating the union by hand was the first
+  attempt and the package's own type test refused it: the shape must fit `PreToolCallContext`
+  structurally, and a copy that drifts by one member stops fitting. Importing the source makes it a
+  mirror by construction.
+
+  Unchanged, and still the documented decision: the gate ignores the mode. `bypass` does not disable
+  it, because a standing grant is the operator's and not the run's.
+
+- 9725bf1: A text event whose `content` is not a string is refused instead of delivered unexamined.
+
+  Both extractors tested `typeof e.content === 'string'` and returned `undefined` otherwise.
+  `moderateOutputStream` reads `undefined` as "this event carries no text", so the payload was never
+  accumulated, never shown to a guard, and yielded **verbatim**.
+
+  The failure direction is DELIVER, not block: a guard declared to stop that payload silently never saw
+  it, and the run reported green. Reachable in practice — `StreamEvent` is
+  `{ type: string; [key: string]: unknown }`, `event-translator.ts` casts an unvalidated provider
+  content block to `{ text?: string }`, and a consumer-supplied `streamFactory` is a public option.
+
+  **Two different questions had been collapsed into one answer.** "Not this event kind" and "this kind,
+  content unreadable" both returned `undefined`, and they need opposite handling. The new
+  `textPayloadExtractor` keeps `undefined` for the first and throws `UnreadableTextPayloadError` for
+  the second.
+
+  **Refused, not coerced.** Coercing would moderate `"[object Object]"` — a guard consulted about a
+  string the model never produced, returning a verdict about nothing, while the real payload rides
+  along underneath. That is the redaction-computed-and-discarded shape with an extra step.
+
+  One implementation, used by both seams. The defect existed as two hand-written copies of the same
+  predicate in `AgentRunner.stream()` and the served endpoint; fixing one and leaving the other is the
+  half-fix this release keeps finding.
+
+  Only runs that declared an output guard can meet the error: `moderateOutputStream` is a transparent
+  pass-through when no guard defines `checkOutput`, so the extractor is never consulted otherwise.
+
+- 2bc27d3: `inheritHooks` no longer lets a member's `transform_tool_result` or `pre_user_send` handler replace
+  its parent's — both now chain parent-first, matching the six events that already composed.
+
+  `inheritHooks` documents its security property as "the parent's refusal is evaluated first, and a
+  member can only ever ADD a reason to refuse". For these two events the plain object spread did the
+  opposite: a member declaring either handler silently discarded the parent's. The reachable surface is the EXPORTED `inheritHooks`, called with two handler maps.
+  `delegate()` passes `undefined` for the member (`agent-orchestrator.ts:175`), so that path composed
+  nothing and was never affected — a distinction the first version of this note got wrong.
+
+  `pre_user_send` composes additively — both contributions reach the model, parent first — because
+  `PreUserSendResult` carries only `recalledContext` and the seam exposes no prompt mutation.
+
+- dcb461f: Thirteen types named in exported signatures now cross a barrel, and the guard that finds them derives the requirement instead of listing it.
+
+  `bridge/index.ts` enumerates this shape four times by issue number — #663, #668, #675, #686 — and
+  B-004 was the fifth. Each was found by _installing_ the published package, because the source is
+  correct every time: the type is exported from its own module and only the barrel omits it.
+
+  The guard that followed reads the emitted barrel, which was the right move, and it is a **hand-written
+  list** — so it catches the entries somebody remembered to add. B-004 was added to it _after_ a review
+  found the miss, which is precisely what the list existed to prevent.
+
+  **This one derives it.** It parses every built `.d.ts`, collects the names each chunk imports and uses
+  in an exported signature, and flags any that no public barrel re-exports. Measured on the built
+  output: thirteen, including `BudgetTracker`, `InlineSkill`, `PluginsSettings`, `SkillsOptions`,
+  `ContextWindowOptions`, `Plugin`, `ProviderRoutingSettings`, `RetryOptions`,
+  `DiscoverSubagentsOptions`, and four reached through subpath entries.
+
+  Two things the first version of the guard got wrong are worth recording, because both produced a
+  green over nothing:
+
+  - **A rollup does not put `export` on its declarations.** It emits them bare and lists every public
+    name in one `export { … }` clause at the end. A single forward pass keyed on the `export` modifier
+    visited zero exported declarations and reported no problem — while `index.d.ts` imported
+    `PluginsSettings` on line 1, used it in a signature on line 359, and did not carry it in the clause
+    on line 1445. It takes two passes.
+  - **Reachable means every barrel a consumer can import from**, not just the root. A type exported from
+    `auth.d.ts` is nameable through `@theokit/agents/auth`; the hashed internal chunks are not
+    importable at all, so what they export is not reachable and what they import is still a finding.
+
+  The guard caught one of the changes made in this same release — `PermissionMode`, added to
+  `PermissionGate` hours earlier — which is the difference between a list and a derivation.
+
+- eaac7b0: The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability
+  already lives, instead of ending "the handler does not exist yet".
+
+  Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput`
+  for `transform_llm_output`, and `createToolHooksPlugin({ processInput })` for `pre_user_send` — so
+  the old message told consumers to wait for work that will not come. The third, `on_session_end`, is
+  named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an
+  ending, so wiring it would produce a hook that runs and cannot decide.
+
+  Nothing is wired. `HOOK_EVENTS`, `WIRED_EVENTS` and `OBSERVATIONAL_EVENTS` keep the same members.
+
+- 1202e86: `$ARGUMENTS` works, and the substitutions this module does and does not perform are written down.
+
+  The template understood `$1`, `$2`, … and nothing else. A command that wanted everything the user
+  typed had to guess how many positions to concatenate, and stopped being correct at the first
+  invocation that passed one more. Measured: `$ARGUMENTS` returned 0 hits against a control of 31.
+
+  It expands to the **raw** string, not the split tokens rejoined. Splitting strips the quotes that
+  decided the grouping — `"two words" solo` is two arguments and five words — so rejoining would hand
+  the model `two words solo` and lose the only mark saying which three belonged together. A placeholder
+  whose whole job is "what the user typed" must not quietly retype it. The backslash escape works the
+  same way `$N`'s does.
+
+  **`templateHints` no longer asks for escaped placeholders.** `\$1` is prose about a placeholder, not
+  a request for one, and listing it asked the user to supply an argument the template would never
+  substitute. It also broke the sort outright: the match carries the backslash, so `slice(1)` produced
+  `"$1"`, `Number` produced `NaN`, and a comparator returning `NaN` leaves the order unspecified.
+  `$ARGUMENTS` sorts first — reading it after `$3` suggests it is a fourth position.
+
+  A table above the regex now states the supported set where an author will meet it, including two
+  deliberate absences: `${CLAUDE_SKILL_DIR}` belongs to a skill body rather than a command template
+  (and is substituted by `@theokit/sdk`'s `skill_read`, the only place that knows which directory the
+  skill came from), and `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` are **out of scope rather
+  than pending** — the plugin format is not implemented on either side, so substituting a root for a
+  plugin that cannot be loaded would have to invent the layout it points into.
+
+- ec899f4: An observational hook handler is now assigned to its own key rather than chosen by comparison.
+
+  The dispatch loop used a two-branch conditional over a list of two event names, so a third
+  observational event would have landed on `post_assistant_reply` — silently, with no test objecting.
+  No behaviour changes for the events wired today; the fix removes the trap for the next one added.
+
+- dcb461f: `@Checkpoint` says, at the name, that it is run-state checkpointing and not file undo.
+
+  Two different things share the word and only one of them exists here. What this package has is
+  run-state checkpointing — enough to resume a conversation. What it does not have is file
+  checkpointing: snapshot and restore of the files an agent edited, the thing an interactive coding
+  agent needs to offer an undo.
+
+  Measured: `rewindFiles`, `rewind_files`, `restoreFile` and `backup` returned 0 files here, 0 in the
+  SDK `.d.ts` and 0 in `@theokit/sdk-tools`, while `checkpoint` returned six — all of them run state.
+
+  **The harm is not the missing feature, it is the collision.** Any parity checklist that greps for
+  `checkpoint` is satisfied by the wrong one and reports a capability that does not exist. A consumer
+  reads the checklist, believes undo is available, and finds out when a user asks for it.
+
+  The absence is stated **at the colliding name**, which is the only place a grep will reach, and a
+  test pins both the statement and the reason it matters — a docblock nothing checks is a docblock that
+  gets tidied away. It fails if a file-restore surface ever appears under the run-state name without
+  the statement being updated with it.
+
+  Not implemented here, and the reason is stated rather than implied: there is no pre-write seam on the
+  edit tools to hang snapshot and restore on, which makes it a feature with its own design questions
+  rather than a wiring job. Half-building it under a name that already means something else would make
+  the collision worse.
+
+- e4f2e78: Documents that `sandbox` here is not the Claude Code CLI's `sandbox.*` settings block, at the door a
+  reader of the local vocabulary meets (`@theokit/agents/sandbox`) and in a new measured surface note,
+  `docs/surfaces/sandbox-vocabulary.md`.
+
+  They share an enforcement mechanism — bubblewrap and seccomp on Linux — and differ in what they
+  expose above it. This package offers an execution BACKEND (`SandboxBackend`, `LocalSandbox` /
+  `LinuxSandbox`) whose policy is three modes and four `SandboxConfig` fields. The CLI's is a SETTINGS
+  POLICY of 38 keys spanning per-path filesystem rules, a network allowlist with proxies and TLS
+  termination, and per-variable credential masking.
+
+  The gap that matters is network: this package has no network policy at any level, so a checklist
+  that greps for `sandbox`, finds this module and stops reports a domain allowlist that does not
+  exist. Every one of the 38 keys is enumerated with a verdict — absent, coarser, or not applicable to
+  a library — rather than dismissed in aggregate.
+
+  Two corrections fell out of doing it. The count is 38, not the 39 previously recorded: two
+  independent fetches of the reference returned the same 38 keys while the summarising step attached a
+  different total to each. And `sandbox.failIfUnavailable` has no equivalent here — `createSandboxBackend`
+  degrades to an unconfined `LocalSandbox` after one warning when bubblewrap is missing, and an
+  operator who believes they are sandboxed cannot make that a hard failure.
+
+- 1202e86: A `.mcp.json` written against the current MCP spec is accepted.
+
+  The specification renamed the HTTP transport to "Streamable HTTP". `validateRemote` accepted
+  `"http"` and `"sse"` and refused anything else, so a server declared with the spec own current
+  name was dropped — with a message about a field the author had written correctly.
+
+  It is an ALIAS, normalised at the boundary, not a third transport. They are one transport under two
+  names, and forwarding the synonym downstream would ask every consumer of the parsed config to learn
+  it too; the SDK own `McpServerConfig` does not carry it. The parser accepts what the author wrote
+  and hands on what the runtime speaks.
+
+  An invented transport is still refused. Accepting the alias must not turn the check into a
+  pass-through, and a silent acceptance would be worse than the refusal this started as.
+
+- dcb461f: Sub-agents declared through the authoring chain now spawn, and the per-run door is nameable.
+
+  Three halves that did not connect: `SubAgentsCapability` wrote `draft.agents`,
+  `CompiledAgentOptions.agents` held it, and `assembleM8CreateOptions` had no `agents` field to
+  project it into. Declaring a sub-agent compiled cleanly and spawned nothing.
+
+  `agent-compiler.ts` recorded the gap as ADR D3 — "a resolver here is carried, not invoked" — and a
+  test pinned the boundary with an instruction attached: if someone wires the projection, go red and
+  record that the deferral ended. **That deferral has ended.** What could not be defended was the shape
+  a consumer meets: `SubAgentsCapability`, `SubagentDefinition`, `discoverSubagents`,
+  `loadSubagentDefinition` and `listSubagentNames` all cross the public barrel, so the authoring chain
+  reads as complete. This package already names that failure four times by issue number (#663, #668,
+  #675, #686): the type crosses, the capability does not.
+
+  **Why projecting rather than un-exporting.** The shapes already agreed everywhere except in the one
+  type nothing consumed. `RuntimeOverrides.agents` — the per-run door that always worked — is
+  `Record<string, AgentDefinition>`, the SDK's own shape, and that same shape already crossed the
+  barrel as `SubagentDefinition`. The odd one out was `CompiledSubAgent` (`{ model?, systemPrompt? }`),
+  referenced in exactly two places, both of them its own declaration and the field that held it. It
+  could not have been projected as it stood: `AgentDefinition` requires `description` and `prompt`, and
+  a sub-agent with no description is one the parent model has no basis to delegate to.
+  `CompiledSubAgent` is now an alias of the SDK type, so `model` is `ModelSelection | "inherit"` rather
+  than a bare string.
+
+  **`RuntimeOverrides` is exported, type-only.** It was declared by the adapter and exported by zero
+  barrels, so a consumer could pass the value and could not name the type — no helper, no wrapper, no
+  typed variable to hold one.
+
+  Per-run overrides still win over the compiled set: `sdk-adapter.ts` spreads `...m8, ...extra`, and a
+  per-run value that lost to a compile-time one would be the opposite of what "override" promises. The
+  key is written only when something was declared — an unconditional `agents: {}` would hand
+  `Agent.create` a claim ("this agent has children") that no author made.
+
+- dcb461f: `@ContextWindow` now documents that declaring it is also the on-switch for instruction discovery.
+
+  The SDK constructs its `FileContextManager` only under `if (options.context !== undefined)`, and
+  `ContextWindowCapability` is the only place this layer sets that field. The consequence was
+  undocumented and load-bearing:
+
+  - declare `@ContextWindow(...)` → `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules` and
+    `.theokit/rules` are discovered;
+  - omit it → every one of those files is inert, with no warning.
+
+  The option's entire surface is one key whose doc comment reads "Maximum tokens before compaction
+  triggers", and the module docblock above it is about compaction and strategy knobs. A consumer
+  debugging "why is my CLAUDE.md ignored" had no path from that symptom back to a decorator named after
+  a token budget.
+
+  **No behaviour changes.** The coupling is stated where the author decides whether to declare the
+  decorator, and pinned by a test that goes red if discovery ever gains a switch of its own — at which
+  point the documentation should be deleted rather than left quietly false.
+
+  `ContextSettings.maxBytesPerFile` and `maxBytesTotal` are now reachable from this surface too.
+  They were not, and the gap bit hardest exactly here: the option that enables `CLAUDE.md` discovery
+  is the same option that decides at which size a `CLAUDE.md` is truncated (40 000 characters by
+  default, head/tail with a marker) or dropped (120 000 aggregate, lower-priority sources first). A
+  60 000-character instruction file was silently cut, and the only knob on offer was named after
+  tokens. Keys are written only when declared, so an agent that never asks about bytes keeps the SDK's
+  own defaults.
+
+- a2b0a59: The hook gate's vocabulary crosses with the capability that takes it
+
+  `13.0.0-next.6` exported `HookApprovalCapability` and withheld `HookApprovalGate`,
+  `HookApprovalRequest` and `HookGateUnsupportedError`. A consumer could build the gate, and could
+  neither type the object it takes nor catch its refusal by class — which matters more here than
+  usual, because refusing loudly is the whole design.
+
+  Fourth instance of the same shape (#663 `AgentModule`, #668 `transcriptOf`, #675 `RegistryOutcome`),
+  and the first three were each found by installing the published package. The source is correct every
+  time: the type IS exported from its own module, and only the barrel omits it.
+
+  A guard now reads the EMITTED `dist/index.d.ts` export list rather than the source, and it was
+  proved able to fail by removing one export and watching it name that one.
+
+- 9915c19: `RegistryOutcome` is exported alongside the field that uses it
+
+  `registryOutcome` shipped in `13.0.0-next.4` and its type did not, so a consumer could read the
+  value and not name it — `function handle(o: RegistryOutcome)` did not compile. A union whose members
+  cannot be named is read as `string`, which loses every distinction it exists to make.
+
+  Third instance of the same omission (`AgentModule` in #663, `transcriptOf` in #668), and the third
+  found by installing the published package into an empty project rather than by reading the source.
+
+- 5451233: Say, where a consumer can read it, why `CompatSurface` has five names and the SDK's has four
+
+  `CompatSurface` gained `'commands'` in #704 because this package reads
+  `<projectDir>/.claude/commands/*.md` itself. The SDK's own union still has four. A caller who
+  builds SDK `local` options directly therefore cannot pass a value of this type, and `TS2345` names
+  the mismatch without naming the reason.
+
+  The explanation existed only in `//` comments, which do not survive into the emitted `.d.ts` — so
+  it was invisible to exactly the audience that hits the error. It now lives in the JSDoc block that
+  does ship, together with the guidance to derive the SDK's four from this five rather than writing a
+  second list by hand: a hand-copied list goes stale the day a surface is added, which is the
+  divergence #704 existed to remove.
+
+  Documentation only; no behaviour changes. Reported by a consumer who hit the compiler error while
+  converging four call sites onto one declaration, and who supplied the sentence that was missing.
+
+- Updated dependencies [cfe7f4c]
+  - @theokit/presenter@0.9.0
+
 ## 13.0.0-next.13
 
 ### Minor Changes
