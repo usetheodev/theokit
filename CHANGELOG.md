@@ -8,6 +8,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- The test build lock moved from the OS temp directory into `node_modules/.cache/`. CodeQL reported `js/insecure-temporary-file` (high) on it and on the test beside it, and the mitigation that was in place did not hold: `mkdirSync(…, { recursive: true, mode: 0o700 })` does not change the mode of a directory that already exists, so whoever creates the predictable path first owns it — and the mode was the mitigation. Internal to the test harness; no published behaviour changes (B-016)
+
+- **BREAKING for hand-built compiled options:** `resolveCompatSources` returns a branded `GatedCompatSource[]` and `CompiledAgentOptions.compatSources` takes it, so a raw compat source no longer typechecks. The twin of the `settingSources` brand, left bare when that one shipped: measured with the `settingSources` route as control, the control errored and `setOnce(draft, 'compatSources', ['claude-code'], 'cap')` compiled cast-free, while the field's docblock said it "can only hold a source some posture granted". It reaches further than its twin — `Agent.create({ local: { compatSources } })` reads `<cwd>/.claude/`, `hooks.json` included, and that executes shell (B-004)
+
+- `moderateOutputStream`'s `rebuildText` narrows to `(text, replaced: E) => E`. The `undefined` case could not happen: a stream where no event carried text returns from the absence check before the guards run. The branch that handled it was dead code documented as reachable (B-012)
+
+- **BREAKING for hand-built compiled options:** `resolveSettingSources` returns a branded `GatedSettingSource[]` and `CompiledAgentOptions.settingSources` takes it, so a raw root no longer typechecks. `define-agent.ts` claimed that field could only hold authorised roots; measured, `setOnce(draft, 'settingSources', ['mdm'], 'cap')` compiled cast-free, and a `Capability` is the documented way to extend the builder. Build roots through `resolveSettingSources` (B-004)
+
+### Fixed
+
+- A permission-gate veto is observable. `grantGate` refused and emitted no log, no counter and no debug line, so an operator could see the refusal only through the tool result the model received — and the two causes its message distinguishes ("no standing grant matches" versus "the permission store could not be read") are indistinguishable from there. The sibling refusal gate already logged through this seam. The query is logged (tool, scope, cause) and the grant is not (B-003)
+
+- A delegation target carrying both `compiled` and a callable `run` is treated as a spec, not a port. `isPort` discriminated on the PRESENCE of `run` and argued from the declared type that "the two cannot be confused" — the same reasoning that failed open on a permission gate one file over. The port branch calls `run` directly; the spec branch is where the declared guardrails run, the parent's veto is inherited and the budget is clamped, so an ambiguous target now takes the guarded path (B-015)
+
+- Output guards moderate `thinking` events too. `AgentRunner` extracted only `text_delta`, so a secret in the model's reasoning reached the client verbatim while the operator's declared guard reported nothing. Two passes rather than one wider extractor — two kinds under one extractor collapse into a single event, which would promote the reasoning into visible output. **`DoneEvent.result` and `task_progress.text` remain unmoderated** and need a different mechanism, since there is one `done` per round and a pass keyed on it would collapse them (B-014)
+
+- A guardrail refusal thrown inside a round is no longer wrapped into `DelegationError`, whose message interpolates its cause — which carried the guard's name and trigger to the model through the delegate tool's `delegation_failed` allowlist entry. Reachable with a consumer-supplied `streamFactory` (B-015)
+
+- The test build lock is released by the process that took it. A non-owner ran the same `finally` and unlinked the holder's lock, and a wait that timed out fell through to building beside it — two tsup runs cleaning one `dist/`, which is the intermittent `ENOENT: unlink dist/chunk-*.js.map` on root suite runs. A lock held past the build timeout is now recovered as stale; a live one refuses with the holder's pid (B-016)
+
+- The package build moved OUT of the test runner: `pnpm test` builds `packages/theo` before invoking vitest, so the build owns the machine instead of racing the suite it is building for. A warm dist still costs a stat, not a build (B-017)
+
+- `CompatImportUnsupportedError` crosses the `@theokit/agents/bridge` barrel, so a consumer can catch the refusal by class. It shipped one commit without doing so, while `HookGateUnsupportedError` — the class it was written to mirror — sat beside it (B-004)
+
+- A guardrail block reaches the delegate tool's caller as `{ ok: false, error: 'guardrail_violation' }` instead of ending the parent's turn. A typed error's message travels only for codes on an explicit allowlist: a guardrail message names the guard and its trigger, and a model given that learns which words to avoid rather than that it should stop (B-015)
+
+- `delegate()` applies the guardrails its spec declares. It accepted a `compiled` object carrying them and consulted neither half — measured: the input reached the model with its injection intact and the caller received the secret, while the run was green. Reachable as a tool (`tools/delegate-tool.ts` wraps it), so an agent could delegate to a sub-agent whose declared guards did nothing (B-015)
+
+- A narrowed `settingSources.claudeCode.import` is refused when the installed `@theokit/sdk` cannot read it. The field's docblock said it was "refused at resolve time" below 5.4.0 and nothing read a version: on 5.0.0 ≤ SDK < 5.4.0 the narrowed shape was forwarded, dropped in silence, and the foreign root was not read at all — less than the caller asked for, not more. `compatSources` landed in 5.0.0 and the narrowing in 5.4.0 (B-004)
+
+- `commands` is subtracted from the compat sources handed to the SDK. It is this package's surface, not the SDK's, so `import: ['commands']` forwarded a list containing zero names the SDK defines — reproducing the empty-list ambiguity `resolveCompatSources` refuses one layer up. A source whose surfaces all belong to this layer is dropped rather than sent empty (B-004)
+
+- Two test files do their filesystem I/O and their module imports once in `beforeAll` instead of inside the per-test budget. Both timed out under machine load — measured at load average 32.9, passing idle minutes later — which reads as a regression until somebody measures the load. Measured before and after under identical concurrent load: the worst test went from 1747ms to 33ms against a 5000ms budget. An earlier draft claimed "five consecutive runs at load average 40+", which proves nothing — an independent review ran the UNFIXED version five times at the same load and it passed too (B-009)
+
+- `moderateOutputStream` delivers the redacted text to the client instead of computing it and replaying the original events. A guard that redacted correctly had its work discarded — measured: `[REDACTED]` computed, `sk-abc123` delivered. **Signature change**: a fourth argument, `rebuildText(text, replaced)`, builds the moderated event — required so a redaction cannot be computed and dropped, and given the event it replaces so the surviving event keeps its kind and metadata. **`extractText` must match exactly one event kind** — several still collapse into one, measured, and an earlier entry wrongly said this parameter prevented that. A fifth argument, `rebuildResult`, applies the moderated text to the generator's RETURN value: the first release moderated the events and left the aggregate, so `run()` — the primary non-streaming API — kept delivering the original text. `replaced` is ALWAYS the text-carrying event being replaced: an earlier entry said it was `undefined` whenever no event carried text, and that case cannot reach `rebuildText` — the absence check returns before the guards run, which the package's own test already pinned. The moderated string lands on the **last** text-carrying event, keeping a trailing terminator in place and any completion claim after the work. **Known consequence**: when text events straddle a non-text event, their relative order does not survive a redaction — pinned by a test (B-012)
+
+## [@theokit/agents 13.0.0-next.12] - 2026-09-10
+
+### Changed
+
 - The "will NOT fire" warning for a declared-but-unwired hook event now names where the capability already lives, instead of saying the handler "does not exist yet". Two of the three unwired events are served today by purpose-built seams — `Guardrail.checkOutput` and `createToolHooksPlugin({ processInput })` — so the old message sent consumers to wait for work that will not come. The third, `on_session_end`, is named as genuinely uncovered, with the reason: its handler returns `void` and cannot refuse an ending
 
 ### Fixed
@@ -15,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - A guardrail returning `action: 'redact'` with no replacement `text` now throws `MalformedGuardrailResultError` instead of redacting nothing in silence. Both pipeline paths are one function now, so they cannot diverge. **Behaviour change**: a guard relying on the previous no-op will throw — `text: ''` is unaffected and always was a real redaction (B-008)
 
 - `inheritHooks` no longer lets a member's `transform_tool_result` or `pre_user_send` handler replace its parent's; both chain parent-first, matching the six events that already composed. Reachable through the exported `inheritHooks` called with two handler maps — `delegate()` itself passes `undefined` for the member, so that path was never affected (B-007)
+
 - An observational hook handler is assigned to its own key instead of being chosen by a two-branch comparison. A third observational event would have landed on `post_assistant_reply` silently; no behaviour changes for the events wired today (B-006)
 
 
@@ -36,6 +77,10 @@ own `CHANGELOG.md`.
 ## [@theokit/agents 13.0.0-next.8] - 2026-09-08
 
 ### Added
+
+- `settingSources.plugins`, taking the same trust grant as `project` — the root the SDK genuinely reads (`includesSetting` is called with exactly `project` and `plugins`) and the facade withheld. `team` and `mdm` stay absent because the SDK never reads them (B-004)
+
+- `grantGate(store, classify)` in `@theokit/agents/auth` — adapts a `PermissionStore` to the `pre_tool_call` veto seam, so a standing grant can actually refuse a tool. The store previously said "deny by default, always" with zero callers of `isGranted`: a grant and its revocation produced identical behaviour. Nothing is enforced unless a consumer attaches the handler. `PermissionStore`'s docblock now says so, and records the precedence among the surfaces in this package that can refuse a tool — and says plainly that the list is not exhaustive, because `@theokit/sdk` has its own permission system that neither knows about these nor is known by them (B-003)
 
 - `settingSources.claudeCode.import` names WHICH surfaces of a foreign configuration root to take — `hooks`, `plugins`, `skills`, `subagents`. Absent still means all of them; an empty list is refused rather than guessed, because "none" and "unset, so all" differ by whether `.claude/hooks.json` executes shell (#686)
 

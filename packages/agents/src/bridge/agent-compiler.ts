@@ -9,7 +9,6 @@
 import type {
   ContextSettings,
   MemorySettings,
-  SettingSource,
   SkillsSettings,
   SystemPromptResolver,
 } from '@theokit/sdk'
@@ -30,7 +29,7 @@ import type {
 } from '../types.js'
 
 import type { HookApprovalGate } from './sdk-adapter-create-options.js'
-import type { ResolvedCompatSource } from './setting-sources-gate.js'
+import type { GatedCompatSource, GatedSettingSource } from './setting-sources-gate.js'
 
 /**
  * M53 — the input shape `compileTools`/`compileHitlGates` consume, declared WITH them now that the
@@ -269,14 +268,14 @@ export interface CompiledAgentOptions {
    * Projected into `Agent.create({ local: { settingSources } })` by `assembleM8CreateOptions`
    * (merged with `cwd`, decoupled from inline skills). Absent ⇒ inline (code) config only.
    */
-  settingSources?: readonly SettingSource[]
+  settingSources?: readonly GatedSettingSource[]
   /**
    * Foreign configuration dialects, already authorised (usetheokit/theokit#634).
    *
    * Resolved at compile time by `resolveCompatSources`, exactly like `settingSources`: a value here
    * can only hold a source some posture granted, so the adapter projects rather than decides.
    */
-  compatSources?: readonly ResolvedCompatSource[]
+  compatSources?: readonly GatedCompatSource[]
   /**
    * #686 — the consumer's pre-spawn approval gate, forwarded to `Agent.create({ local: { hooks } })`.
    *

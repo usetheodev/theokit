@@ -25,6 +25,7 @@ import {
   DelegationError,
 } from '../bridge/delegation-types.js'
 import { debugLog } from '../debug-log.js'
+import { GuardrailViolationError } from '../guardrails/index.js'
 
 import type { LoopFinishReason, LoopOutcome, LoopStrategy } from './loop-strategy.js'
 import type { ReflectionContext, ReflectionStrategy } from './reflection-strategy.js'
@@ -190,7 +191,25 @@ async function* consumeRoundOrThrow(
       inputs.retry,
     )
   } catch (err) {
-    if (err instanceof DelegationBudgetExceededError || err instanceof DelegationError) throw err
+    // A guardrail refusal passes through as ITSELF, like the two delegation errors above.
+    //
+    // Wrapping it made `delegate-tool.ts` classify it `delegation_failed` — which is on that file's
+    // message allowlist, because a delegation failure's text is a fact about the work. So the
+    // wrapper's message, `Delegation to agent "X" failed: ${cause.message}`, carried the guard's own
+    // words to the model: `Guardrail "pii-detector" blocked output: ssn found`. Measured through
+    // `createDelegateTool` with a consumer-supplied `streamFactory` that throws mid-round — a public
+    // option, so this is reachable rather than theoretical.
+    //
+    // Fixed here and not by suppressing the message downstream, because the defect is the
+    // CLASSIFICATION: a guard refusal is not a delegation failure, and a layer that renames it
+    // cannot be expected to keep a list of what the new name must hide.
+    if (
+      err instanceof DelegationBudgetExceededError ||
+      err instanceof DelegationError ||
+      err instanceof GuardrailViolationError
+    ) {
+      throw err
+    }
     throw new DelegationError(agentName, err)
   }
 }

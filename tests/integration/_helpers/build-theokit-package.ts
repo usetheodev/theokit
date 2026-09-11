@@ -52,15 +52,26 @@ import {
   mkdirSync,
   openSync,
   closeSync,
+  fstatSync,
   readFileSync,
   unlinkSync,
   statSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs'
-import { resolve } from 'node:path'
-import { tmpdir, userInfo } from 'node:os'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = resolve(__dirname, '../../..')
+/**
+ * Derived from `import.meta.url`, not from `__dirname`.
+ *
+ * vitest injects `__dirname` into the modules it transforms, so this file worked inside the runner
+ * and threw `ReferenceError: __dirname is not defined in ES module scope` the moment anything else
+ * imported it — which is what `scripts/ensure-theo-dist.ts` does, and the reason that script exists.
+ * A helper that only runs under one loader is a helper the build gate cannot reuse.
+ */
+const HERE = dirname(fileURLToPath(import.meta.url))
+const ROOT = resolve(HERE, '../../..')
 const DIST = resolve(ROOT, 'packages/theo/dist')
 const INDEX_DTS = resolve(DIST, 'index.d.ts')
 /**
@@ -68,19 +79,36 @@ const INDEX_DTS = resolve(DIST, 'index.d.ts')
  * rendezvous concurrent vitest workers use to agree on who builds `dist`. `mkdtemp` would hand each
  * worker a lock of its own, and a lock nobody else can see is not a lock.
  *
- * Predictable inside a world-writable `/tmp` is precisely what CodeQL reports as
- * `js/insecure-temporary-file`, and the report is fair: another account on the same machine could
- * pre-create the directory as a symlink and take the run's writes with it, or plant the lock file
- * and stall every worker. So the name is scoped to this uid and the directory is created `0o700` —
- * predictability is kept where it is load-bearing, and the exposure it costs is paid for. (Windows
- * reports `uid` as -1, where `tmpdir()` is already per-user.)
+ * **It lives inside the repository, not in the OS temp dir.** It used to sit under `tmpdir()`,
+ * scoped to the uid and created `0o700`, with a docblock arguing that the predictability was paid
+ * for. CodeQL reported `js/insecure-temporary-file` (high) on it, and the argument did not survive
+ * the report: `mkdirSync(…, { recursive: true, mode: 0o700 })` does NOT change the mode of a
+ * directory that already exists, and does not fail either. Whoever creates that path before the
+ * first run of the day owns it, mode and all — and the mode WAS the mitigation.
+ *
+ * `node_modules/.cache/` has no such window: inside the checkout, created by the package manager
+ * under the user's own permissions, and not a rendezvous shared with other accounts. The
+ * predictability the lock needs is kept and the shared-directory exposure is not traded for it — it
+ * is simply absent. A shared-temp path hardened with three careful clauses is still a shared-temp
+ * path; moving it deletes the class instead of guarding each instance.
  */
-const LOCK_DIR = resolve(tmpdir(), `theokit-test-locks-${String(userInfo().uid)}`)
+const LOCK_DIR = resolve(ROOT, 'node_modules/.cache/theokit-build-locks')
 const LOCK_FILE = resolve(LOCK_DIR, 'packages-theo-build.lock')
 /** The window a build stays trusted when no marker from this run vouches for it. Exported so a
  * test asserts against the SAME number the decision uses — a duplicated literal is how a test ends
  * up green against a window it invented (this one read 24h while the code read 10min). */
 export const FRESH_WINDOW_MS = 10 * 60 * 1000
+
+/** Bounds `execSync`, and therefore bounds how long a live holder can legitimately hold the lock. */
+const BUILD_TIMEOUT_MS = 240_000
+
+/**
+ * Slack on top of {@link BUILD_TIMEOUT_MS} before a lock is called stale.
+ *
+ * A holder that is being killed by its own timeout has not released yet, and declaring its lock
+ * stale in that window is exactly the concurrent build this guard exists to prevent.
+ */
+const STALE_MARGIN_MS = 30_000
 
 /** Records which RUN last validated dist. Shared across every worker of that run. */
 export const VALIDATION_MARKER = resolve(LOCK_DIR, 'packages-theo-build.validated.json')
@@ -153,12 +181,110 @@ const hasFreshBuild = isDistUsableWithoutRebuilding
  */
 let distDecidedUsable: boolean | undefined
 
-const acquireLock = (): number | null => {
-  mkdirSync(LOCK_DIR, { recursive: true, mode: 0o700 })
+/**
+ * What a caller holds when it owns the lock. `null` means it does not.
+ *
+ * A handle rather than a bare fd, so {@link releaseLock} can refuse on identity instead of on a
+ * number that `-1` could impersonate.
+ */
+interface BuildLockHandle {
+  readonly fd: number
+  /** The file this handle owns. */
+  readonly path: string
+  /**
+   * The INODE this handle owns.
+   *
+   * The path alone is not identity, measured: A acquires (inode 12088330), a stale recovery unlinks
+   * it, B acquires at the same path (inode 12088332), and `releaseLock(A)` deletes B's lock. Two
+   * processes then both believe they hold it and both run `execSync` — the two-concurrent-`tsup`
+   * race this file exists to prevent, reopened by the branch written to close it.
+   */
+  readonly ino: number
+}
+
+const acquireLock = (lockPath: string = LOCK_FILE): BuildLockHandle | null => {
+  mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 })
   try {
-    return openSync(LOCK_FILE, 'wx')
+    const fd = openSync(lockPath, 'wx')
+    // Who holds it and since when — so a human looking at a blocked run can tell a live build from
+    // a crashed one without reading this file.
+    writeSync(fd, `${String(process.pid)} ${new Date().toISOString()}\n`)
+    return { fd, path: lockPath, ino: fstatSync(fd).ino }
   } catch {
     return null
+  }
+}
+
+/**
+ * Release the lock — ONLY if this caller took it.
+ *
+ * The `finally` this replaces guarded `closeSync` on ownership and then unlinked unconditionally, so
+ * a process that never acquired the lock deleted the holder's and freed every waiter to pile in.
+ * Combined with the fall-through below, that is how three tsup runs came to share one `dist/`:
+ * `ENOENT: unlink packages/theo/dist/chunk-*.js.map`, measured on a root suite run.
+ */
+const releaseLock = (held: BuildLockHandle | null): void => {
+  if (held === null) return
+  closeSync(held.fd)
+  try {
+    // Identity by INODE, not by path. A file at the same path may be a DIFFERENT lock: a stale
+    // recovery can have unlinked ours and let another process create its own there. Deleting that
+    // one frees every waiter while its holder is still building.
+    if (statSync(held.path).ino !== held.ino) return
+    unlinkSync(held.path)
+  } catch {
+    // Already gone. Not an error: a stale-lock recovery elsewhere may have removed it, and failing
+    // here would turn a successful build into a failed one.
+  }
+}
+
+/**
+ * A lock held longer than a build can possibly take belongs to a process that died.
+ *
+ * `BUILD_TIMEOUT_MS` bounds `execSync`, so a holder past that either finished (and released) or is
+ * gone. Without this, one crashed run blocks every future run until somebody clears `/tmp` by
+ * hand — which is how a deadlock gets "fixed" by deleting the guard.
+ *
+ * Absent is NOT stale: staleness is a statement about a lock that exists, and answering `true` for a
+ * missing file would have the caller remove nothing and report a recovery.
+ */
+const isLockStale = (lockPath: string = LOCK_FILE): boolean => {
+  if (!existsSync(lockPath)) return false
+  try {
+    return Date.now() - statSync(lockPath).mtimeMs > BUILD_TIMEOUT_MS + STALE_MARGIN_MS
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Remove a lock whose holder is gone, so one crashed run does not block every future run.
+ *
+ * **What makes this safe is the staleness re-check, not an inode comparison.** The previous version
+ * read `statSync(LOCK_FILE).ino` into `staleIno` and then compared `statSync(LOCK_FILE).ino` against
+ * it on the very next line — a value against itself, across a window of microseconds. Its comment
+ * claimed that test stopped "two processes that both find the lock stale" from both recovering. It
+ * did not, and could not: the guard that actually stops that is the freshness test below. When a
+ * competing recoverer has already removed the dead lock and taken its own, the file at this path is
+ * a NEW lock with a current mtime, so it is not stale and is left alone.
+ *
+ * Residual window, stated rather than implied: the holder can release and a new holder can acquire
+ * between this check and the `unlinkSync`, in which case a live lock is removed. It is the same
+ * TOCTOU `releaseLock` closes by inode, and it is not closed here — an unlink is by path, and POSIX
+ * has no unlink-by-inode. The recovery only runs after a wait of `BUILD_TIMEOUT_MS` has already
+ * expired, so the window is bounded by two adjacent syscalls rather than by the build.
+ *
+ * @returns whether a lock was removed. Exported for tests as {@link __recoverStaleBuildLockForTests}
+ *          — the branch that deletes another process's file had no coverage at all.
+ */
+const recoverStaleLock = (lockPath: string = LOCK_FILE): boolean => {
+  if (!isLockStale(lockPath)) return false
+  try {
+    unlinkSync(lockPath)
+    return true
+  } catch {
+    // Someone else recovered it first. Not an error: the caller retries the acquire.
+    return false
   }
 }
 
@@ -181,32 +307,47 @@ export const buildTheokitPackageOnce = (): void => {
     markDistValidatedForThisRun()
     return
   }
-  const lockFd = acquireLock()
-  if (lockFd === null) {
+  let held = acquireLock()
+  if (held === null) {
     waitForLockRelease()
     if (hasFreshBuild()) {
       distDecidedUsable = true
       markDistValidatedForThisRun()
       return
     }
-    // Lock released but no dist still — fall through and build ourselves
+
+    // The wait ended with no dist. That is either "the holder released without producing one" or
+    // "the wait expired and the holder is still going", and the two need different answers.
+    //
+    // This used to FALL THROUGH to `execSync` — building beside a holder that was, by construction,
+    // still building. Two tsup runs clean one output directory, which is the `ENOENT: unlink
+    // dist/chunk-*.js.map` measured on a root suite run.
+    held = acquireLock()
+    if (held === null) {
+      recoverStaleLock()
+      held = acquireLock()
+    }
+    if (held === null) {
+      // A live holder. Refusing is the decision: building beside it corrupts the dist BOTH runs
+      // read, and a clear message is recoverable where a corrupted dist is a confusing red suite.
+      throw new Error(
+        `another process is building packages/theo and did not finish within ` +
+          `${String(BUILD_TIMEOUT_MS / 1000)}s. Its lock is ${LOCK_FILE} — read it for the pid and ` +
+          `start time. Wait for it, or remove that file if the process is gone.`,
+      )
+    }
   }
   try {
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local test running the framework's own build CLI
     execSync('pnpm --filter theokit build', {
       cwd: ROOT,
       stdio: 'pipe',
-      timeout: 240_000,
+      timeout: BUILD_TIMEOUT_MS,
     })
     distDecidedUsable = true
     markDistValidatedForThisRun()
   } finally {
-    if (lockFd !== null) closeSync(lockFd)
-    try {
-      unlinkSync(LOCK_FILE)
-    } catch {
-      // already removed by other process
-    }
+    releaseLock(held)
   }
 }
 
@@ -223,6 +364,20 @@ export const buildTheokitPackageOnce = (): void => {
 export const BUILD_HOOK_TIMEOUT_MS = 300_000
 
 export const THEOKIT_DIST = DIST
+
+/**
+ * The lock primitives, exported for tests only — same precedent as
+ * {@link __resetBuildDecisionForTests}.
+ *
+ * Reproducing the real interleaving would need two concurrent builds and minutes of wall clock,
+ * which is the kind of test people delete. The defects were properties of the DISCIPLINE — who may
+ * release, and whether a dead holder can be told from a live one — so the discipline is what is
+ * tested.
+ */
+export const __acquireBuildLockForTests = acquireLock
+export const __releaseBuildLockForTests = releaseLock
+export const __isBuildLockStaleForTests = isLockStale
+export const __recoverStaleBuildLockForTests = recoverStaleLock
 
 /** Reset the per-process decision. Exists so the guard below can exercise both branches. */
 export const __resetBuildDecisionForTests = (): void => {

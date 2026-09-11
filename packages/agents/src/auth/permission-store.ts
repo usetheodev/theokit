@@ -32,6 +32,50 @@
  * and an expired grant all answer `false`. A corrupt store additionally REPORTS
  * (`lastReadError`) — reading as empty is indistinguishable from being empty, and the operator
  * would never learn their grants stopped applying.
+ *
+ * ## This class DOES NOT ENFORCE ANYTHING ON ITS OWN
+ *
+ * The posture above is what `isGranted` ANSWERS, not what the framework does. **No tool path
+ * consults a store by default and no option accepts one**, so until a consumer attaches
+ * {@link grantGate}, a grant and its revocation produce identical behaviour and
+ * `.theokit/tool-permissions.json` is a file an operator can read and cannot rely on.
+ *
+ * The previous wording was "nothing in this package calls it", which the commit that added this
+ * paragraph made false in the same diff: `auth/permission-gate.ts` is in this package and calls
+ * `isGranted`. Corrected on review — a sentence written to fix a stale enforcement claim should not
+ * itself go stale on arrival.
+ *
+ * That sentence is here because its absence was a defect. For one release this docblock said
+ * "Deny by default, always" — an enforcement claim — beside an `isGranted` with zero callers, which
+ * is the fabricated mechanism this repository refuses everywhere else.
+ *
+ * {@link grantGate} is the supported way to put it in force: it adapts this store to
+ * `pre_tool_call`, the only hook with veto power, which runs before the tool by construction.
+ *
+ * ## Precedence, among the surfaces INSIDE THIS PACKAGE
+ *
+ * These do not negotiate — each is consulted by whoever wired it:
+ *
+ * | Surface | Decides | Runs |
+ * |---|---|---|
+ * | `defineAgent({ approvals })` | this tool PAUSES for a human | at compile time into `compiled.hitl` |
+ * | `.approval()` | the same, through the builder | same |
+ * | `ApprovalPosture: 'auto-reject'` | refuses without asking | at approval time (`bridge/approval-posture.ts:206`) |
+ * | a `pre_tool_call` hook | veto, with a message | before the tool |
+ * | `createToolHooksPlugin({ beforeToolCall })` | veto | before the tool, as a plugin |
+ * | {@link grantGate} | veto, from a standing grant | before the tool, as a `pre_tool_call` hook |
+ *
+ * **This is not the complete map, and an earlier version said "four things can refuse a tool" as
+ * though it were.** `@theokit/sdk` has its own permission system — `PermissionEngine`,
+ * `PermissionPlugin`, file hooks (`preToolUse`), a fork whitelist — which neither knows about these
+ * nor is known by them. A table presenting itself as exhaustive is worse than no table, because a
+ * reader stops at it.
+ *
+ * `pre_tool_call` handlers written through `HookHandlers` share ONE field, so assigning one over
+ * another loses it silently — compose them explicitly; {@link grantGate}'s docblock shows the line.
+ * Plugins do not have that problem: the SDK keeps plugin hooks in an array and runs all of them,
+ * first block winning. The HITL surfaces are orthogonal to a grant: a tool can be gated by both,
+ * and a veto from a grant means the human is never asked.
  */
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
