@@ -237,9 +237,39 @@ function readStringList(
  */
 let cached: OperatorPolicy | undefined
 let rootOverride: string | undefined
+/**
+ * What reading the policy reported, kept so every later reader hears it too.
+ *
+ * The memo made the warn channel belong to whoever called first: `cached ??= read(…, warn)` invokes
+ * the channel on the first call only, and every caller after that passes one that is never used.
+ * Measured with a policy declaring `disableSkillShellExecution: "true"` — the first reader heard one
+ * warning and the second heard none.
+ *
+ * That mattered because three modules read this policy (`mcp-file`, `credential-helper`,
+ * `command-template`) and nothing orders them, so whether an operator learned their policy was
+ * malformed depended on which code path a given application happened to run first. The whole tier is
+ * a set of REFUSALS, and a refusal that silently fails to apply is the defect this tier was built to
+ * remove — here, in the mechanism that removes it elsewhere.
+ *
+ * Replaying is preferred over threading a channel into every reader: the one that needs it most
+ * (`resolveCompatSources`) has none and sits two call sites away from anything that does, so that
+ * fix would be five edits that each have to be right, to restore a guarantee this file can keep.
+ */
+let cachedWarnings: readonly string[] = []
 
 export function currentOperatorPolicy(warn: (message: string) => void): OperatorPolicy {
-  cached ??= readOperatorPolicy(rootOverride, warn)
+  if (cached === undefined) {
+    const collected: string[] = []
+    cached = readOperatorPolicy(rootOverride, (message) => {
+      collected.push(message)
+      warn(message)
+    })
+    cachedWarnings = collected
+    return cached
+  }
+  // A later reader hears exactly what the first one did. A well-formed policy collected nothing, so
+  // this loop is empty and silent — the replay never becomes a warning that always fires.
+  for (const message of cachedWarnings) warn(message)
   return cached
 }
 
@@ -251,6 +281,12 @@ export function currentOperatorPolicy(warn: (message: string) => void): Operator
  * untestable, and an untested refusal is how a control becomes decoration.
  */
 export function _resetOperatorPolicyForTests(root?: string): void {
+  // `cachedWarnings` is deliberately NOT cleared here, and the omission is load-bearing rather than
+  // an oversight: clearing `cached` sends the next call down the first-read branch, which reassigns
+  // `cachedWarnings` before anything can read it. A line here could never change behaviour — it was
+  // written, mutated to prove it, and found to be provably dead. The guarantee it looked like it
+  // provided is pinned by a test instead ("does not carry a previous policy's warnings across a
+  // reset"), which keeps holding if the assignment ever moves.
   cached = undefined
   rootOverride = root
 }
