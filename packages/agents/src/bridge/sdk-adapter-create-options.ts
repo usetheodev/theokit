@@ -9,7 +9,7 @@
 import { createRequire } from 'node:module'
 
 import type { ContextSettings, SkillsSettings, SystemPromptResolver } from '@theokit/sdk'
-import type { MemorySettings } from '@theokit/sdk'
+import type { MemorySettings, TelemetrySettings } from '@theokit/sdk'
 import { PermissionEngine, PermissionPlugin } from '@theokit/sdk'
 import { TheokitAgentError } from '@theokit/sdk/errors'
 
@@ -50,6 +50,19 @@ interface M8CreateOptions {
   mcpServers?: McpServersMap
   /** M49 — durable-memory settings forwarded to `Agent.create({ memory })` (SDK MemorySettings). */
   memory?: MemorySettings
+  /**
+   * B-072 — OpenTelemetry settings forwarded to `Agent.create({ telemetry })`.
+   *
+   * The SDK owns the tracer: spans for `agent.send`, `llm.call`, `tool.call` and `memory.search`,
+   * an exporter selector, and auto-detection of Langfuse / Sentry / PostHog. This layer owns only
+   * the door. Building a tracer here instead would have produced a second diagnostics vocabulary
+   * beside the one that already works, which is what the item asked not to happen.
+   *
+   * `@opentelemetry/api` is an OPTIONAL peer of the SDK, so a consumer who has not installed it
+   * gets a silent no-op rather than a crash — a run reporting no spans with `enabled: true` is
+   * almost always that, not a misconfigured collector.
+   */
+  telemetry?: TelemetrySettings
   /**
    * B-034 — compiled sub-agents forwarded to `Agent.create({ agents })`.
    *
@@ -519,6 +532,15 @@ export function assembleM8CreateOptions(
       options.memory = { enabled: true }
     }
     applied.push('memory')
+  }
+
+  // B-072 — forwarded verbatim. Unlike `memory` above, there is no legacy decorator shape to
+  // normalize and no key this layer knows better than the SDK does, so reshaping here could only
+  // lose a field the SDK added. The guard is presence, not truthiness: `{ enabled: false }` is a
+  // deliberate off switch, and dropping it would silently re-enable whatever the SDK defaults to.
+  if (compiled.telemetry !== undefined) {
+    options.telemetry = compiled.telemetry
+    applied.push('telemetry')
   }
 
   return { options, applied }

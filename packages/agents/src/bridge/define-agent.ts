@@ -10,7 +10,7 @@
  * NEVER calls an LLM. It imports only `zod` (types) + the compiler shape — no `theokit`
  * core, preserving the agents → (nothing) dependency direction (G1).
  */
-import type { CustomTool, InlineSkill, MemorySettings } from '@theokit/sdk'
+import type { CustomTool, InlineSkill, MemorySettings, TelemetrySettings } from '@theokit/sdk'
 import type { z } from 'zod'
 
 import type { Guardrail } from '../guardrails/index.js'
@@ -136,6 +136,14 @@ export interface DefineAgentConfig<TInput extends z.ZodType = z.ZodType> {
    * `Agent.create({ memory })` by `assembleM8CreateOptions`.
    */
   memory?: MemorySettings
+  /**
+   * B-072 — OpenTelemetry for this agent. Forwarded verbatim to `Agent.create({ telemetry })`,
+   * where the SDK emits spans for `agent.send`, `llm.call`, `tool.call` and `memory.search`.
+   *
+   * `{ enabled: true }` is the minimal opt-in. `@opentelemetry/api` is an OPTIONAL peer of the SDK:
+   * without it the whole thing is a silent no-op, which is the usual reason a run reports no spans.
+   */
+  telemetry?: TelemetrySettings
   /**
    * Code `Plugin` objects forwarded to `Agent.create({ plugins })` — EXTENSION units (tools,
    * commands, model providers, memory adapters). For lifecycle interception use {@link hooks}.
@@ -318,6 +326,10 @@ export function compileAgentDefinition(def: AgentDefinition): CompiledAgentOptio
     ...(def.hookApproval !== undefined ? { hookApproval: def.hookApproval } : {}),
     // M49 — memory flows to the projection layer; `assembleM8CreateOptions` forwards it to Agent.create.
     ...(def.memory !== undefined ? { memory: def.memory } : {}),
+    // B-072 — same shape, same reason: the projection layer forwards it to Agent.create. Spread
+    // conditionally so an agent that never asked about telemetry does not hand the SDK an explicit
+    // `undefined`, which reads as a decision rather than as its absence.
+    ...(def.telemetry !== undefined ? { telemetry: def.telemetry } : {}),
     // Hooks are converted here — the layer EVERY path converges on — rather than on the builder, so
     // `defineAgent({ hooks })` cannot type-check and silently no-op. A lifecycle hook that is
     // declared but never registered is a security gate that does not gate.

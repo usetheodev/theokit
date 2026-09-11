@@ -229,6 +229,22 @@ export class CanUseToolCapability extends FieldCapability<'canUseTool'> {
   readonly name = 'can-use-tool'
   protected readonly field = 'canUseTool' as const
 }
+/**
+ * B-072 — OpenTelemetry settings, the door onto a tracer the SDK already runs.
+ *
+ * A `FieldCapability` because telemetry is one setting block set once: two of them would be two
+ * answers to "which service name do these spans carry", and composing them would mean inventing a
+ * precedence nobody declared — the same reasoning `CanUseToolCapability` records above.
+ *
+ * It exists because the waist gained `telemetry` and `capability-zero-behavior.test.ts` refuses to
+ * compile while a waist field has no capability expressing it. That gate is the reason this is a
+ * whole door rather than half of one: the projection alone would have let `defineAgent` reach the
+ * SDK while the capability path could not, and the two paths are asserted deep-equal.
+ */
+export class TelemetryCapability extends FieldCapability<'telemetry'> {
+  readonly name = 'telemetry'
+  protected readonly field = 'telemetry' as const
+}
 export class PluginsCapability extends FieldCapability<'plugins'> {
   readonly name = 'plugins'
   protected readonly field = 'plugins' as const

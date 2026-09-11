@@ -11,6 +11,7 @@ import type {
   MemorySettings,
   SkillsSettings,
   SystemPromptResolver,
+  TelemetrySettings,
 } from '@theokit/sdk'
 import type { PermissionGate, SessionStore } from '@theokit/sdk'
 import type { AgentDefinition as SubagentDefinition } from '@theokit/sdk/subagents-loader'
@@ -337,6 +338,14 @@ export interface CompiledAgentOptions {
   memory?: MemoryOptions | MemorySettings
   skills?: SkillsSettings
   context?: ContextSettings
+  /**
+   * B-072 — OpenTelemetry settings, projected onto `Agent.create({ telemetry })`.
+   *
+   * Typed against the SDK's `TelemetrySettings` rather than restated, for the reason `canUseTool`
+   * above gives about `PermissionGate`: a hand-written copy is where a field gets invented for a
+   * seam that discards it, and this one has six keys with real defaults behind them.
+   */
+  telemetry?: TelemetrySettings
   /**
    * M7 — run-context injected into every tool handler's `ctx.context` by the theokit adapter
    * (`buildSdkTools` wrapper). Populated by `defineAgent({ context })` (functional surface).

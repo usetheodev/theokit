@@ -22,6 +22,7 @@ import {
   CanUseToolCapability,
   SessionStoreCapability,
   SubAgentsCapability,
+  TelemetryCapability,
 } from '../../src/capability/agent-capabilities.js'
 import {
   ModelCapability,
@@ -78,6 +79,10 @@ const WAIST_FIELDS = [
   'sessionStore',
   // B-056 — `CanUseToolCapability`. Same gate, same commit-time demand.
   'canUseTool',
+  // B-072 — `TelemetryCapability`. Third time this gate has demanded the capability before the
+  // tests would compile, and the third time the demand was right: the field existed one layer
+  // down and only `defineAgent` could have reached it.
+  'telemetry',
 ] as const satisfies readonly WaistField[]
 
 /**
@@ -223,6 +228,9 @@ describe('capability path — waist coverage is complete', () => {
       // its field reads as inexpressible when it was simply not asked for.
       new SessionStoreCapability({} as never),
       new CanUseToolCapability((() => ({ behavior: 'allow' })) as never),
+      // B-072 — same reason as `SessionStoreCapability` above: this fixture is "every capability,
+      // fully switched on", and telemetry exists only when asked for.
+      new TelemetryCapability({ enabled: true } as never),
       // #686 — the pre-spawn hook approval gate. Present here for the same reason the selection
       // below declares the foreign dialect: this fixture is "every capability, fully switched on",
       // and a field only produced when asked for reads as inexpressible when it simply was not.

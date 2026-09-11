@@ -6,17 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- A hook's `matcher: "*"` fires, as the format defines it. `new RegExp("*")` throws "nothing to repeat" and the catch reads a throw as no-match, so the spelling an author is most likely to write for "always" was the one spelling that meant "never". Measured end to end with a vetoing hook against tool `Bash`: `"*"` let the call through while `""`, `"Bash"` and an omitted matcher all vetoed it. The comma-separated exact-list form (`"Edit, Write"`) also matched nothing — as a pattern it required the space to be part of a tool name — and is now recognised as the list it is. Both shapes are handled BEFORE the regex engine, since neither is valid regex. An uncompilable matcher still does not match, deliberately: a broken matcher must not take down the turn (B-031)
+- **The settings precedence stack is named.** `SettingsLayer`, `SETTINGS_LAYERS`,
+  `layerPrecedence` and `settingsLayerChain` declare which layers exist and in what order — managed
+  settings, command line, project local, shared project, user, and below all five the values passed
+  to `defineAgent()`. The SDK shipped the folding mechanism and, correctly for a library, no
+  vocabulary: `DeclaredLayer.layer` is a free-form string with an optional number, so two consumers
+  could each invent an order, fold in opposite directions, and both pass `verifyLayerOrdering` —
+  a chain is only ever checked against itself. The order is the format's, and it places code below
+  every file a human can edit, which is the operator tier in one line. A layer added without a
+  declared position now fails to compile (B-067)
+
+- **Telemetry reaches the SDK from the authoring surface.** `defineAgent({ telemetry })`,
+  `AgentBuilder.create().telemetry(...)` and `TelemetryCapability` now forward the SDK's
+  `TelemetrySettings` to `Agent.create({ telemetry })`, so a run emits OpenTelemetry spans for
+  `agent.send`, `llm.call`, `tool.call` and `memory.search`. The SDK has emitted them since 4.52.1 —
+  exporter selector, service name, auto-detection of Langfuse / Sentry / PostHog — and this layer
+  never passed the field through, so no operator could switch any of it on. Measured before the
+  change: four occurrences of "telemetry" in the package source, all four in prose, zero
+  assignments. `@opentelemetry/api` is an OPTIONAL peer of the SDK, so without it the whole thing is
+  a silent no-op even with `enabled: true` — usually the real reason a run reports no spans (B-072)
 
 ### Changed
+
+- **`sandbox` here is not the CLI's `sandbox.*`, and the 38 keys are enumerated rather than dismissed.**
+  The two share bubblewrap + seccomp as an enforcement mechanism and differ entirely above it: this
+  package offers an execution backend with three modes and four config fields; the CLI's is a
+  settings policy with per-path filesystem rules, a network allowlist with proxies and TLS
+  termination, and per-variable credential masking. The gap that matters is network — there is no
+  network policy here at any level, so a checklist that greps for `sandbox` and stops reports a
+  domain allowlist that does not exist. Written at the door a reader meets
+  (`@theokit/agents/sandbox`) and in `docs/surfaces/sandbox-vocabulary.md`, with a verdict per key.
+  Two corrections fell out: the count is 38 and not the 39 previously recorded, and
+  `sandbox.failIfUnavailable` has no equivalent — a missing bubblewrap degrades to an unconfined
+  backend after one warning, and nothing lets an operator demand the opposite (B-070)
 
 - `@ContextWindow` documents that declaring it is also what turns instruction discovery on. The SDK builds its `FileContextManager` only when `options.context` is set, and this capability is the only place that sets it — so declaring a compaction budget silently enables discovery of `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `.cursor/rules` and `.theokit/rules`, and omitting it leaves every one of them inert with no warning. The option's whole surface was one key doc-commented "Maximum tokens before compaction triggers", so a consumer debugging "why is my CLAUDE.md ignored" had no path from the symptom back to the decorator. Behaviour is unchanged; the coupling is now stated where the author chooses, and pinned by a test that goes red if discovery ever gains its own switch (B-035)
 
 - `blockAppliesTo(block, filePath)` is exported from `@theokit/agents/config`, so a `paths:` scope can finally be applied. `InstructionBlock.scopes` shipped with no glob matcher anywhere in the package, so a consumer who wanted to honour a scope had to invent the semantics — and the field's own docblock names what happens when that goes wrong: a rule written for one subtree applied EVERYWHERE, silently. Delegating the DECISION to the product is unchanged; what was missing was the means. `scopesUnreadable` answers `false` whatever the path, which is the fail-closed half the flag was invented for. Supports `**`, `*` and `?` — the three the SDK's own rule activation implements — and refuses to guess at brace expansion or character classes (B-036)
 
 ### Fixed
+
+- A hook's `matcher: "*"` fires, as the format defines it. `new RegExp("*")` throws "nothing to repeat" and the catch reads a throw as no-match, so the spelling an author is most likely to write for "always" was the one spelling that meant "never". Measured end to end with a vetoing hook against tool `Bash`: `"*"` let the call through while `""`, `"Bash"` and an omitted matcher all vetoed it. The comma-separated exact-list form (`"Edit, Write"`) also matched nothing — as a pattern it required the space to be part of a tool name — and is now recognised as the list it is. Both shapes are handled BEFORE the regex engine, since neither is valid regex. An uncompilable matcher still does not match, deliberately: a broken matcher must not take down the turn (B-031)
 
 - `${VAR}` in `.mcp.json` resolves against the host environment instead of reaching the server as eleven literal characters. `.mcp.json` is committed, so a named reference is the only documented way to keep a credential out of it; unexpanded, the server authenticated with the text `${API_KEY}` and failed at the remote end, pointing nowhere near the config line. An unset reference is REPORTED and left as written — substituting empty would start the server with a blank credential and fail somewhere further away. This does not loosen the posture `buildEntry` already takes in refusing `envPolicy`: that refusal is about a committed file handing a server the WHOLE environment, while this resolves one variable the host already chose to set (B-037)
 
