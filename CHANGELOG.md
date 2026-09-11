@@ -24,6 +24,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - An inline `` !`command` `` is recognised only at a boundary — the start of a line or after whitespace — as the contract specifies. The guard was applied to the `@file` branch and not to the shell branch, so `` KEY=!`echo boom` `` executed from a position defined as literal text. Measured: both segments ran. This was the one place this module did MORE than its contract allows, and the trigger is a markdown file loaded out of a working directory (B-041)
 
+## [@theokit/agents 13.0.0-next.13] - 2026-09-11
+
 ### Changed
 
 - The test build lock moved from the OS temp directory into `node_modules/.cache/`. CodeQL reported `js/insecure-temporary-file` (high) on it and on the test beside it, and the mitigation that was in place did not hold: `mkdirSync(…, { recursive: true, mode: 0o700 })` does not change the mode of a directory that already exists, so whoever creates the predictable path first owns it — and the mode was the mitigation. Internal to the test harness; no published behaviour changes (B-016)

@@ -19,6 +19,11 @@
  * an organisation writes one policy file and both layers honour it; a key this layer does not
  * enforce is reported rather than carried, exactly as the SDK's reader does.
  *
+ * Nothing here is exported beyond `currentOperatorPolicy` and the test reset. The path resolver and
+ * the file reader are steps of one answer, and exporting them would offer a second way to read the
+ * policy that could disagree with the memoised one — which is the two-caches-of-one-file problem the
+ * memo exists to prevent.
+ *
  * @internal
  */
 import { existsSync, readFileSync } from 'node:fs'
@@ -68,7 +73,7 @@ const LIST_KEYS = new Set<keyof OperatorPolicy>(['deniedMcpServers', 'allowedMcp
  * `root` exists so the policy branch is testable: the real directories are platform-owned and a test
  * must not write to `/etc`. An untestable refusal is how a control becomes decoration.
  */
-export function operatorPolicyPath(root?: string): string {
+function operatorPolicyPath(root?: string): string {
   if (root !== undefined) return join(root, 'claude-code', 'managed-settings.json')
   if (process.platform === 'darwin') {
     return '/Library/Application Support/ClaudeCode/managed-settings.json'
@@ -89,7 +94,7 @@ export function operatorPolicyPath(root?: string): string {
  * that deployed a policy and got silence would believe it applied. That belief is what this tier
  * removes.
  */
-export function readOperatorPolicy(
+function readOperatorPolicy(
   root: string | undefined,
   warn: (message: string) => void,
 ): OperatorPolicy {
