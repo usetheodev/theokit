@@ -6,9 +6,15 @@ Output guards now moderate `thinking` events, not only `text_delta`.
 
 `AgentRunner` handed `moderateOutputStream` an extractor matching `text_delta` and nothing else,
 while `thinking` is a public `AgentStreamEvent` that reaches the client like any other. Measured: a
-guard declared over the agent's output delivered `thinking "the key is sk-abc123"` verbatim. An
-operator who declares `guardrails` believes the output is moderated; one of the two client-visible
-text channels was not.
+guard declared over the agent's output delivered `thinking "the key is sk-abc123"` verbatim.
+
+**This closes one channel and does not close all of them.** `DoneEvent.result` carries the model's
+whole answer and is still unmoderated — measured on the same turn, `text_delta` came out
+`"here: [R]"` while `done.result` came out `"here: sk-abc123"`. `task_progress.text` is a fourth and
+reaches the web wire. A third pass does not extend to them: there is one `done` per round, so a pass
+keyed on it would collapse every round's into one, and they need a different mechanism. Tracked
+separately; stated here because a security note that overstates its coverage is worse than one that
+does not exist.
 
 The third channel of a shape fixed twice already in this release — a streamed redaction that was
 computed and discarded, and `delegate()` consulting no guards at all.

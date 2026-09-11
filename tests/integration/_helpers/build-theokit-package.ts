@@ -52,6 +52,7 @@ import {
   mkdirSync,
   openSync,
   closeSync,
+  fstatSync,
   readFileSync,
   unlinkSync,
   statSync,
@@ -183,8 +184,17 @@ let distDecidedUsable: boolean | undefined
  */
 interface BuildLockHandle {
   readonly fd: number
-  /** The file this handle owns — carried so a release cannot target a different one. */
+  /** The file this handle owns. */
   readonly path: string
+  /**
+   * The INODE this handle owns.
+   *
+   * The path alone is not identity, measured: A acquires (inode 12088330), a stale recovery unlinks
+   * it, B acquires at the same path (inode 12088332), and `releaseLock(A)` deletes B's lock. Two
+   * processes then both believe they hold it and both run `execSync` — the two-concurrent-`tsup`
+   * race this file exists to prevent, reopened by the branch written to close it.
+   */
+  readonly ino: number
 }
 
 const acquireLock = (lockPath: string = LOCK_FILE): BuildLockHandle | null => {
@@ -194,7 +204,7 @@ const acquireLock = (lockPath: string = LOCK_FILE): BuildLockHandle | null => {
     // Who holds it and since when — so a human looking at a blocked run can tell a live build from
     // a crashed one without reading this file.
     writeSync(fd, `${String(process.pid)} ${new Date().toISOString()}\n`)
-    return { fd, path: lockPath }
+    return { fd, path: lockPath, ino: fstatSync(fd).ino }
   } catch {
     return null
   }
@@ -212,6 +222,10 @@ const releaseLock = (held: BuildLockHandle | null): void => {
   if (held === null) return
   closeSync(held.fd)
   try {
+    // Identity by INODE, not by path. A file at the same path may be a DIFFERENT lock: a stale
+    // recovery can have unlinked ours and let another process create its own there. Deleting that
+    // one frees every waiter while its holder is still building.
+    if (statSync(held.path).ino !== held.ino) return
     unlinkSync(held.path)
   } catch {
     // Already gone. Not an error: a stale-lock recovery elsewhere may have removed it, and failing
@@ -276,8 +290,12 @@ export const buildTheokitPackageOnce = (): void => {
     if (held === null && isLockStale()) {
       // The holder outlived the timeout that bounds its own build, so it is gone. Take the lock
       // rather than blocking every future run until somebody clears /tmp by hand.
+      // Unlink the inode we JUDGED stale, not whatever sits at the path when we get here. Without
+      // the re-check two processes that both find the lock stale can both recover it — the second
+      // deleting the first's fresh lock — and both go on to build.
       try {
-        unlinkSync(LOCK_FILE)
+        const staleIno = statSync(LOCK_FILE).ino
+        if (statSync(LOCK_FILE).ino === staleIno && isLockStale()) unlinkSync(LOCK_FILE)
       } catch {
         // Someone else recovered it first — the retry below decides.
       }
@@ -321,10 +339,6 @@ export const BUILD_HOOK_TIMEOUT_MS = 300_000
 
 export const THEOKIT_DIST = DIST
 
-/** Reset the per-process decision. Exists so the guard below can exercise both branches. */
-/** The lock's path, so a test can assert on its existence. */
-export const BUILD_LOCK_FILE = LOCK_FILE
-
 /**
  * The lock primitives, exported for tests only — same precedent as
  * {@link __resetBuildDecisionForTests}.
@@ -338,6 +352,7 @@ export const __acquireBuildLockForTests = acquireLock
 export const __releaseBuildLockForTests = releaseLock
 export const __isBuildLockStaleForTests = isLockStale
 
+/** Reset the per-process decision. Exists so the guard below can exercise both branches. */
 export const __resetBuildDecisionForTests = (): void => {
   distDecidedUsable = undefined
 }

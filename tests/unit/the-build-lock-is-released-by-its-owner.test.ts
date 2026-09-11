@@ -105,4 +105,28 @@ describe('the build lock', () => {
     expect(existsSync(LOCK)).toBe(false)
     expect(__isBuildLockStaleForTests(LOCK)).toBe(false)
   })
+
+  it('test_a_release_does_not_delete_a_DIFFERENT_lock_at_the_same_path', async () => {
+    // The path is not identity, and a review measured the consequence: A acquires, a stale recovery
+    // unlinks it, B acquires at the same path, and A's release deletes B's lock — freeing every
+    // waiter while B is still building. That is the two-concurrent-`tsup` race this file exists to
+    // prevent, reopened by the change written to close it.
+    const a = __acquireBuildLockForTests(LOCK)
+    expect(a).not.toBeNull()
+
+    // Simulate the stale recovery: the file A holds is removed and someone else takes the path.
+    unlinkSync(LOCK)
+    const b = __acquireBuildLockForTests(LOCK)
+    expect(b, 'a second process now owns a DIFFERENT lock at the same path').not.toBeNull()
+
+    __releaseBuildLockForTests(a)
+
+    expect(
+      existsSync(LOCK),
+      "A's release must not delete B's lock — same name, different inode",
+    ).toBe(true)
+
+    __releaseBuildLockForTests(b)
+    expect(existsSync(LOCK)).toBe(false)
+  })
 })

@@ -98,6 +98,32 @@ export async function* moderateOutputStream<E, R>(
     step = await inner.next()
   }
 
+  // A channel this stream does not carry is not moderated — it is ABSENT.
+  //
+  // Composing two passes, one per event kind, made every stream run both. On the ordinary stream
+  // with no reasoning that meant calling the guards a SECOND time with `''`, and three measured
+  // consequences followed:
+  //
+  //   1. A guard that rewrites unconditionally — a disclaimer appender, a trim, an NFC normaliser,
+  //      the class named below — turned `''` into text and the tail emitted it as a PHANTOM event:
+  //      `[text('hello'), done]` became `[text('hello'), done, thinking('<!>')]`. Content the model
+  //      never produced, attributed as its reasoning, arriving AFTER the terminal frame clients key
+  //      their state on.
+  //   2. Every guard was consulted twice per turn. For a paid moderation API that is double the
+  //      calls; `outputModeration`'s consumer predicate measured `["hello", ""]` where it had seen
+  //      `["hello"]`.
+  //   3. A predicate that flags blank input blocked EVERY turn — and a block throws before any
+  //      event reaches the client, so the agent stopped answering entirely.
+  //
+  // `textAt` records what the stream actually carried, so "no text-carrying event AND nothing
+  // accumulated" is the honest test for absence. An empty string that a text event genuinely
+  // carried still moderates: `[text('')]` has a text-carrying event and is a channel with empty
+  // content, which is a different fact from a channel that is not there.
+  if (!textAt.includes(true) && accumulated === '') {
+    for (const event of buffered) yield event
+    return step.value
+  }
+
   // Moderate the FULL output before emitting anything — throws on block.
   const moderated = await runOutputGuards(accumulated, guards)
 

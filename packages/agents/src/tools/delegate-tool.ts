@@ -145,14 +145,18 @@ const REFUSED_BY_POLICY = 'the delegated task was refused by a policy guard'
  * Adding a code to `errorCodeOf` and not to `MESSAGE_MAY_CROSS` makes it withhold. That is the safe
  * direction of forgetting, and it is the only one a reviewer can rely on.
  *
- * ## What this does NOT cover
+ * ## The hole this used to name, and what closed it
  *
  * `DelegationError`'s message is `Delegation to agent "X" failed: ${cause.message}`
- * (`delegation-types.ts`), and `run-reflective-loop.ts` wraps a non-delegation round error into one
- * — so a guard throwing INSIDE a round would cross as `delegation_failed` with its text intact.
- * Measured 2026-09-10: not reachable from the framework's own wiring, because
- * `createSdkAgentStream` applies no guards and `withGuardrails` wraps only the `toAgentFactory`
- * handle. Stated because the shape exists and the next seam that runs a guard mid-round reopens it.
+ * (`delegation-types.ts`), and `run-reflective-loop.ts` wrapped a non-delegation round error into
+ * one — so a guard throwing INSIDE a round crossed as `delegation_failed`, which IS on the
+ * allowlist above, with the guard's name and trigger intact. Measured through this tool with a
+ * consumer-supplied `streamFactory`.
+ *
+ * `run-reflective-loop.ts` now lets `GuardrailViolationError` pass through as itself, alongside the
+ * two delegation errors that already did, so it reaches `errorCodeOf` as the class it is. This
+ * section described the hole as open for one round after the commit that closed it, in a file that
+ * commit did not touch.
  */
 /**
  * A `Set` and not a `Record<string, true>`, because that record's type LIES: indexing it types the

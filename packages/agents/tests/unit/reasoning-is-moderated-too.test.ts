@@ -12,8 +12,9 @@
  *
  * The fix is TWO passes and not a wider matcher, which is the part worth not re-deriving: two kinds
  * under one `extractText` COLLAPSE into one event, so the reasoning would be promoted into a visible
- * one — a disclosure created by the moderation. `test_widening_one_extractor_collapses_the_kinds`
- * in `guardrails-output-stream.test.ts` pins that.
+ * one — a disclosure created by the moderation. `test_matching_two_kinds_collapses_them_and_that_is_the_contract`
+ * in `guardrails-output-stream.test.ts` pins that. (The name cited here for one round did not exist —
+ * a fabricated citation caught by grepping for it.)
  */
 import { describe, expect, it, vi } from 'vitest'
 
@@ -104,12 +105,24 @@ describe('an output guard reaches the reasoning too', () => {
     expect(events[1]?.content).toBe('Here is your answer.')
   })
 
-  it('test_a_block_on_reasoning_emits_nothing_at_all', async () => {
+  it('test_a_block_on_the_reasoning_alone_emits_nothing_at_all', async () => {
+    // VACUOUS for one round, and the fix is the whole point. The blocker used to refuse ANY text, so
+    // the visible pass threw first and the reasoning pass was never reached — removing that pass
+    // entirely left this test green, while it was the only support for the changeset's claim that a
+    // block on EITHER channel throws.
+    //
+    // It now refuses only text the reasoning carries, so the assertion is about the channel it names.
     script([SECRET_IN_REASONING])
-    const blocker = { name: 'b', checkOutput: () => ({ action: 'block' as const, reason: 'no' }) }
+    const reasoningOnly = {
+      name: 'b',
+      checkOutput: (t: string) =>
+        t.includes('I must not say it')
+          ? { action: 'block' as const, reason: 'no' }
+          : { action: 'allow' as const },
+    }
 
     await expect(
-      drain(runnerWith([blocker]).stream('hi', { apiKey: 'k' }) as never),
+      drain(runnerWith([reasoningOnly]).stream('hi', { apiKey: 'k' }) as never),
     ).rejects.toBeInstanceOf(GuardrailViolationError)
   })
 

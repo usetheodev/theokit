@@ -252,7 +252,19 @@ export class AgentRunner {
         const safe = await runInputGuards(message, guardrails)
         // Output guards moderate the accumulated text before it reaches the client (M9).
         // `moderateOutputStream` is a transparent pass-through when no output guard is present.
-        // TWO passes, one per client-visible text kind — B-014.
+        // TWO passes over the two text-EVENT kinds — B-014.
+        //
+        // NOT "one per client-visible text channel", which is what this said for one round and what
+        // measurement refuses. `DoneEvent.result` carries the model's whole answer
+        // (`sdk-adapter-create-options.ts:502`) and reaches every consumer of this generator:
+        // measured, `text_delta` came out `"here: [R]"` and the same turn's `done.result` came out
+        // `"here: sk-abc123"`. `task_progress.text` is a fourth, reaching the web wire through
+        // `present-ui-message-stream.ts:192`.
+        //
+        // A third pass would NOT extend to `done`: there is one per round, so a pass keyed on it
+        // would collapse every round's into one. Those two channels need a different mechanism and
+        // are tracked separately — naming them here is what keeps this comment from claiming a
+        // coverage it does not have.
         //
         // `thinking` is a public `AgentStreamEvent` and reaches the client like any other, and this
         // moderated only `text_delta`: measured, a guard declared over the agent's output delivered
@@ -266,8 +278,14 @@ export class AgentRunner {
         // kind is what keeps them apart.
         //
         // The VISIBLE pass is inner and owns the aggregate: `response` accumulates from `text_delta`
-        // upstream, so moderating it in the reasoning pass too would apply a non-idempotent guard
-        // twice.
+        // upstream, so writing it from the reasoning pass too would REPLACE the answer with the
+        // moderated reasoning.
+        //
+        // This comment said "would apply a non-idempotent guard twice" for one round, which is the
+        // half the measurement REFUTED — the mutation produces
+        // `expected 'the key is [R], I must not say it' to be 'Here is your answer.'`, substitution
+        // rather than double application. The commit body had it right and the source comment kept
+        // the wrong half.
         return yield* moderateOutputStream(
           moderateOutputStream(
             runUnguarded(safe),

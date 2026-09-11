@@ -240,38 +240,37 @@ describe('B-012 — what a redaction costs, pinned', () => {
     expect(out[0]?.content).toBe('the key is [R] visible')
   })
 
-  it('test_an_empty_stream_moderated_into_text_hands_undefined_to_rebuildText', async () => {
-    // The one case where `replaced` is undefined, and the reason the signature admits it instead of
-    // asserting it away: nothing was buffered, so there is no event whose kind or metadata could be
-    // preserved. Discarding the moderation here would be B-012's own defect one layer down.
+  it('test_a_channel_the_stream_does_not_carry_is_absent_not_empty', async () => {
+    // THIS TEST ASSERTED THE OPPOSITE for one round, and the reversal is the point.
+    //
+    // It pinned that a guard turning `''` into text owed the client that text, reasoned from B-012's
+    // thesis: a computed redaction must not be discarded. That reasoning was right for a SINGLE
+    // pass over a stream that genuinely had no text.
+    //
+    // Composing two passes, one per event kind, made every ordinary stream have an absent channel —
+    // and then measured: a guard that rewrites unconditionally emitted a PHANTOM `thinking` event
+    // after the terminal `done`, every guard was consulted twice per turn (doubling a paid
+    // moderation call), and a predicate flagging blank input blocked every turn outright.
+    //
+    // A channel the stream does not carry is ABSENT. Moderating absence produces content the model
+    // never wrote.
     const notice: Guardrail = {
       name: 'notice',
       checkOutput: (t) => ({ action: 'redact', text: t === '' ? 'NOTICE' : t }),
     }
-    // Yielding nothing IS the case under test: a stream that carried no event at all.
     // eslint-disable-next-line require-yield, sonarjs/generator-without-yield
     async function* empty(): AsyncGenerator<Ev, string> {
       return 'done'
     }
-    const seen: (Ev | undefined)[] = []
     const out: Ev[] = []
-    const g = moderateOutputStream(
-      empty(),
-      [notice],
-      (e) => e.content,
-      (content, replaced) => {
-        seen.push(replaced)
-        return { type: 'text_delta', content }
-      },
-      (_t, r) => r,
-    )
+    const g = moderateOutputStream(empty(), [notice], (e) => e.content, rebuildText, keepResult)
     let s2 = await g.next()
     while (!s2.done) {
       out.push(s2.value)
       s2 = await g.next()
     }
-    expect(seen).toEqual([undefined])
-    expect(out).toEqual([{ type: 'text_delta', content: 'NOTICE' }])
+
+    expect(out, 'nothing carried text, so nothing is invented').toEqual([])
   })
 
   it('test_matching_two_kinds_collapses_them_and_that_is_the_contract', async () => {
@@ -374,44 +373,44 @@ describe('B-012 — what a redaction costs, pinned', () => {
     ])
   })
 
-  it('test_a_guard_may_add_text_to_a_stream_that_had_none', async () => {
-    // The tail is reachable: a guard moderating '' into something non-empty owes the client that
-    // text, and there is no existing text event to carry it. Note what does NOT reach it — a guard
-    // that redacts every text event AWAY still replaces its last text event with `content: ''`.
+  it('test_a_tool_only_round_is_not_given_reasoning_it_never_had', async () => {
+    // Renamed from `test_a_guard_may_add_text_to_a_stream_that_had_none`, which asserted the
+    // opposite and was measured to be the wrong contract — see the test above for why the reversal.
     //
-    // The `replaced` assertion below is the one that matters, and its absence let a real defect
-    // through two reviews. This branch passed `buffered[0]` for one round, which for THIS stream is
-    // the tool call — an event that is not being replaced and is also still yielded. A caller
-    // spreading it, as `test_the_replaced_event_is_handed_to_rebuildText` documents, would emit a
-    // second tool call carrying the first one's id and arguments. The suite looked like it covered
-    // this branch and pinned nothing on it.
-    async function* noText(): AsyncGenerator<Ev, string> {
+    // This is the shape that made it visible: `[tool_call]` with an unconditionally-rewriting guard
+    // produced `[tool_call, text('<!>')]`. Under the two-pass composition in `agent-runner` that
+    // happens on EVERY stream with no reasoning, which is the common case, and the phantom arrives
+    // after the `done` frame clients key terminal state on.
+    const rewriter: Guardrail = {
+      name: 'disclaimer',
+      checkOutput: (t) => ({ action: 'redact', text: `${t}<!>` }),
+    }
+    async function* toolOnly(): AsyncGenerator<Ev, string> {
       yield { type: 'tool_call' }
       return 'done'
     }
-    const inject: Guardrail = {
-      name: 'i',
-      checkOutput: () => ({ action: 'redact', text: 'NOTICE' }),
-    }
-    const out: Ev[] = []
     const seen: (Ev | undefined)[] = []
+    const out: Ev[] = []
     const g = moderateOutputStream(
-      noText(),
-      [inject],
+      toolOnly(),
+      [rewriter],
       (e) => e.content,
       (content, replaced) => {
         seen.push(replaced)
         return { type: 'text_delta', content }
       },
-      (_t, r) => r,
+      keepResult,
     )
-    let s = await g.next()
-    while (!s.done) {
-      out.push(s.value)
-      s = await g.next()
+    let s2 = await g.next()
+    while (!s2.done) {
+      out.push(s2.value)
+      s2 = await g.next()
     }
-    expect(out.map((e) => e.type)).toEqual(['tool_call', 'text_delta'])
-    expect(out[1]?.content).toBe('NOTICE')
-    expect(seen, 'a non-text event is not "the event being replaced"').toEqual([undefined])
+
+    expect(
+      out.map((e) => e.type),
+      'the tool call, and nothing invented',
+    ).toEqual(['tool_call'])
+    expect(seen, 'rebuildText is never called for a channel that is not there').toEqual([])
   })
 })
