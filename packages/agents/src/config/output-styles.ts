@@ -30,6 +30,7 @@ import { join } from 'node:path'
 import { TheokitAgentError } from '@theokit/sdk/errors'
 
 import { splitFrontmatter, frontmatterValue } from './frontmatter.js'
+import { loadSettings } from './settings-file.js'
 
 /** Where styles live, under a project root or a home directory. */
 const OUTPUT_STYLES_DIR = join('.claude', 'output-styles')
@@ -125,4 +126,28 @@ export function loadOutputStyle(input: LoadOutputStyleInput): OutputStyle | unde
       `${input.name}.md in: ${searched.join(', ')}. A style that cannot be read is not applied, ` +
       `and a silent fallback would be indistinguishable from a style that had no effect.`,
   )
+}
+
+/**
+ * The style the project's settings name, read from the project's style files.
+ *
+ * The two halves of the documented mechanism, joined. `loadSettings` reads the `outputStyle` key and
+ * {@link loadOutputStyle} reads the file; until this existed nothing connected them, so a consumer
+ * had to find both modules and know that one feeds the other. Two halves each individually correct
+ * and jointly unreachable is the same defect as a capability with no caller — it just takes two
+ * files to make.
+ *
+ * Deliberately does NOT soften the loader: a style named in settings with no file behind it still
+ * throws {@link OutputStyleError}. Returning `undefined` there would restore the exact silence this
+ * work removed — configured, not applied, and no way to tell which.
+ *
+ * @throws OutputStyleError when settings name a style and no file backs it.
+ */
+export function resolveOutputStyle(input: {
+  readonly cwd: string
+  readonly homeDir?: string
+  readonly onWarn?: (message: string) => void
+}): OutputStyle | undefined {
+  const settings = loadSettings(input)
+  return loadOutputStyle({ ...input, name: settings.values.outputStyle })
 }
