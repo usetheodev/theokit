@@ -153,6 +153,17 @@ export {
  * turned into a matcher that almost fires, because a `deny` the operator believes is in force and is
  * not is worse than no rule at all.
  */
+/**
+ * The SDK's rule types, re-exported so a consumer can NAME what
+ * {@link permissionRulesFromSettings} returns.
+ *
+ * `PermissionTranslation.rules` is `readonly PermissionRule[]`, and a type that appears in an
+ * exported signature but cannot be imported is a signature a consumer can call and not annotate.
+ * `every-public-type-crosses-the-barrel` caught exactly that — reading the BUILT `.d.ts`, which is
+ * why a local suite run against a stale `dist` had said nothing.
+ */
+export type { PermissionAction, PermissionRule } from '@theokit/sdk'
+
 export {
   permissionRulesFromSettings,
   type PermissionTranslation,
