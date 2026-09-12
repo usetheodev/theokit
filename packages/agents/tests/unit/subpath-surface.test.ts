@@ -94,8 +94,21 @@ describe('M90 — the infra subpath surface is locked', () => {
     // `LiveTranscriptError` and kept `LiveSessionError` working and deprecated; only the name BOTH
     // majors have crosses, so the layer's surface is the same number under either. That is the
     // property the widening had to preserve — see the gap recorded in `subpath-coverage.test.ts`.
+    //
+    // 185 since B-029 NARROWED that range to `^5.0.0`. The delta is +7, all in `persistence`, with
+    // nothing removed — verified against the committed snapshot rather than inferred from the
+    // arithmetic:
+    //
+    //   LiveTranscriptError   the 5.x name, withheld above only because 4.x lacked it. That note
+    //                         ended "revisit when the floor moves past 4.x"; it just did.
+    //   legacyTranscriptPath, listSessions, sessionUuidFor,
+    //   ListSessionsOptions, SessionIdSource, SessionListing
+    //
+    // Those six were never a decision. They were unreachable: the workspace resolved 4.52.1, and a
+    // barrel generated against the bottom of a range ships the bottom of the range. The number this
+    // floor protects had been counting a smaller SDK than the one the package claimed to support.
     const total = Object.values(SNAPSHOT).reduce((n, s) => n + s.values.length + s.types.length, 0)
-    expect(total).toBe(178)
+    expect(total).toBe(185)
   })
 
   /**

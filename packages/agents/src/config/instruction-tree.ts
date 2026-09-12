@@ -274,7 +274,7 @@ export function loadInstructionTree(input: LoadInstructionTreeInput): Instructio
         // Cast for the upstream `.d.ts` gap named in usetheokit/theokit-sdk#280 — the symbol is
         // re-exported by the barrel and never declared, so it arrives unresolved. It is real
         // (measured), and this is a security control: hiding the cast would hide the control.
-        ;(assertNoSymlinkEscape as (p: string, rootDir: string) => void)(path, cwd)
+        assertNoSymlinkEscape(path, cwd)
       } catch {
         // The security control, and the one warning that must never be swallowed: a link out of the
         // tree is an attempt to read a file the project has no business reading.

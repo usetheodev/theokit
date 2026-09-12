@@ -397,9 +397,10 @@ async function startRound(
     }
   }
   if (!retry) return open()
-  // SE36 (SDK v3.0) — `withRetry` became `Retry.create`; same call shape.
+  // SE36 (SDK v3.0) — `withRetry` became `Retry.create`, and 5.x renamed that to `Retry.run`; same
+  // call shape. See `bridge/turn-retry.ts` for why the second rename only became visible with B-029.
   const { Retry } = await import('@theokit/sdk/retry')
-  return Retry.create(open, { ...retry, signal: retry.signal ?? signal })
+  return Retry.run(open, { ...retry, signal: retry.signal ?? signal })
 }
 
 async function* consumeOneRound(

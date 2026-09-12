@@ -158,12 +158,33 @@ describe('the gate reads what would actually be sent, not what was declared', ()
   it('test_a_narrowing_the_sdk_would_receive_is_still_refused', () => {
     // The other half: the reorder must not have disarmed the gate. `skills` IS forwarded, so on an
     // SDK that cannot read the narrowed shape the refusal still fires.
+    //
+    // The version is INJECTED, and that is the point of this edit. This assertion used to read the
+    // ambient installation, and it passed for an environmental reason rather than a behavioural
+    // one: the workspace happened to resolve 4.52.1. B-029 narrowed the declared range, the
+    // resolution moved to 5.5.0, and the test went red without a single line of production code
+    // changing — it had been asserting "the SDK on this machine is old", which is not a fact about
+    // this gate. `the-hook-gate-crosses-or-refuses.test.ts` was already injecting; this file is now
+    // consistent with it.
     expect(() =>
-      assembleM8CreateOptions({
-        ...base,
-        compatSources: compatFor(['skills']),
-      }),
+      assembleM8CreateOptions(
+        { ...base, compatSources: compatFor(['skills']) },
+        { sdkVersion: '5.0.0' },
+      ),
     ).toThrow(CompatImportUnsupportedError)
+  })
+
+  it('test_a_narrowing_an_sdk_that_CAN_read_it_is_forwarded', () => {
+    // The control the refusal above was missing, and without which it proves nothing: a gate that
+    // refused unconditionally would satisfy the assertion above and break every consumer. Naming
+    // both versions is what makes the pair a statement about the boundary rather than about a
+    // machine.
+    const { options } = assembleM8CreateOptions(
+      { ...base, compatSources: compatFor(['skills']) },
+      { sdkVersion: '5.4.0' },
+    )
+
+    expect(options.local?.compatSources).toEqual([{ kind: 'claude-code', import: ['skills'] }])
   })
 
   it('test_the_whole_root_needs_no_narrowing_and_is_forwarded', () => {
