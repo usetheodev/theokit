@@ -1,5 +1,39 @@
 # @theokit/agents
 
+## 13.4.0
+
+### Minor Changes
+
+- 7a04f79: Resolve the memory root a subagent's `memory:` frontmatter promises
+
+  `.claude/agent-memory/` was not a surface. Measured with controls: `agent-memory` returned 0 files in
+  this package, and the 7 hits in `@theokit/sdk@5.5.0` are the internal module names
+  `local-agent-memory*.ts` — the SDK's `MemorySettings` is a different feature, a vector store with
+  embeddings. A subagent whose frontmatter said `memory: project` began every run with nothing while
+  its own definition said otherwise.
+
+  `resolveAgentMemory` resolves all three roots and reads `MEMORY.md` under the documented caps — 200
+  lines and 25KB, both applied, with truncation REPORTED rather than silent.
+
+  The three roots are decided together, because they differ in who can see the notes: `project` is
+  committed and shared, `local` is kept out of version control, `user` crosses projects. An
+  unrecognised scope is refused rather than defaulted — guessing `project` would publish, on the next
+  commit, notes somebody wrote expecting privacy. A subagent name that would escape the root is refused
+  for the same reason: the name comes from a file that arrives with the repository.
+
+### Patch Changes
+
+- 2e36483: Document which `.claude/` surfaces this package reads, and which it refuses
+
+  The parity work landed across several releases and the README said nothing about any of it. A
+  consumer had to read the source to learn that `agent-memory/` has three roots, that an unrecognised
+  `memory:` scope is refused rather than defaulted, or that `workflows/*.js` is found and deliberately
+  not executed.
+
+  The table states each surface's state, and the `agent-memory/` section states the one thing a reader
+  must not get wrong: the three roots differ in who can see the notes, so `local` never falls through
+  to the committed root.
+
 ## 13.3.0
 
 ### Minor Changes
