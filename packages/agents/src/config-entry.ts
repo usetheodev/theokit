@@ -162,6 +162,24 @@ export {
  * `every-public-type-crosses-the-barrel` caught exactly that — reading the BUILT `.d.ts`, which is
  * why a local suite run against a stale `dist` had said nothing.
  */
+/**
+ * The operator tier, so a consumer can REPORT what it refuses.
+ *
+ * `disableAllHooks` shipped working and unreadable: an audit of all 628 exported symbols against the
+ * built `.d.ts` found `OperatorPolicy` declared in none and `currentOperatorPolicy` present only
+ * inside a docblock. A downstream diagnostic could therefore say `hooks: none` and never
+ * `hooks: refused by operator policy` — the ambiguity the switch exists to remove, restored one layer
+ * up in the type system.
+ *
+ * `mcpServerAdmitted` travels with them because it answers the same question for a different
+ * surface: a diagnostic listing MCP servers needs to say which the policy refused and why.
+ */
+export {
+  currentOperatorPolicy,
+  mcpServerAdmitted,
+  type OperatorPolicy,
+} from './config/operator-policy.js'
+
 export type { PermissionAction, PermissionRule } from '@theokit/sdk'
 
 export {
