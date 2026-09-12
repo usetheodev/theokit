@@ -1,14 +1,41 @@
 import { randomBytes } from 'node:crypto'
 
 import type { ToolResultTransformContext } from '@theokit/sdk'
-import { TheokitAgentError } from '@theokit/sdk/errors'
-import { z } from 'zod'
 
 import type { HookHandlers } from '../bridge/hook-handlers.js'
 
+import {
+  DEFAULT_CONTINUATION_BUDGET,
+  DEFAULT_HOOK_TIMEOUT_MS,
+  HOOK_EVENTS,
+  HookSpecError,
+  hookSpecSchema,
+  parseHookSpecs,
+  type HookEvent,
+  type HookSpec,
+} from './hook-events.js'
 import { hookFingerprint, type HookIdentity } from './hook-fingerprint.js'
 import { CHAIN_BUDGET_MULTIPLIER, runHookCommand } from './hook-runner.js'
 import { unwiredEventAdvice } from './unwired-events.js'
+
+/**
+ * Re-exported, not redefined.
+ *
+ * These moved to `./hook-events.js` when this file went over its line budget (B-002 AC-007). Every
+ * caller was MEASURED before the split — three source modules and four test files import them from
+ * here — so the re-export is what makes this a refactor instead of a breaking change. The names live
+ * there; this file keeps them reachable.
+ */
+export {
+  DEFAULT_CONTINUATION_BUDGET,
+  DEFAULT_HOOK_TIMEOUT_MS,
+  HOOK_EVENTS,
+  HookSpecError,
+  hookSpecSchema,
+  parseHookSpecs,
+  type HookEvent,
+  type HookSpec,
+}
 
 /**
  * M75 — declarative hooks: from a line in a config file to a bounded, trusted subprocess.
@@ -33,98 +60,6 @@ import { unwiredEventAdvice } from './unwired-events.js'
  * Approval is keyed by fingerprint precisely so it cannot be inherited by mutation — see
  * `hook-fingerprint.ts`.
  */
-
-/** The eight events the seam exposes. Declared here so an unknown one fails loudly at parse. */
-export const HOOK_EVENTS = [
-  'pre_tool_call',
-  'post_tool_call',
-  'transform_tool_result',
-  'transform_llm_output',
-  'on_session_start',
-  'on_session_end',
-  'pre_user_send',
-  'post_assistant_reply',
-] as const
-
-export type HookEvent = (typeof HOOK_EVENTS)[number]
-
-/** Default per-hook wall clock, measured from the consumer this was ported from. */
-export const DEFAULT_HOOK_TIMEOUT_MS = 30_000
-
-/**
- * How many times a hook may feed its own output back into the turn.
- *
- * Without a ceiling a hook that reacts to its own effect loops forever, burning tokens on every
- * pass. Three is the consumer's measured default.
- */
-export const DEFAULT_CONTINUATION_BUDGET = 3
-
-/**
- * One declared hook.
- *
- * `.strict()` on purpose: an unknown KEY is a typo in a security-relevant file, and silently
- * ignoring it means the operator believes they configured something they did not.
- */
-export const hookSpecSchema = z
-  .object({
-    event: z.enum(HOOK_EVENTS),
-    command: z
-      .string()
-      .min(1)
-      // Control characters cannot appear in a command: they are invisible in an approval prompt,
-      // so a command that LOOKS like `npm test` could carry anything after a carriage return. This
-      // is also what makes the fingerprint's record separator unambiguous.
-      //
-      // The rule below is right that control characters in a pattern are usually a typo. Here they
-      // are the subject: matching them IS the check.
-      // eslint-disable-next-line no-control-regex -- see above
-      .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), {
-        message: 'command contains control characters that would be hidden in the approval dialog',
-      }),
-    /** Selector for which tools/messages this fires on. Absent means all. */
-    matcher: z.string().optional(),
-    timeout_ms: z.number().int().positive().default(DEFAULT_HOOK_TIMEOUT_MS),
-  })
-  .strict()
-
-export type HookSpec = z.infer<typeof hookSpecSchema>
-
-/** Raised when a spec cannot be parsed. Typed so a caller distinguishes it from an IO failure. */
-/**
- * M80 — extends {@link TheokitAgentError}, not plain `Error`.
- *
- * This one is mine, from M75, and it was in the offending list: `isTransientError` is defined over
- * `TheokitAgentError`, so a class outside that hierarchy is invisible to it.
- */
-export class HookSpecError extends TheokitAgentError {
-  override readonly name = 'HookSpecError'
-  constructor(message: string) {
-    super(message, {
-      code: 'HOOK_SPEC_INVALID',
-      // A typo in a config file is not a transient condition.
-      isRetryable: false,
-    })
-  }
-}
-
-/**
- * Parse declared hooks, failing high on an unknown event.
- *
- * Failing rather than skipping: a hook whose event name is misspelled never fires, and a silent skip
- * means the operator believes a guard is in place when nothing is. That belief is worse than no
- * hook at all — it is the failure mode `G10` (honest enforcement) exists to forbid.
- */
-export function parseHookSpecs(input: unknown): HookSpec[] {
-  const parsed = z.array(hookSpecSchema).safeParse(input)
-  if (!parsed.success) {
-    throw new HookSpecError(
-      `invalid hook configuration: ${parsed.error.issues
-        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
-        .join('; ')}`,
-    )
-  }
-  return parsed.data
-}
 
 export interface BuildHookHandlersOptions {
   /** Working directory the commands run in. */
