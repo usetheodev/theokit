@@ -1,5 +1,79 @@
 # @theokit/agents
 
+## 13.2.0
+
+### Minor Changes
+
+- af53600: Read the settings files the declared layers correspond to
+
+  `SETTINGS_LAYERS` published a precedence stack — `user` 10, `project-shared` 20, `project-local` 30 —
+  and opened no file. Measured with controls (`loadMcpJson` 5 files, an invented term 0):
+  `settings.local.json` appeared once in this package, as a comment; `outputStyle` appeared zero times
+  here and zero times in the SDK's built output.
+
+  Three documented features were unreachable for that one reason. `settings.local.json` had a
+  precedence and no reader. `outputStyle` had a loader — shipped in this same line of work — with no
+  caller and no source for the name it takes. The session `env` had neither.
+
+  `loadSettings` opens the three files, folds them through the existing `LayeredConfig` (rather than
+  deriving a second answer to "which layer wins"), and reports which declared layers contributed
+  nothing. `resolveOutputStyle` joins the two halves so the documented path works end to end: name a
+  style in settings, get the style — and a named style with no file behind it still refuses, because
+  returning nothing there would restore the silence this work removed.
+
+  Unknown keys pass through untouched. The brief is the same mechanisms, not every configuration, and
+  a reader that dropped what it did not recognise would silently discard an operator's settings.
+
+- 88dd1ca: Translate a settings `permissions` block into rules the engine evaluates
+
+  The SDK ships a real permission engine — `PermissionEngine(rules, { defaultAction })`,
+  `PermissionRule`, `PermissionAction` — and it is a code surface: you construct it with rules. What
+  was missing was the path from the FILE to those rules. Measured: `permissions` appears in 13 SDK
+  files, and the SDK reads `settings.json` in three, of which two are sourcemaps and the third
+  describes the hooks shape. An operator writing `{ "permissions": { "deny": ["Bash(curl:*)"] } }` got
+  a file nothing translated.
+
+  `permissionRulesFromSettings` renders `Tool` and `Tool(prefix:*)` / `Tool(exact)` into anchored
+  rules, emitted deny-before-ask-before-allow because the engine is first-match-wins and an operator
+  reading their own file top to bottom has no reason to expect an `allow` above a `deny` to win.
+
+  Anything it cannot render faithfully — path globs, `~` expansion, per-tool argument names — is
+  RETURNED as unsupported with a reason, never quietly turned into a matcher that almost fires. A
+  `deny` an operator believes is in force and is not is strictly more dangerous than no rule, because
+  without one they would have written the guard themselves.
+
+- 6022a2a: An operator can refuse every hook a foreign configuration root declares
+
+  `.claude/hooks.json` runs shell commands out of a working directory that usually arrived with the
+  clone, and the operator tier had no switch for it: an operator who inherited an untrusted checkout
+  could not decline hook execution without editing files inside it. `disableAllHooks` in the managed
+  policy now drops the `hooks` surface where `resolveCompatSources` grants the root — one place, and
+  the place whose own refusal message already says that root "includes hooks.json, which executes
+  shell". It applies whether the consumer took the whole root or narrowed it, and when hooks were the
+  only surface asked for, nothing is granted at all.
+
+  Unlike every other key in this policy, a malformed value fails CLOSED: `"disableAllHooks": "true"`
+  as a string is read as `true`, with a warning naming what happened. The asymmetry is the reason —
+  fail-open is silent and unsafe, fail-closed is loud and recoverable. An absent key still means hooks
+  run, so no existing consumer changes behaviour.
+
+### Patch Changes
+
+- c692b54: Report a malformed operator policy to every reader, not just whichever ran first
+
+  `currentOperatorPolicy` memoises, and the memo took the warn channel with it: the first caller in the
+  process received the warnings and every caller after passed a channel that was never invoked.
+  Measured with a policy declaring `disableSkillShellExecution: "true"` — a string where a boolean is
+  required — the first reader heard one warning and the second heard none.
+
+  Three modules read this policy and nothing orders them, so whether an operator learned their policy
+  was malformed depended on which code path a given application happened to run first. The whole
+  operator tier is a set of refusals; one that silently fails to apply, in a process where nobody is
+  told, is the failure the tier exists to remove.
+
+  The warnings are now kept beside the policy and replayed to each reader. A well-formed policy
+  collects nothing, so nothing is replayed and no new noise appears.
+
 ## 13.1.0
 
 ### Minor Changes
