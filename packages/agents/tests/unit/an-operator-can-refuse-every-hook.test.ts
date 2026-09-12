@@ -54,13 +54,13 @@ function policyRootWith(settings: unknown): string {
 describe('an operator can refuse every hook', () => {
   it('drops hooks from the WHOLE root, leaving the other surfaces', () => {
     // The bare literal grants every surface, so enforcing means narrowing to the rest. A consumer
-    // who took the whole root keeps their skills, subagents, commands and plugins.
+    // who took the whole root keeps their skills, subagents, commands, plugins and rules.
     _resetOperatorPolicyForTests(policyRootWith({ disableAllHooks: true }))
 
     const resolved = resolveCompatSources({ claudeCode: trusted })
 
     expect(resolved).toEqual([
-      { kind: 'claude-code', import: ['commands', 'plugins', 'skills', 'subagents'] },
+      { kind: 'claude-code', import: ['commands', 'context', 'plugins', 'skills', 'subagents'] },
     ])
   })
 
@@ -90,7 +90,7 @@ describe('an operator can refuse every hook', () => {
     const resolved = resolveCompatSources({ claudeCode: trusted }, (w) => warnings.push(w))
 
     expect(resolved).toEqual([
-      { kind: 'claude-code', import: ['commands', 'plugins', 'skills', 'subagents'] },
+      { kind: 'claude-code', import: ['commands', 'context', 'plugins', 'skills', 'subagents'] },
     ])
     expect(warnings.join('\n'), 'the operator is not told which way it failed').toMatch(
       /disableAllHooks/,

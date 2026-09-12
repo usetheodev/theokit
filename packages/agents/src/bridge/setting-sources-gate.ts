@@ -139,17 +139,25 @@ export interface SettingSourcesSelection {
  * checked. Verified against the published 5.4.0 `.d.ts`, where the union is
  * `"hooks" | "plugins" | "skills" | "subagents"` — note `subagents`, not `agents`.
  *
- * The two unions therefore DIVERGE by one name, on purpose: the SDK has four, and `commands` is
- * this layer's, because `<projectDir>/.claude/commands/*.md` is read here and never by the SDK.
- * A caller who builds SDK `local` options directly cannot pass a value of this type — `TS2345`,
- * with a compiler message that names the mismatch and not the reason. Derive the SDK's list from
- * this one minus `commands` rather than writing four names beside five; a hand-copied list goes
- * stale the day a surface is added, which is the divergence #704 existed to remove.
+ * The two unions therefore DIVERGE, on purpose. `commands` is this layer's, because
+ * `<projectDir>/.claude/commands/*.md` is read here and never by the SDK. A caller who builds SDK
+ * `local` options directly cannot pass a value of this type — `TS2345`, with a compiler message
+ * that names the mismatch and not the reason. Derive the SDK's list from this one minus the names
+ * the SDK lacks rather than writing one list beside the other; a hand-copied list goes stale the
+ * day a surface is added, which is the divergence #704 existed to remove.
+ *
+ * `context` is the foreign root's INSTRUCTIONS — `.claude/rules/*.md`. Added ahead of the SDK
+ * release that honours it (usetheokit/theokit-sdk#652), and that ordering is safe in exactly one
+ * direction: the SDK matches an `import` list PER SURFACE, so a name it does not recognise is never
+ * matched and changes nothing. On an older SDK the rules load as they always did; on a newer one
+ * the grant is what keeps them loading. The reverse — shipping the SDK gate first and this
+ * vocabulary second — would take `.claude/rules` from every caller here with no name they could
+ * write to ask for it back, which is the failure the paragraph above this one describes.
  */
 // `commands` is loaded by THIS package rather than by the SDK, and was missing here until #704.
 // An enumeration used to NARROW a root must cover every surface that root feeds: a name absent
 // from the vocabulary is a surface the caller cannot ask for and cannot be told it lost.
-export type CompatSurface = 'commands' | 'hooks' | 'plugins' | 'skills' | 'subagents'
+export type CompatSurface = 'commands' | 'context' | 'hooks' | 'plugins' | 'skills' | 'subagents'
 
 /**
  * Every surface the bare `'claude-code'` literal stands for.
@@ -160,6 +168,7 @@ export type CompatSurface = 'commands' | 'hooks' | 'plugins' | 'skills' | 'subag
  */
 const EVERY_SURFACE: readonly CompatSurface[] = [
   'commands',
+  'context',
   'hooks',
   'plugins',
   'skills',
