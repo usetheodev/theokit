@@ -82,6 +82,50 @@ question without a round trip to the repository.
 For "which symbol delivers capability X, and in which version did it land", the CHANGELOG entry that
 shipped the symbol is the answer — every entry names the version it landed in.
 
+## Foreign configuration surfaces
+
+Which `.claude/` surfaces this package reads, and which it refuses. A surface is **read, or refused
+with a reason** — never accepted and ignored, which is the failure an author cannot tell apart from
+configuration that had no effect.
+
+| Surface | State |
+|---|---|
+| `CLAUDE.md` | read |
+| `settings.json` — `permissions` | translated into the SDK's `PermissionRule[]`; an entry that cannot be rendered faithfully is reported and excluded |
+| `settings.json` — `env`, `outputStyle` | read |
+| `settings.local.json` | read, layered above `settings.json` |
+| `skills/`, `agents/`, `commands/`, `plugins/` | read when the dialect is declared |
+| `.mcp.json` | read; a field this runtime does not carry is reported |
+| `output-styles/*.md` | read, selected by `settings.json` |
+| `agent-memory/` | read — see below |
+| `workflows/*.js` | **refused**, and reported. Every other surface is data; a workflow is code, and executing JavaScript found under a caller-supplied directory is a decision that belongs to you |
+
+### `agent-memory/`
+
+A subagent whose frontmatter declares `memory:` gets a directory it reads and writes. The first
+**200 lines, capped at 25KB**, of its `MEMORY.md` are loaded when it runs — both caps apply, and
+truncation is reported rather than silent.
+
+| `memory:` | Root | Who can see it |
+|---|---|---|
+| `project` | `<cwd>/.claude/agent-memory/<agent>/` | committed, shared with the team |
+| `local` | `<cwd>/.claude/agent-memory-local/<agent>/` | kept out of version control |
+| `user` | `~/.claude/agent-memory/<agent>/` | crosses projects |
+
+```ts
+import { resolveAgentMemory } from '@theokit/agents/config'
+
+const { root, memory, truncated } = resolveAgentMemory({ agent: 'auditor', scope: 'project', cwd })
+```
+
+An unrecognised scope is **refused**, not defaulted. The three differ in exactly one way — who can
+see the notes — so guessing `project` would publish, on the next commit, something written expecting
+privacy. A subagent name that would escape the root is refused for the same reason: it comes from a
+file that arrives with the repository.
+
+This is distinct from the session auto-memory at `~/.claude/projects/`: each subagent reads and
+writes its own `MEMORY.md`, not the operator's.
+
 ## Boundaries this package keeps
 
 - It does **not** call an LLM provider, run a tool-dispatch loop, or own the conversation store.
