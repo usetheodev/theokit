@@ -180,6 +180,24 @@ export {
   type OperatorPolicy,
 } from './config/operator-policy.js'
 
+/**
+ * Per-subagent memory — the directory a `memory:` frontmatter key promises.
+ *
+ * B-028. Measured with controls: `agent-memory` returned 0 files here, and the SDK's hits are the
+ * internal module names `local-agent-memory*.ts`, not this surface — its `MemorySettings` is a
+ * different feature (a vector store with embeddings). A subagent declaring `memory: project` began
+ * every run with nothing while its own definition said otherwise.
+ */
+export {
+  resolveAgentMemory,
+  AgentMemoryError,
+  MEMORY_LINE_CAP,
+  MEMORY_BYTE_CAP,
+  type AgentMemory,
+  type AgentMemoryScope,
+  type ResolveAgentMemoryInput,
+} from './config/agent-memory.js'
+
 export type { PermissionAction, PermissionRule } from '@theokit/sdk'
 
 export {
