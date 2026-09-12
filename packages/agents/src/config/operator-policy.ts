@@ -39,6 +39,26 @@ export interface OperatorPolicy {
    */
   disableSkillShellExecution?: boolean
   /**
+   * Refuse every hook declared under a foreign configuration root.
+   *
+   * B-042. `.claude/hooks.json` runs shell commands out of a working directory that usually arrived
+   * with the clone, and until this key existed an operator who inherited an untrusted checkout could
+   * not decline hook execution without editing files in it. `resolveCompatSources` reads this and
+   * drops the `hooks` surface from what it grants.
+   *
+   * ## It fails CLOSED, unlike every other key here
+   *
+   * The others ignore a value of the wrong shape and warn. For this one that is fail-OPEN: an
+   * operator who writes `"true"` as a string would get hooks running while believing they were off.
+   * The asymmetry decides it — fail-open is silent and unsafe, fail-closed is loud and recoverable:
+   * hooks stop, somebody notices, the typo is fixed. For a control whose purpose is refusing,
+   * failing toward the refusal is the only direction where the failure announces itself.
+   *
+   * An ABSENT key is not a malformed one and still means "hooks run": most machines have no operator
+   * tier, and refusing by default would remove hooks nobody asked to remove.
+   */
+  disableAllHooks?: boolean
+  /**
    * Servers from a project `.mcp.json` that may NOT start, by name.
    *
    * Deny wins over {@link OperatorPolicy.allowedMcpServers}. A server named in both is a
@@ -71,6 +91,7 @@ export interface OperatorPolicy {
 
 const KNOWN_KEYS = new Set<keyof OperatorPolicy>([
   'disableSkillShellExecution',
+  'disableAllHooks',
   'deniedMcpServers',
   'allowedMcpServers',
   'apiKeyHelper',
@@ -198,11 +219,43 @@ function applyPolicyKey(
     if (key === 'apiKeyHelper') out.apiKeyHelper = value.trim()
     return
   }
-  if (typeof value !== 'boolean') {
-    warn(`${path} declares "${key}" as ${typeof value}, not a boolean — it is NOT being applied.`)
+  applyBooleanKey(out, key, value, path, warn)
+}
+
+/**
+ * Apply one boolean key, or explain why it was not applied.
+ *
+ * Split out of `applyPolicyKey` because adding `disableAllHooks` — whose malformed-value branch is a
+ * decision rather than a fallthrough — put that function over this repository's cognitive-complexity
+ * limit. The same split, for the same reason, as the one between `readOperatorPolicy` and
+ * `readPolicyDocument` above: "is there a document?" and "what does this key mean?" are two
+ * questions, and so are "what shape is this value?" and "what does this key do when it is wrong?".
+ */
+function applyBooleanKey(
+  out: OperatorPolicy,
+  key: keyof OperatorPolicy,
+  value: unknown,
+  path: string,
+  warn: (message: string) => void,
+): void {
+  if (typeof value === 'boolean') {
+    if (key === 'disableSkillShellExecution') out.disableSkillShellExecution = value
+    if (key === 'disableAllHooks') out.disableAllHooks = value
     return
   }
-  if (key === 'disableSkillShellExecution') out.disableSkillShellExecution = value
+  // `disableAllHooks` is the one key that does NOT fall back to "not applied". See its docblock: for
+  // a refusal control, ignoring a malformed value means the refusal silently does not happen, which
+  // is precisely the failure the key exists to prevent.
+  if (key === 'disableAllHooks') {
+    out.disableAllHooks = true
+    warn(
+      `${path} declares "disableAllHooks" as ${typeof value}, not a boolean. It is being read as ` +
+        `TRUE — hooks are refused — because a security switch that silently fails open is worse ` +
+        `than one that fails visibly. Write \`true\` or \`false\` to say which you meant.`,
+    )
+    return
+  }
+  warn(`${path} declares "${key}" as ${typeof value}, not a boolean — it is NOT being applied.`)
 }
 
 /**
@@ -237,9 +290,39 @@ function readStringList(
  */
 let cached: OperatorPolicy | undefined
 let rootOverride: string | undefined
+/**
+ * What reading the policy reported, kept so every later reader hears it too.
+ *
+ * The memo made the warn channel belong to whoever called first: `cached ??= read(…, warn)` invokes
+ * the channel on the first call only, and every caller after that passes one that is never used.
+ * Measured with a policy declaring `disableSkillShellExecution: "true"` — the first reader heard one
+ * warning and the second heard none.
+ *
+ * That mattered because three modules read this policy (`mcp-file`, `credential-helper`,
+ * `command-template`) and nothing orders them, so whether an operator learned their policy was
+ * malformed depended on which code path a given application happened to run first. The whole tier is
+ * a set of REFUSALS, and a refusal that silently fails to apply is the defect this tier was built to
+ * remove — here, in the mechanism that removes it elsewhere.
+ *
+ * Replaying is preferred over threading a channel into every reader: the one that needs it most
+ * (`resolveCompatSources`) has none and sits two call sites away from anything that does, so that
+ * fix would be five edits that each have to be right, to restore a guarantee this file can keep.
+ */
+let cachedWarnings: readonly string[] = []
 
 export function currentOperatorPolicy(warn: (message: string) => void): OperatorPolicy {
-  cached ??= readOperatorPolicy(rootOverride, warn)
+  if (cached === undefined) {
+    const collected: string[] = []
+    cached = readOperatorPolicy(rootOverride, (message) => {
+      collected.push(message)
+      warn(message)
+    })
+    cachedWarnings = collected
+    return cached
+  }
+  // A later reader hears exactly what the first one did. A well-formed policy collected nothing, so
+  // this loop is empty and silent — the replay never becomes a warning that always fires.
+  for (const message of cachedWarnings) warn(message)
   return cached
 }
 
@@ -251,6 +334,12 @@ export function currentOperatorPolicy(warn: (message: string) => void): Operator
  * untestable, and an untested refusal is how a control becomes decoration.
  */
 export function _resetOperatorPolicyForTests(root?: string): void {
+  // `cachedWarnings` is deliberately NOT cleared here, and the omission is load-bearing rather than
+  // an oversight: clearing `cached` sends the next call down the first-read branch, which reassigns
+  // `cachedWarnings` before anything can read it. A line here could never change behaviour — it was
+  // written, mutated to prove it, and found to be provably dead. The guarantee it looked like it
+  // provided is pinned by a test instead ("does not carry a previous policy's warnings across a
+  // reset"), which keeps holding if the assignment ever moves.
   cached = undefined
   rootOverride = root
 }

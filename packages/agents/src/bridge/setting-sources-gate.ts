@@ -1,6 +1,8 @@
 import type { SettingSource, TrustPosture } from '@theokit/sdk'
 import { TheokitAgentError } from '@theokit/sdk/errors'
 
+import { currentOperatorPolicy } from '../config/operator-policy.js'
+
 /**
  * M68 — the trust gate for `settingSources`.
  *
@@ -148,6 +150,23 @@ export interface SettingSourcesSelection {
 // An enumeration used to NARROW a root must cover every surface that root feeds: a name absent
 // from the vocabulary is a surface the caller cannot ask for and cannot be told it lost.
 export type CompatSurface = 'commands' | 'hooks' | 'plugins' | 'skills' | 'subagents'
+
+/**
+ * Every surface the bare `'claude-code'` literal stands for.
+ *
+ * Written out so an operator refusal can express "all of it EXCEPT hooks", which the literal cannot.
+ * It must stay in step with `CompatSurface`; the type is the contract and this is the enumeration of
+ * it, which TypeScript checks by construction below.
+ */
+const EVERY_SURFACE: readonly CompatSurface[] = [
+  'commands',
+  'hooks',
+  'plugins',
+  'skills',
+  'subagents',
+]
+
+const IGNORE_WARNING = (): void => undefined
 
 /** What `resolveCompatSources` returns: the whole root, or the root narrowed to some surfaces. */
 export type ResolvedCompatSource =
@@ -333,6 +352,12 @@ export function resolveSettingSources(
  */
 export function resolveCompatSources(
   selection: SettingSourcesSelection | undefined,
+  /**
+   * Where a policy problem is reported. Optional because the two in-tree callers compile agents and
+   * have no channel of their own; absent, the operator still hears it through `currentOperatorPolicy`'s
+   * replay to whichever reader does have one.
+   */
+  onWarn?: (message: string) => void,
 ): readonly GatedCompatSource[] {
   if (selection?.claudeCode === undefined) return []
 
@@ -377,6 +402,22 @@ export function resolveCompatSources(
   // The two places the compat brand is minted. Both are past every posture check above, which is
   // the property the type then carries for the rest of the program.
   const gated = (source: ResolvedCompatSource): GatedCompatSource => source as GatedCompatSource
+
+  // B-042 — the operator's refusal, applied where the root is granted. This gate's own message above
+  // already says `.claude/` includes "hooks.json, which executes shell", so it is the one place that
+  // knows both that the surface is being handed over and that shell comes with it.
+  //
+  // `EVERY_SURFACE` minus `hooks` rather than the bare literal: the literal means "all of them", and
+  // a future surface added by the SDK would ride in on it. Narrowing fails CLOSED against that — a
+  // surface this package has not heard of is not granted — which is the right direction here and is
+  // stated rather than left to be discovered.
+  if (currentOperatorPolicy(onWarn ?? IGNORE_WARNING).disableAllHooks === true) {
+    const kept = (surfaces ?? EVERY_SURFACE).filter((surface) => surface !== 'hooks')
+    // No empty `import` list: `#686` refuses that as ambiguous, and it would be a lie here anyway.
+    // Nothing survived, so nothing is granted.
+    return kept.length === 0 ? [] : [gated({ kind: 'claude-code', import: kept })]
+  }
+
   if (surfaces !== undefined) return [gated({ kind: 'claude-code', import: [...surfaces] })]
   return [gated('claude-code')]
 }

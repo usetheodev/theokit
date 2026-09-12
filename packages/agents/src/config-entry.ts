@@ -129,10 +129,54 @@ export type { DeclaredLayer, LayerValues } from '@theokit/sdk'
  */
 export {
   loadOutputStyle,
+  resolveOutputStyle,
   OutputStyleError,
   type LoadOutputStyleInput,
   type OutputStyle,
 } from './config/output-styles.js'
+
+/**
+ * The settings files the declared layers correspond to, actually opened.
+ *
+ * `SETTINGS_LAYERS` published the precedence stack and nothing read a file — measured with controls,
+ * `settings.local.json` appeared once in this package as a COMMENT and `outputStyle` appeared zero
+ * times in either this package or the SDK's built output. Exported beside the layer declaration so a
+ * consumer who finds one finds the other; finding only the stack is what made three documented
+ * features unreachable.
+ */
+/**
+ * A settings `permissions` block, as rules the SDK's `PermissionEngine` evaluates.
+ *
+ * Exported beside `loadSettings` because the two are one mechanism: the file says what is denied and
+ * the engine enforces it, and until this existed nothing joined them. `unsupported` travels with the
+ * rules on purpose — an entry that could not be rendered faithfully is REPORTED and excluded, never
+ * turned into a matcher that almost fires, because a `deny` the operator believes is in force and is
+ * not is worse than no rule at all.
+ */
+/**
+ * The SDK's rule types, re-exported so a consumer can NAME what
+ * {@link permissionRulesFromSettings} returns.
+ *
+ * `PermissionTranslation.rules` is `readonly PermissionRule[]`, and a type that appears in an
+ * exported signature but cannot be imported is a signature a consumer can call and not annotate.
+ * `every-public-type-crosses-the-barrel` caught exactly that — reading the BUILT `.d.ts`, which is
+ * why a local suite run against a stale `dist` had said nothing.
+ */
+export type { PermissionAction, PermissionRule } from '@theokit/sdk'
+
+export {
+  permissionRulesFromSettings,
+  type PermissionTranslation,
+  type PermissionsBlock,
+  type UnsupportedPermissionEntry,
+} from './config/settings-permissions.js'
+
+export {
+  loadSettings,
+  type LoadSettingsInput,
+  type LoadSettingsResult,
+  type Settings,
+} from './config/settings-file.js'
 
 export { frontmatterValue, splitFrontmatter, type ParsedFrontmatter } from './config/frontmatter.js'
 
