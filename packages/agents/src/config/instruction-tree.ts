@@ -193,7 +193,47 @@ export interface InstructionTree {
   readonly count: number
 }
 
-const DEFAULT_FILE_NAMES = ['THEO.md', 'AGENTS.md'] as const
+/**
+ * The public chain, and beside it the private one.
+ *
+ * B-023 — the `.local` companion is where an operator keeps the standing corrections that matter
+ * most to them, and nothing read it. Measured 2026-09-12: a grep for the four `.local` spellings
+ * returned **0 files** across every package source tree, against a control of 4 for `AGENTS.md`;
+ * query over the newly-resolved `@theokit/sdk@5.5.0` returned **0** against a control of 23 for
+ * `CLAUDE.md`. So the gap survives in both layers, and raising the SDK floor (B-029) did not
+ * close it.
+ *
+ * The failure is the silent kind this backlog keeps finding: the file exists, it is named the
+ * documented way, nothing loads it, and no error is raised. The agent behaves exactly as it would
+ * if the operator had written nothing.
+ *
+ * ## Why the two chains are independent rather than one falling back to the other
+ *
+ * A local file never REPLACES its public sibling; both load. The trap the reference implementation
+ * names is what this avoids: with one chain, adding a `THEO.md` would silently orphan an existing
+ * `AGENTS.local.md` — a file the operator wrote, disabled by a file they added for an unrelated
+ * reason. Here it costs nothing to avoid, because this walk has no winner-takes-all at all: it
+ * accepts every matching entry rather than taking the first name that exists.
+ *
+ * ## Why `CLAUDE.local.md` is NOT here
+ *
+ * `CLAUDE.md` is not in the public half of this list either. A private companion to a file this seam
+ * does not read would pair with nothing, and adding it would quietly widen what this default covers
+ * under the guise of symmetry. If `CLAUDE.md` is ever added here, its companion comes with it.
+ */
+const DEFAULT_FILE_NAMES = ['THEO.md', 'AGENTS.md', 'THEO.local.md', 'AGENTS.local.md'] as const
+
+/**
+ * `true` for the private half of {@link DEFAULT_FILE_NAMES}.
+ *
+ * Ordering, not membership, and the distinction is the whole point of this predicate. Loading a
+ * `.local` file in the WRONG PLACE is a subtler version of not loading it: the operator's standing
+ * correction gets composed before the general rule it was written to refine, so the public file
+ * wins. Measured rather than assumed — `localeCompare` sorts `AGENTS.local.md` BEFORE `AGENTS.md`
+ * ('l' < 'm'), which is exactly backwards, and a bare addition to the list above would have shipped
+ * that silently.
+ */
+const isPrivateInstructionFile = (entry: string): boolean => entry.endsWith('.local.md')
 
 /** Named, so the default is a decision a reader can see rather than an empty pair of braces. */
 const IGNORE_WARNING = (): void => undefined
@@ -251,13 +291,7 @@ export function loadInstructionTree(input: LoadInstructionTreeInput): Instructio
       return false // unreadable directory — not an error, just nothing to load here
     }
 
-    // Files in THIS directory before any subdirectory.
-    //
-    // A single alphabetical pass descended into `nested/` before reading the root's own `THEO.md`,
-    // because `nested` sorts before `THEO`. That inverts the meaning of an instruction tree: the
-    // outer file states the general rule and the inner one refines it, so loading the refinement
-    // first hands the composer its blocks in the opposite of the order it needs. Two passes make the
-    // outward-in order a property of the walk instead of an accident of file names.
+    // Ordering is `walkOrder`'s decision, with its three bands and their reasons written there.
     for (const { entry, path, stats } of walkOrder(dir, entries, input.order ?? 'outward-in')) {
       // Inode identity, not path identity — see the function docblock.
       const inode = `${String(stats.dev)}:${String(stats.ino)}`
@@ -271,10 +305,12 @@ export function loadInstructionTree(input: LoadInstructionTreeInput): Instructio
       if (!accepts(entry)) continue
 
       try {
-        // Cast for the upstream `.d.ts` gap named in usetheokit/theokit-sdk#280 — the symbol is
-        // re-exported by the barrel and never declared, so it arrives unresolved. It is real
-        // (measured), and this is a security control: hiding the cast would hide the control.
-        ;(assertNoSymlinkEscape as (p: string, rootDir: string) => void)(path, cwd)
+        // A cast used to sit here for the upstream `.d.ts` gap named in usetheokit/theokit-sdk#280 —
+        // the symbol was re-exported by the barrel and never declared, so it arrived unresolved.
+        // B-029 narrowed the declared SDK range to `^5.0.0`, the type resolves, and the cast is
+        // gone. The CONTROL is untouched: this call is what refuses a symlink pointing out of the
+        // project, and the note stays so its removal does not read as the control being relaxed.
+        assertNoSymlinkEscape(path, cwd)
       } catch {
         // The security control, and the one warning that must never be swallowed: a link out of the
         // tree is an attempt to read a file the project has no business reading.
@@ -340,11 +376,24 @@ function walkOrder(
     }
   }
 
-  // Alphabetical either way — the difference is only whether directories are held back.
+  // `lexicographic` stays literally alphabetical. It is the documented escape for a caller who wants
+  // the raw order, so the semantic rule below must not leak into it.
   if (order === 'lexicographic') return found
 
+  // Three bands, and each boundary is a decision with a reason.
+  //
+  // FILES BEFORE DIRECTORIES: a single alphabetical pass descended into `nested/` before reading the
+  // root's own `THEO.md`, because `nested` sorts before `THEO`. That inverts the meaning of an
+  // instruction tree — the outer file states the general rule and the inner one refines it.
+  //
+  // PUBLIC BEFORE PRIVATE (B-023): the same argument one level down. A `.local` file is the
+  // operator's standing correction and must be composed AFTER the file it corrects, and alphabetical
+  // order puts it first — `AGENTS.local.md` sorts before `AGENTS.md`. Membership without this band
+  // would deliver the file in the reverse of its meaning, which is why the two shipped together.
+  const isFile = (item: WalkEntry): boolean => !item.stats.isDirectory()
   return [
-    ...found.filter((item) => !item.stats.isDirectory()),
+    ...found.filter((item) => isFile(item) && !isPrivateInstructionFile(item.entry)),
+    ...found.filter((item) => isFile(item) && isPrivateInstructionFile(item.entry)),
     ...found.filter((item) => item.stats.isDirectory()),
   ]
 }

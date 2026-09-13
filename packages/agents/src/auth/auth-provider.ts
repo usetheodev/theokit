@@ -112,7 +112,7 @@ export class AuthProvider {
     if (resolved.kind !== 'oauth') {
       // An API key does not expire: no lock, no re-read, no I/O. Keeping the hot path clear is what
       // makes the per-run resolver cheap (M74, Risk 1).
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- `CredentialStoreConfig` from the /auth subpath resolves under tsc; eslint's type-aware project reads it as error-typed.
+
       return ensureFreshCredential(resolved, { config: this.config, store: this.store, env }, deps)
     }
 
@@ -155,7 +155,6 @@ export class AuthProvider {
     deps: EnsureFreshHttpDeps,
     env?: Record<string, string | undefined>,
   ): Promise<ResolvedCredential> {
-    /* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access -- the SDK's `/auth` and `/persistence` subpaths resolve under tsc (root typecheck clean); eslint's type-aware project reads them as error-typed. The same note this file already carried for `CredentialStoreConfig`. */
     return withFileLock(filePath, async () => {
       // RE-READ after acquiring the lock: another process may have refreshed while we waited.
       const doDisco = readStoredOAuth(this.store, env)
@@ -184,8 +183,7 @@ export class AuthProvider {
           await new Promise((resolve) => setTimeout(resolve, waitWithJitter(attempt)))
         }
       }
-    }) as Promise<ResolvedCredential>
-    /* eslint-enable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+    })
   }
 
   /**

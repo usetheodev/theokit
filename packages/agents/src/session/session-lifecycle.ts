@@ -253,7 +253,7 @@ export function protectedTranscriptPaths(
   for (const session of sessions) {
     // Third instance of the same upstream `.d.ts` gap (see `listSessions`). The predicate is real
     // and the negative test proves it fires — a live lease does refuse the delete.
-    const hasWriter = (sessionHasWriter as (p: string) => boolean)(session.transcript)
+    const hasWriter = sessionHasWriter(session.transcript)
     if (hasWriter) protectedBy.set(session.transcript, 'active writer lease')
   }
   return protectedBy

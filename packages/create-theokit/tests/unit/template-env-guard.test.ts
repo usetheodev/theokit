@@ -62,10 +62,20 @@ describe('B-124 — scaffolded products do not load a project .env unguarded', (
       dependencies: Record<string, string>
     }
     const pin = pkg.dependencies['@theokit/sdk'] ?? ''
-    const minor = Number(/^\^4\.(\d+)\./.exec(pin)?.[1] ?? -1)
+    // Compared as a (major, minor) TUPLE rather than by a v4-shaped regex, which is what this was.
+    // That regex expressed "at least 4.50" as "matches ^4. and the minor is >= 50", and the two stop
+    // agreeing the moment the pin crosses a major: B-029 moved it to `^5.0.0` — strictly newer, and
+    // strictly more likely to export the guard — and the check read -1 and failed. A version
+    // predicate that only works inside one major is a predicate that fails on the upgrade it exists
+    // to permit.
+    const GUARD_SINCE: readonly [number, number] = [4, 50]
+    const parsed = /^\^(\d+)\.(\d+)\./.exec(pin)
+    expect(parsed, `\`${pin}\` is not a caret pin this check can read`).not.toBeNull()
+    const [major, minor] = [Number(parsed?.[1]), Number(parsed?.[2])]
 
-    expect(minor, `\`${pin}\` may resolve to an SDK without loadProjectEnv`).toBeGreaterThanOrEqual(
-      50,
-    )
+    expect(
+      major > GUARD_SINCE[0] || (major === GUARD_SINCE[0] && minor >= GUARD_SINCE[1]),
+      `\`${pin}\` may resolve to an SDK without loadProjectEnv (landed in ${String(GUARD_SINCE[0])}.${String(GUARD_SINCE[1])})`,
+    ).toBe(true)
   })
 })
