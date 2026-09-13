@@ -62,7 +62,41 @@ export interface ProjectSettingsGrant {
  * not turn it on", not "turned it off".
  */
 export interface SettingSourcesSelection {
-  /** `~/.theokit/` — the operator's machine. No gate: no third party controls it. */
+  /**
+   * `~/.theokit/` — the operator's machine. No gate: no third party controls it.
+   *
+   * ## What this does NOT do today, stated here because the field is where it is read
+   *
+   * **Nothing reads the operator's root because of this flag.** `resolveSettingSources` forwards it
+   * and `includesSetting` is called with exactly `"project"` and `"plugins"` — measured against
+   * `@theokit/sdk@5.5.0`, not inferred: a grep of the published `dist` returns those two literals
+   * and no `"user"`. So skills, subagents and rules under `~/.theokit/` do not reach a run.
+   *
+   * The admission already lived in `resolveSettingSources`' docblock, several hundred lines away,
+   * while this line described the root as though the flag delivered it. Two docblocks disagreeing
+   * about one field is how a consumer reads the reassuring one — and this is the one they read,
+   * because it is the one attached to the thing they are typing.
+   *
+   * ## What the SDK DOES read from `~/.theokit/`, which is the part nothing gates
+   *
+   * Measured at 5.5.0: `pluginsRoot()` → `~/.theokit/plugins/model-providers`, the provider trust
+   * file, the transcript root and the HTTP cache. Those are read UNCONDITIONALLY — no setting
+   * source governs them, and this flag neither enables nor disables them. So the honest shape of
+   * the gap is two halves, not one: a grant that governs nothing, beside a root that is read with
+   * no grant at all.
+   *
+   * ## Why it is still accepted rather than refused
+   *
+   * Refusing would be the shape `HookGateUnsupportedError` uses for an unsupported option, and it
+   * is wrong here: the measured consumer passes `user: true` on every run, including the
+   * untrusted-directory path where it is the ONLY thing granted. A refusal would turn a graceful
+   * degradation into a throw for the exact case the flag was designed to survive.
+   *
+   * Delivering it is not reachable from this layer alone: the SDK builds every root from `cwd`
+   * (`projectConfigRoots(this.cwd, …)`, globbing within it, never walking up), so there is no
+   * second root to hand it. The remaining options are an SDK-side root or reading and injecting
+   * here, the way the reference consumer does. Tracked as B-024.
+   */
   readonly user?: boolean
   /** `<cwd>/.theokit/` — controlled by whoever wrote the open repository. Requires evidence. */
   readonly project?: ProjectSettingsGrant
