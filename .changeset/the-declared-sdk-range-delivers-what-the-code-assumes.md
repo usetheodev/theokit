@@ -1,6 +1,6 @@
 ---
 "@theokit/agents": major
-"@theokit/theo": major
+"theokit": major
 ---
 
 The declared `@theokit/sdk` range no longer admits a floor that delivers zero parity.
