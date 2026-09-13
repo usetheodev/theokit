@@ -1,6 +1,6 @@
 {
   "name": "@theokit/agents",
-  "version": "13.4.0",
+  "version": "14.0.0",
   "description": "AI agents as first-class citizens of the TheoKit pipeline. The AgentBuilder.create() authoring chain compiles to the @theokit/sdk runtime.",
   "repository": {
     "type": "git",
