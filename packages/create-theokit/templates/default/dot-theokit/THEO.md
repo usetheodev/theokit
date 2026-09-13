@@ -14,16 +14,20 @@ tone instruction in this file quietly makes `usePersonality` do nothing. Tone be
 
 ## Why this file is here and not at the root
 
-This project installs `@theokit/sdk@^5.0.0`, where **both** locations work: 5.x added a root
+This project installs `@theokit/sdk@^5.3.0`, where **both** locations work: 5.x added a root
 `THEO.md` (`usetheokit/theokit-sdk#531`) at priority 55, and `.theokit/THEO.md` at 60 still wins a
 conflict. The scaffold keeps the file here because it wins, not because the root is unreadable.
 
 That reason is new. This paragraph used to say the template pinned `^4.52.1` — where
 `.theokit/THEO.md` was the **only** path read and a root copy was silently ignored — and that 5.x
 was published on the `next` channel only, so moving the file would break the default install. Both
-halves expired: 5.5.0 is `latest`, and the template's pin moved to `^5.0.0` because every `.claude`
+halves expired: 5.5.0 is `latest`, and the template's pin moved to `^5.3.0` because every `.claude`
 parity surface this framework advertises is absent from 4.x. A scaffold that hands a new project an
 SDK delivering none of that, with nothing saying so, is the defect the pin change closes.
+
+The floor is 5.3 rather than 5.0 because the framework's persistence barrel re-exports six names that
+5.0.0 does not have — measured with controls, 1 of 7 at 5.0.0 and 7 of 7 from 5.3.0 — so the range had
+to name a version that can actually build it.
 
 Two more things worth knowing if you do move it once 5.x is stable:
 

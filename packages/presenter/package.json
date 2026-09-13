@@ -39,11 +39,11 @@
     "prepublishOnly": "node ../../scripts/check-pack-no-workspace.mjs ."
   },
   "peerDependencies": {
-    "@theokit/sdk": "^5.0.0",
+    "@theokit/sdk": "^5.3.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@theokit/sdk": "^5.0.0",
+    "@theokit/sdk": "^5.3.0",
     "ai": "7.0.14",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

@@ -28,7 +28,21 @@ not have been written. The reason the floor stayed low is recorded in the code a
 *"Until this package's floor can name a stable 5.x"*; `@theokit/sdk@5.5.0` is `latest`, and stable
 5.x has existed since 5.3.0.
 
-**Why 5.0.0 and not 5.4.0.** `local.hooks` and the narrowed `compatSources[].import` landed in
+**The floor is `^5.3.0`, and the first attempt at `^5.0.0` was wrong for an instructive reason.**
+Verifying that the four parity surfaces exist at 5.0.0 — they do — was necessary and not sufficient.
+The persistence barrel is GENERATED from the resolved copy, so it also ships whatever that copy
+exports, and six of those names do not exist at 5.0.0. The DTS build fails against the bottom of the
+range, which a consumer meets as a build error rather than as a typed refusal.
+
+Caught by `dep-check / suite at the bottom of every declared range`, the job that skips on a pull
+request into `develop` and runs on one into `main` — it fired exactly where it was designed to.
+
+Measured with controls at each version (positive `transcriptPath` = 1, invented name = 0): 5.0.0
+carries **1 of the 7**; 5.3.0, 5.4.0 and 5.5.0 carry **7 of 7**. So 5.3.0 is the lowest version
+*proven* to work, not necessarily the first — the two releases between them are not in the measured
+set, and a declared floor that was proven beats one that was inferred.
+
+**Why not 5.4.0.** `local.hooks` and the narrowed `compatSources[].import` landed in
 5.4.0, which is inside the new range — and that is deliberate. Both already throw a typed error
 naming the version they need. Raising the floor to 5.4.0 would strand every 5.0-5.3 consumer who
 uses neither, in order to duplicate a refusal that already announces itself. The invariant is that

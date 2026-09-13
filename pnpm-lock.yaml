@@ -48,7 +48,7 @@ importers:
         specifier: workspace:*
         version: link:packages/presenter
       '@theokit/sdk':
-        specifier: ^5.0.0
+        specifier: ^5.3.0
         version: 5.5.0(@lancedb/lancedb@0.30.0(apache-arrow@18.1.0))(@types/ws@8.18.1)(better-sqlite3@12.11.1)(proper-lockfile@4.1.2)(sqlite-vec@0.1.9)(ws@8.21.3)
       '@types/cross-spawn':
         specifier: ^6.0.6
@@ -189,7 +189,7 @@ importers:
         specifier: workspace:*
         version: link:../presenter
       '@theokit/sdk':
-        specifier: ^5.0.0
+        specifier: ^5.3.0
         version: 5.5.0(@lancedb/lancedb@0.30.0(apache-arrow@18.1.0))(@types/ws@8.18.1)(better-sqlite3@12.11.1)(proper-lockfile@4.1.2)(sqlite-vec@0.1.9)(ws@8.21.3)
       '@theokit/sdk-tools':
         specifier: ^0.27.1
@@ -270,7 +270,7 @@ importers:
   packages/presenter:
     devDependencies:
       '@theokit/sdk':
-        specifier: ^5.0.0
+        specifier: ^5.3.0
         version: 5.5.0(@lancedb/lancedb@0.30.0(apache-arrow@18.1.0))(@types/ws@8.18.1)(better-sqlite3@12.11.1)(proper-lockfile@4.1.2)(sqlite-vec@0.1.9)(ws@8.21.3)
       ai:
         specifier: 7.0.14
@@ -374,7 +374,7 @@ importers:
         version: 4.4.3
     devDependencies:
       '@theokit/sdk':
-        specifier: ^5.0.0
+        specifier: ^5.3.0
         version: 5.5.0(@lancedb/lancedb@0.30.0(apache-arrow@18.1.0))(@types/ws@8.18.1)(better-sqlite3@12.11.1)(proper-lockfile@4.1.2)(sqlite-vec@0.1.9)(ws@8.21.3)
       '@types/busboy':
         specifier: ^1.5.4
