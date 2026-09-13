@@ -1,6 +1,6 @@
 ---
 "@theokit/agents": major
-"theokit": major
+"theokit": minor
 ---
 
 The declared `@theokit/sdk` range no longer admits a floor that delivers zero parity.
@@ -66,6 +66,14 @@ changed. Each was something never verified:
 - `effectiveToolNames` entered the root bar in 5.x and was invisible here. Recorded `out` with
   measured evidence (0 callers in this repo, 0 in the downstream product, against probe controls of
   3 and 90) rather than by taste.
+
+**Why `theokit` takes a minor and not a major.** Narrowing a dependency range IS breaking, and under
+semver 0.x the breaking slot is the MINOR — `major` on a 0.x package means declaring 1.0.0, which is a
+statement about stability, not about this change. `theokit` is at 0.65.0 and has never taken a major:
+its own CHANGELOG carries entries labelled "BREAKING for hand-built compiled options" that shipped as
+minors. `public-copy.md § 3` refuses the production-ready claim until there is sustained measured
+evidence, and a 1.0.0 cut is that claim in the one place every consumer reads it. `@theokit/agents`
+(13.4.0) and `create-theokit` (2.0.0) are past 1.0, so their majors are the ordinary encoding.
 
 **Breaking:** a consumer pinned to `@theokit/sdk@4.x` can no longer install these packages. That
 consumer was already receiving none of the `.claude` compatibility the packages advertise, and
