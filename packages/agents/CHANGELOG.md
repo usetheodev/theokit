@@ -1,5 +1,208 @@
 # @theokit/agents
 
+## 14.0.0
+
+### Major Changes
+
+- ef049e1: The declared `@theokit/sdk` range no longer admits a floor that delivers zero parity.
+
+  `packages/agents` declared `^4.52.1 || ^5.0.0` and `packages/theo` peer-declared the same. Measured
+  by unpacking the published tarballs, against a control of `AgentOptions` (83-86 files in every one):
+
+  | surface                          | 4.52.1 | 5.0.0 | 5.3.0 | 5.4.0 |
+  | -------------------------------- | ------ | ----- | ----- | ----- |
+  | `CompatSurface`                  | 0      | 10    | 10    | 10    |
+  | `.claude/rules/*` discovery spec | 0      | 4     | 4     | 4     |
+  | `settings.local.json`            | 0      | 4     | 4     | 4     |
+  | `CLAUDE_PROJECT_DIR`             | 0      | 14    | 14    | 14    |
+
+  The boundary is the 4→5 major exactly, and the lower half of the declared range delivered **zero**
+  parity. Not one missing surface — every surface at once, invisibly, because the package resolves,
+  compiles and runs. This repository's own lockfile resolved 4.52.1, so its green suite was green
+  against an SDK where `compatSources` does not exist as an option.
+
+  **Why the range rather than a fourth runtime guard.** Three version guards already exist
+  (`HOOK_GATE_SINCE`, `COMPAT_IMPORT_SINCE`, and the `compatSources` warning), and every one is on a
+  path where this layer PASSES AN OPTION to the SDK. The surfaces above are not like that: nothing is
+  passed, the SDK reads a file or it does not, so there is no call site to guard. A fourth check could
+  not have been written. The reason the floor stayed low is recorded in the code and has expired —
+  _"Until this package's floor can name a stable 5.x"_; `@theokit/sdk@5.5.0` is `latest`, and stable
+  5.x has existed since 5.3.0.
+
+  **The floor is `^5.3.0`, and the first attempt at `^5.0.0` was wrong for an instructive reason.**
+  Verifying that the four parity surfaces exist at 5.0.0 — they do — was necessary and not sufficient.
+  The persistence barrel is GENERATED from the resolved copy, so it also ships whatever that copy
+  exports, and six of those names do not exist at 5.0.0. The DTS build fails against the bottom of the
+  range, which a consumer meets as a build error rather than as a typed refusal.
+
+  Caught by `dep-check / suite at the bottom of every declared range`, the job that skips on a pull
+  request into `develop` and runs on one into `main` — it fired exactly where it was designed to.
+
+  Measured with controls at each version (positive `transcriptPath` = 1, invented name = 0): 5.0.0
+  carries **1 of the 7**; 5.3.0, 5.4.0 and 5.5.0 carry **7 of 7**. So 5.3.0 is the lowest version
+  _proven_ to work, not necessarily the first — the two releases between them are not in the measured
+  set, and a declared floor that was proven beats one that was inferred.
+
+  **Why not 5.4.0.** `local.hooks` and the narrowed `compatSources[].import` landed in
+  5.4.0, which is inside the new range — and that is deliberate. Both already throw a typed error
+  naming the version they need. Raising the floor to 5.4.0 would strand every 5.0-5.3 consumer who
+  uses neither, in order to duplicate a refusal that already announces itself. The invariant is that
+  every version the range admits either works or fails with a typed error naming what it needs; none
+  fails in silence. A silent gap is closed by the range, a named one is not.
+
+  **What the narrowing exposed, which is the item's real value.** The workspace itself resolved
+  4.52.1, so raising the floor moved it to 5.5.0 and five test files went red with no production line
+  changed. Each was something never verified:
+
+  - `packages/agents/persistence` gained **7 exports** it had never been able to carry —
+    `LiveTranscriptError`, `legacyTranscriptPath`, `listSessions`, `sessionUuidFor`,
+    `ListSessionsOptions`, `SessionIdSource`, `SessionListing`. None were withheld; they were
+    unreachable. The barrel is generated from the resolved copy, and a barrel generated against the
+    bottom of a range ships the bottom of the range. `LiveTranscriptError` carried a note ending
+    _"revisit when the floor moves past 4.x"_ — this is that revisit.
+  - `assembleM8CreateOptions`'s `deps.sdkVersion`, documented "Injectable for tests", reached the hook
+    gate and **not** the narrowed-import gate. So that gate could only ever read the ambient
+    installation, and its test passed because the machine happened to resolve 4.52.1. The seam now
+    reaches both, and the refusal is pinned with a version on each side rather than one.
+  - `effectiveToolNames` entered the root bar in 5.x and was invisible here. Recorded `out` with
+    measured evidence (0 callers in this repo, 0 in the downstream product, against probe controls of
+    3 and 90) rather than by taste.
+
+  **Why `theokit` takes a minor and not a major.** Narrowing a dependency range IS breaking, and under
+  semver 0.x the breaking slot is the MINOR — `major` on a 0.x package means declaring 1.0.0, which is a
+  statement about stability, not about this change. `theokit` is at 0.65.0 and has never taken a major:
+  its own CHANGELOG carries entries labelled "BREAKING for hand-built compiled options" that shipped as
+  minors. `public-copy.md § 3` refuses the production-ready claim until there is sustained measured
+  evidence, and a 1.0.0 cut is that claim in the one place every consumer reads it. `@theokit/agents`
+  (13.4.0) and `create-theokit` (2.0.0) are past 1.0, so their majors are the ordinary encoding.
+
+  **Breaking:** a consumer pinned to `@theokit/sdk@4.x` can no longer install these packages. That
+  consumer was already receiving none of the `.claude` compatibility the packages advertise, and
+  `HookGateUnsupportedError` was already refusing them outright if they declared a hook gate. `theo`
+  moves with `agents` because it depends on it: a peer range advertising a major its own dependency
+  rejects is unsatisfiable at install time and says nothing until then.
+
+### Minor Changes
+
+- f28ebd5: `THEO.local.md` and `AGENTS.local.md` are read, and composed after the files they refine.
+
+  The gitignored companion is where an operator keeps the standing corrections that matter most to
+  them — the ones too personal or too situational to commit. Nothing read it. Measured 2026-09-12: a
+  grep for the four `.local` spellings returned **0 files** across every package source tree, against
+  a control of 4 for `AGENTS.md`; the same query over the newly-resolved `@theokit/sdk@5.5.0`
+  returned **0** against a control of 23 for `CLAUDE.md`. The gap is in both layers, and raising the
+  SDK floor did not close it.
+
+  The failure is the silent kind: the file exists, it is named the documented way, nothing loads it,
+  and nothing complains. The agent behaves exactly as it would if the operator had written nothing,
+  which from the outside is indistinguishable from the instructions being wrong.
+
+  **Order shipped with membership, because membership alone would have shipped broken.**
+  `localeCompare` sorts `AGENTS.local.md` BEFORE `AGENTS.md` — `'l' < 'm'` — so adding the names to
+  `DEFAULT_FILE_NAMES` and nothing else would compose the operator's correction _before_ the rule it
+  was written to correct. The file would load and lose: a subtler version of the original defect, and
+  just as quiet. `walkOrder` now emits three bands within a directory — public files, private files,
+  then subdirectories — each boundary carrying its reason. The `lexicographic` mode stays literally
+  alphabetical; it is the documented escape for a caller who wants the raw order.
+
+  **The two chains are independent.** A local file never replaces its public sibling; both load. The
+  trap avoided is one chain falling back to the other, where adding a `THEO.md` would silently orphan
+  an existing `AGENTS.local.md` — a file the operator wrote, disabled by a file they added for an
+  unrelated reason.
+
+  **`CLAUDE.local.md` is deliberately not included.** `CLAUDE.md` is not in the public half of this
+  list either, so a private companion to a file this seam does not read would pair with nothing. If
+  `CLAUDE.md` is ever added, its companion comes with it.
+
+  Also corrects two comments in the same file that `@theokit/sdk@^5.0.0` made false: one described a
+  cast removed when the type began resolving — the symlink-escape **control it guards is untouched**,
+  and the note stays so its removal does not read as the control being relaxed — and one duplicated an
+  ordering rationale that now lives with the ordering.
+
+- 914e177: A caller can now name the foreign root's instructions — `context` is a `CompatSurface`.
+
+  `.claude/rules/*.md` had no name a consumer could write. The union was `'commands' | 'hooks' |
+'plugins' | 'skills' | 'subagents'` — five names for a root that feeds six things — and the gate's
+  own docblock had already written the rule that violated: "An enumeration used to NARROW a root must
+  cover every surface that root feeds: a name absent from the vocabulary is a surface the caller
+  cannot ask for and cannot be told it lost."
+
+  It was measured from the other end. `theokit-sdk` #652: `FileContextManager` consulted no
+  foreign-dialect grant at all, so a cloned repository's `.claude/rules/*.md` reached the system
+  prompt of a consumer who had declared only its own `.theokit/` — while that same directory's hooks,
+  skills, subagents and plugins were correctly withheld. Closing that gate is what makes the missing
+  name here load-bearing: once the SDK honours a `context` grant, a caller with no word for it loses
+  the rules silently.
+
+  **This ships BEFORE the SDK release that honours it, and the ordering is safe in exactly one
+  direction.** The SDK matches a narrowed `import` list per surface, so a name it does not recognise
+  is never matched and changes nothing: on today's SDK the rules load as they always did, and on the
+  next one the grant is what keeps them loading. The reverse order would take `.claude/rules` from
+  every caller here with no name they could write to ask for it back.
+
+  A consumer passing the bare `'claude-code'` literal is unaffected — it still means the whole root.
+  What changes is that `import: ['context']` is now expressible, so taking a foreign repository's
+  house rules no longer requires also granting it command execution.
+
+### Patch Changes
+
+- 6c1a602: Four `.claude` mechanisms are now declared out of scope, with the reason and the owner.
+
+  An absence that reads as an oversight gets re-investigated at full cost by the next person. The
+  `.claude` sweep produced a table with absences in it, and shipping that without separating "we
+  decided not to" from "we have not got to it" reproduces the defect the table exists to prevent.
+
+  Measured 2026-09-12: `keybindings`, `themes/` and `.claude.json` each return **0 files** across every
+  package source tree, against a control of 31 for `skills`.
+
+  | Surface                                       | Verdict                          |
+  | --------------------------------------------- | -------------------------------- |
+  | `keybindings.json`                            | out of scope — `@theokit/tui`    |
+  | `themes/*.json`                               | out of scope — `@theokit/tui`    |
+  | `~/.claude.json` — OAuth state, UI toggles    | out of scope — a CLI's own state |
+  | `~/.claude.json` — personal-scope MCP servers | **not read yet**, and in scope   |
+
+  **A framework has no keyboard and no colour.** It produces text and tool calls; the process that
+  renders them owns which key does what and which escape codes it emits. Reading those here would let
+  this package hold configuration it cannot act on, which is the accepted-and-ignored failure the whole
+  table exists to prevent.
+
+  **`~/.claude.json` is two things under one name, and the split is the point.** One verdict over the
+  whole file would be wrong about one half whichever way it went: the OAuth state is a specific
+  program's own session, and a library reading another program's login state reaches into something it
+  neither owns nor can refresh — while an MCP server the operator registered for themselves is a
+  framework concern, and this package already reads project-scope servers from `.mcp.json`. That half
+  is **not refused; it is not done**, and the two stay distinguishable because the reader deciding
+  whether to file a bug needs to know which one they are looking at.
+
+  Declared in `README.md` and not only in the project's rules directory, because that directory is
+  gitignored — a decision recorded only there is a decision made for one checkout.
+
+  Separately, `SettingSourcesSelection.user`'s docblock stops describing a capability the runtime does
+  not have: nothing reads the operator's root because of that flag (`includesSetting` is called with
+  exactly `"project"` and `"plugins"` at `@theokit/sdk@5.5.0`). What the SDK _does_ read from
+  `~/.theokit/` — model-provider plugins, the provider trust file, transcripts, the HTTP cache — it
+  reads unconditionally, governed by nothing. The flag is still accepted rather than refused: the
+  measured consumer passes it on every run, including the untrusted-directory path where it is the only
+  grant, so refusing would turn a graceful degradation into a throw for the case it exists to survive.
+
+- 24e1fab: State, where hook events are declared, that no seam can run before compaction
+
+  B-002 FR-004. A consumer needing to persist state before the transcript is compacted has no event to
+  bind to, and could only learn that by writing a handler and watching it never fire.
+
+  Measured against `@theokit/sdk@5.5.0`: `HookName` is a closed union of ten names with no compaction
+  member, and `PluginContext.on` keys its callback by that union — so no event name can be added from
+  this package. The SDK's own auto-compaction path is further out of reach: bundle-internal, absent
+  from every emitted `.d.ts` and all 33 export subpaths, and it builds its own summarizer at the call
+  site.
+
+  The docblock now says so and names `usetheokit/theokit-sdk#653`, the issue that unblocks it, so a
+  reader arrives at the nine candidate seams already ruled out rather than repeating the enumeration.
+
+  `hook-events.ts` is split out of `hook-spec.ts`, which had drifted to 616 lines against the 600 its
+  brief caps it at. Every symbol callers import stays importable from `hook-spec.js`.
+
 ## 13.4.0
 
 ### Minor Changes
