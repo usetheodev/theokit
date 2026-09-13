@@ -106,6 +106,25 @@ function floorsOf(range: string): Array<{ major: number; minor: number }> {
 /** The major below which every `.claude` parity surface is absent from the SDK. Measured, not assumed. */
 const PARITY_SINCE_MAJOR = 5
 
+/**
+ * The lowest minor PROVEN to carry the persistence surface this package re-exports.
+ *
+ * The floor was `^5.0.0` for one commit, on the strength of the four parity surfaces being present
+ * at 5.0.0 — which they are. That check was necessary and not sufficient: the barrel is generated
+ * from the RESOLVED copy, so it also ships whatever that copy exports, and six of those names do not
+ * exist at 5.0.0. The DTS build fails against the bottom of the range, which is a build error for the
+ * consumer rather than a typed refusal.
+ *
+ * Caught by `dep-check / suite at the bottom of every declared range` — the job that runs on a pull
+ * request into `main` and skips on one into `develop`, so it fired exactly where it was designed to.
+ *
+ * Measured with controls at each version (positive `transcriptPath` = 1, invented name = 0):
+ * 5.0.0 carries 1 of the 7, and 5.3.0, 5.4.0 and 5.5.0 carry all 7. So 5.3.0 is the lowest version
+ * MEASURED to work, not necessarily the first — the two tarballs between them were not published to
+ * this scratch set, and declaring a floor that was proven beats declaring one that was inferred.
+ */
+const SURFACE_SINCE_MINOR = 3
+
 describe('the declared SDK range delivers the parity the package advertises', () => {
   it('has at least one declaration to check, so a silent zero cannot pass', () => {
     // The control. `everySdkDeclaration()` reads the filesystem, and a rename or a moved root would
@@ -117,6 +136,16 @@ describe('the declared SDK range delivers the parity the package advertises', ()
   it('admits no major below the one that introduced the compat root, in ANY declaration', () => {
     for (const { pkg, field, range } of everySdkDeclaration()) {
       for (const floor of floorsOf(range)) {
+        // The minor matters as much as the major now, and for a different reason: the major is where
+        // the parity surfaces begin, the minor is where the barrel's own re-exports do.
+        if (floor.major === PARITY_SINCE_MAJOR) {
+          expect(
+            floor.minor,
+            `${pkg} [${field}] admits @theokit/sdk@5.${floor.minor}.x, where six of this ` +
+              `package's persistence re-exports do not exist — the DTS build fails against the ` +
+              `bottom of that range, which the consumer meets as a build error`,
+          ).toBeGreaterThanOrEqual(SURFACE_SINCE_MINOR)
+        }
         expect(
           floor.major,
           `${pkg} [${field}] admits @theokit/sdk@${floor.major}.${floor.minor}.x, where ` +
@@ -155,8 +184,9 @@ describe('the declared SDK range delivers the parity the package advertises', ()
     expect(floors[0]?.major).toBe(5)
     expect(
       floors[0]?.minor,
-      'the floor was raised past the silent gap into the guarded one, stranding consumers to ' +
-        'duplicate a refusal HookGateUnsupportedError already makes',
-    ).toBe(0)
+      'the floor was raised past 5.4, where `local.hooks` and the narrowed `import` land — both ' +
+        'already throw a typed error naming the version, so raising there would strand consumers ' +
+        'to duplicate a refusal that already announces itself',
+    ).toBeLessThan(4)
   })
 })
