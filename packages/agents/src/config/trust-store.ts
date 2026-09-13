@@ -173,7 +173,7 @@ export class TrustStore {
         // order rather than on what the user decided.
         const key = canonicalDir(record.path)
         const records = [...existing.filter((r) => canonicalDir(r.path) !== key), record]
-        await (atomicWriteJson as (f: string, v: unknown) => Promise<void>)(this.file, {
+        await atomicWriteJson(this.file, {
           version: 1,
           records,
         } satisfies TrustStoreFile)

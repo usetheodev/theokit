@@ -210,6 +210,17 @@ const ROOT_BAR_VERDICTS: Record<string, Verdict> = {
   SOVEREIGN_ENV_KEYS: { verdict: 'out', reason: R.CREDENTIALS },
 
   // ── OUT — internal helpers ──────────────────────────────────────────────────────────────────
+  // B-029 — arrived with the floor. It has been in the SDK's root bar since 5.x and was invisible
+  // here while the workspace resolved 4.52.1; narrowing the declared range is what surfaced it, and
+  // this line is the "break the build ONCE" the assertion below asks for.
+  //
+  // It takes the SDK's `AgentOptions`, not this layer's definition, so a consumer holding a
+  // `defineAgent` result could not feed it without reaching past the layer anyway. Measured before
+  // claiming PUBLIC_NO_CONSUMER, which is an assertion about consumers rather than about taste:
+  // 0 files in `packages/*/src`, 0 in `packages/*/tests`, and 0 in TheoCode's `packages/*/src` —
+  // against probe controls of 3 (`resolveTrustPosture`) here and 90 (`@theokit/agents`) there, so
+  // the zero is about the symbol and not about the query.
+  effectiveToolNames: { verdict: 'out', reason: R.PUBLIC_NO_CONSUMER },
   describeAction: { verdict: 'out', reason: R.PUBLIC_NO_CONSUMER },
   normalizeSchema: { verdict: 'out', reason: R.INTERNAL },
   inferApiMode: { verdict: 'out', reason: R.INTERNAL },

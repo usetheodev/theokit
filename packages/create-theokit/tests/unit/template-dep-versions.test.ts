@@ -24,9 +24,17 @@ const parsed = JSON.parse(readFileSync(TEMPLATE, 'utf8')) as {
 const deps = parsed.dependencies
 
 describe('default template external dep pins (regression guard)', () => {
-  it('test_sdk_pin_on_v4_line (theokit peers @theokit/sdk ^4.0.1)', () => {
-    // Caret prefix on the v4 line — a stale `^2.25.0` / `^3.x` would install an SDK theokit rejects.
-    expect(deps['@theokit/sdk']).toMatch(/^\^4\./)
+  it('test_sdk_pin_on_v5_line (the line that carries the .claude parity surfaces)', () => {
+    // Caret prefix on the v5 line — a stale `^2.25.0` / `^3.x` / `^4.x` would install an SDK the
+    // framework rejects.
+    //
+    // Was the v4 line until B-029. Not a threshold somebody chose to raise: `CompatSurface`, the
+    // `.claude/rules` discovery spec, `settings.local.json` and `CLAUDE_PROJECT_DIR` are all absent
+    // from 4.x and present from 5.0.0, measured by unpacking the tarballs. A scaffold pinning 4.x
+    // handed every new project an SDK with none of the parity this framework advertises, and
+    // nothing said so — which is the worst instance of that defect, because it reaches everyone who
+    // starts a project rather than only those who read a range.
+    expect(deps['@theokit/sdk']).toMatch(/^\^5\./)
   })
 
   it('test_usetheo_ui_satisfies_theokit_ui_peer (>=0.22.0)', () => {

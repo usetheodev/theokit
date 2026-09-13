@@ -22,7 +22,7 @@ import type { StreamEvent } from './agent-sse-handler.js'
  *    `events()` ends with a `status: "ERROR"` message, and this layer translates that to
  *    `{type:'error'}`.
  *
- * A `Retry.create` around the stream's creation would therefore have been INERT for the exact
+ * A `Retry.run` around the stream's creation would therefore have been INERT for the exact
  * failure it was asked to cover — it would have compiled, shipped, and never fired. What makes it
  * real is treating that first `error` event as the throw the SDK declined to make.
  *
@@ -117,10 +117,14 @@ async function startTurn(
       throw err
     }
   }
-  // SE36 (SDK v3.0) — `withRetry` became `Retry.create`; same call shape. Dynamic-imported so the
+  // SE36 (SDK v3.0) — `withRetry` became `Retry.create`, and 5.x renamed that to `Retry.run`; same
+  // call shape throughout. B-029 is what surfaced the second rename: the deprecation is type-aware,
+  // so it was invisible while the workspace resolved 4.52.1. `Retry.run` exists across the whole
+  // declared range — verified in the 5.0.0, 5.3.0 and 5.4.0 tarballs, not just the installed copy.
+  // Dynamic-imported so the
   // symbol is loaded only by a caller that opted in, matching `run-reflective-loop`'s discipline.
   const { Retry } = await import('@theokit/sdk/retry')
-  return Retry.create(attempt, retry)
+  return Retry.run(attempt, retry)
 }
 
 /**

@@ -1,11 +1,20 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// `CredentialStoreConfig` is exported BY NAME from `@theokit/sdk/auth` but its declaration does not
-// resolve — the barrel re-exports it from `./auth-types.js`, where it is not declared. Measured
+// `CredentialStoreConfig` was exported BY NAME from `@theokit/sdk/auth` with no declaration that
+// resolved — the barrel re-exported it from `./auth-types.js`, where it was not declared. Measured
 // 2026-08-14 against @theokit/sdk 4.51.1; its runtime shape is `{ home, dirName, fileName,
-// homeEnvVar? }`. Imported as the opaque type it is: this module only forwards it to the SDK, and
-// re-declaring the shape here would be a mirror that drifts. Filed as an upstream type-export defect.
+// homeEnvVar? }`. Filed as an upstream type-export defect.
+//
+// FIXED UPSTREAM, measured 2026-09-12 against 5.5.0: `export interface CredentialStoreConfig {`
+// is declared. B-029 is how that became visible here — the workspace resolved 4.52.1 until the
+// declared range was narrowed to `^5.0.0`, and eslint then reported this file's `no-unsafe-*`
+// suppressions as having nothing to suppress. They are gone; this note stays because the dated
+// measurement above is still true about the version it names, and deleting it would leave the next
+// reader to rediscover why the import is shaped the way it is.
+//
+// Still imported as the opaque type it is: this module only forwards it to the SDK, and
+// re-declaring the shape here would be a mirror that drifts.
 import {
   providerFromApiKeyPrefix,
   readAuthFile,
@@ -520,7 +529,7 @@ export function requireCredential(input: ResolveCredentialInput): CredentialReso
   throw new CredentialNotFoundError(
     credentialSources({
       providers: input.providers,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- `CredentialStoreConfig` does not resolve (see the import note at the top of this file); the value is only forwarded, never inspected
+
       ...(input.store === undefined ? {} : { store: input.store }),
     }),
   )
@@ -589,7 +598,7 @@ export function resolveAgentCredential(input: AgentCredentialInput): CredentialR
     declaredProviderEnvVar: input.declaredProviderEnvVar ?? 'THEOKIT_PROVIDER',
     ...(input.home === undefined ? {} : { home: input.home }),
     ...(input.model === undefined ? {} : { model: input.model }),
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- same unresolved `CredentialStoreConfig`; forwarded verbatim to the resolver
+
     ...(input.store === undefined ? {} : { store: input.store }),
   })
 }

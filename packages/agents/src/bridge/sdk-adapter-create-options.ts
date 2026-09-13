@@ -400,6 +400,17 @@ function applyLocalSources(
   compiled: CompiledAgentOptions,
   options: M8CreateOptions,
   applied: string[],
+  /**
+   * The SDK version to gate against, injectable exactly as {@link applyHookApproval}'s is.
+   *
+   * It was NOT threaded here, and `assembleM8CreateOptions`'s `deps.sdkVersion` is documented
+   * "Injectable for tests" without qualification — so the narrowed-import gate read the ambient
+   * installation and nothing else could reach it. The cost was a test that asserted the refusal and
+   * passed because the workspace happened to resolve 4.52.1; B-029 moved the resolution to 5.5.0
+   * and the assertion went red with no production line changed. A seam honoured by one of two
+   * callers is the half-wired shape this backlog keeps closing.
+   */
+  sdkVersion: string | undefined,
 ): void {
   if (compiled.settingSources !== undefined && compiled.settingSources.length > 0) {
     options.local = { ...options.local, settingSources: [...compiled.settingSources] }
@@ -424,7 +435,7 @@ function applyLocalSources(
     if (forSdk.some((c) => typeof c === 'object' && 'import' in c)) {
       // A narrowed `import` needs a newer SDK than `compatSources` itself does — refuse before the
       // value travels, because the older runtime's silence is indistinguishable from success.
-      assertSdkCanReadNarrowedImport(installedSdkVersion())
+      assertSdkCanReadNarrowedImport(sdkVersion ?? installedSdkVersion())
     }
     if (forSdk.length > 0) {
       options.local = { ...options.local, compatSources: forSdk }
@@ -493,7 +504,7 @@ export function assembleM8CreateOptions(
     options.agents = compiled.agents
     applied.push('agents')
   }
-  applyLocalSources(compiled, options, applied)
+  applyLocalSources(compiled, options, applied, deps.sdkVersion)
   applyHookApproval(compiled, options, applied, deps.sdkVersion)
   if (compiled.context) {
     options.context = compiled.context

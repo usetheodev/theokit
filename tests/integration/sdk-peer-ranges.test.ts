@@ -93,13 +93,20 @@ describe('SDK-family peer/version ranges are closed + aligned (M48 T3.1)', () =>
     }
   })
 
-  it('test_root_devdep_sdk_aligned_to_v4_line', () => {
-    // The root devDep must track the v4 line (not the stale `^3.5.0` hoist EC-C fixed). Assert the
-    // v4 caret prefix, NOT an exact pin, so a within-v4 bump (4.0 → 4.1 → 4.2) stays green — only a
-    // drop off v4 (or back to a 3.x hoist) fails here.
+  it('test_root_devdep_sdk_aligned_to_v5_line', () => {
+    // The root devDep must track the v5 line (not the stale `^3.5.0` hoist EC-C fixed). Assert the
+    // caret prefix, NOT an exact pin, so a within-v5 bump (5.0 → 5.1 → 5.2) stays green — only a
+    // drop off v5 fails here.
+    //
+    // Was `/^\^4\./` until B-029. That is not a threshold somebody chose to raise: every `.claude`
+    // parity surface this framework advertises — `CompatSurface`, the `.claude/rules` spec,
+    // `settings.local.json`, `CLAUDE_PROJECT_DIR` — is absent from 4.x and present from 5.0.0,
+    // measured by unpacking the tarballs. A devDep on the v4 line is what the workspace actually
+    // installs, so this assertion was pinning the resolution that made the whole suite green
+    // against an SDK the packages could not use.
     const root = readPkg('package.json')
     const dev = root.devDependencies as Record<string, string>
-    expect(dev['@theokit/sdk']).toMatch(/^\^4\./)
+    expect(dev['@theokit/sdk']).toMatch(/^\^5\./)
   })
 
   it('test_isClosed_rejects_the_open_shapes', () => {
