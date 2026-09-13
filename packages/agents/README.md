@@ -99,6 +99,34 @@ configuration that had no effect.
 | `output-styles/*.md` | read, selected by `settings.json` |
 | `agent-memory/` | read — see below |
 | `workflows/*.js` | **refused**, and reported. Every other surface is data; a workflow is code, and executing JavaScript found under a caller-supplied directory is a decision that belongs to you |
+| `keybindings.json` | **out of scope** — `@theokit/tui` |
+| `themes/*.json` | **out of scope** — `@theokit/tui` |
+| `~/.claude.json` — OAuth state, UI toggles | **out of scope** — a CLI's own state |
+| `~/.claude.json` — personal-scope MCP servers | **not read yet**, and in scope |
+
+
+### Out of scope, and who owns it instead
+
+An absence that reads as an oversight gets re-investigated at full cost by the next person. These
+were measured on 2026-09-12 — `keybindings`, `themes/` and `.claude.json` each return **0 files**
+across every package source tree, against a control of 31 for `skills` — and each one is a decision
+rather than a gap.
+
+**`keybindings.json` and `themes/*.json` belong to `@theokit/tui`.** A framework has no keyboard and
+no colour: it produces text and tool calls, and the process that renders them owns which key does
+what and which escape codes it emits. Reading them here would let this package hold configuration it
+cannot act on, which is the accepted-and-ignored failure the table above exists to prevent.
+
+**`~/.claude.json` is two things under one name, and the split is the point.** Its OAuth state and UI
+toggles are a CLI's own state — that file is written by a specific program about its own session, and
+a library reading another program's login state would be reaching into something it neither owns nor
+can refresh. Its **personal-scope MCP servers** are a different matter: an MCP server the operator
+registered for themselves is a framework concern, this package already reads project-scope servers
+from `.mcp.json`, and the personal scope measures 0. That half is **not refused — it is not done**,
+and saying so is the distinction this section exists to make.
+
+The registry entry that prompted this counts four decisions across three files, because
+`~/.claude.json` is split. That is the count, stated so nobody goes looking for a fourth file.
 
 ### `agent-memory/`
 
